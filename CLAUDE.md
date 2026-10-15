@@ -42,9 +42,9 @@ Two independent tools that compose:
   `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
   command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
   the surface of record.
-- Hooks (17): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+- Hooks (18, incl. borg-nanoprobe-guard): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
-  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard, borg-resume-hook,
+  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard, borg-resume-hook, borg-nanoprobe-log, borg-prefer-tool-log,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
 - Skills (17): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
   pane, and 10 more (full list under Files below)
@@ -174,7 +174,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
     registry/               Registry read/write core, shell adapter, CLI entry
     recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
     extensions/             Local-extension resolution: layer precedence, prefer-tool, liveness
-    manifest/               Reader for <project>/.borg/chains/ and .stacks/ manifests
+    manifest/               Reader for <project>/.stacks/ manifests, one root
     link/                   `borg link` document build + renderer
         core.py             Registry/plan/checkpoint reads, scope resolution, relative time
         grid.py             Manifests → the topology wire: levels, nodes, parents/children/seq
@@ -185,7 +185,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
 hooks/
     borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
     borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
-    borg-notify.sh          Notification → status=waiting + waiting_reason
+    borg-notify.sh          permission/elicitation Notification → status=waiting + waiting_reason
     borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
     bash-guard.sh           PreToolUse (Bash) → destructive-pattern hard-block + RO pre-approval
     borg-memory-read-log.sh PostToolUse (Read) → logs project-memory reads to memory-hits.log
@@ -195,6 +195,7 @@ hooks/
     borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
     borg-verifier-guard.sh  PreToolUse (Bash) → verifier: git/gh reads
+    borg-nanoprobe-guard.sh PreToolUse (Skill/Write/Edit/Bash) → nanoprobe: skill grant + no borg/extensions access
     borg-resume-hook.sh     Events → borg-resume ledger (append-only)
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
@@ -303,7 +304,7 @@ docs/
   borg source tree.
 - **CLI structure mirrors dev.sh**: `set -e`, case dispatch, colored output, `cmd_*` naming
 - **Registry writes are atomic**: write to tmp file, `mv` to final path
-- **Vocabulary: `repository` is the code word for a git repo; `project` means a cross-repo workstream (rename decided 2026-10-12)**: the code used `project` for both, and the rename (`docs/plans/directives/2026-08-31-project-to-repository-rename.md`, site inventory under `docs/plans/directives/assets/`) moves the repository sense to `repository` in five PRs by area (R1 `borg_core/link`, R2 the rest of `borg_core`, R3 `lib/` and `hooks/`, R4 `borg.zsh`, R5 `drone.zsh` plus `merge-tree/`, `evals/`, `templates/` and `install.sh`), with tests and goldens moving in the step whose output they pin. User-facing words change too (help text, messages, placeholders, column headers say "repository" where they mean one); command and flag names never change. Workstream-sense rows (a manifest or chain describes a project) are never renamed. **Kept permanently as contract names: the `.borg-project` marker filename, every `borg link --json` key (`projects`, `total_projects`, the `project` field on directive, assimilated and cortex_pending records) and `BORG_PROJECT_NAME`.** Why: they are on-disk and cross-repo wire names, so renaming them buys nothing a reader sees and breaks consumers outside this repo, including the distributed plugin (the `borg-link` skill's MARKER-WALK block reads the marker and its `--json` reader reads the keys). A Python variable or keyword argument may be renamed while the key string it reads stays, which is why `assemble(projects=...)` still mirrors the document. The registry key `projects` migrates LAST, in its own PRs: a reader that accepts both `projects` and `repositories`, then the file migration, then dropping the old key (expand, migrate, contract).
+- **Vocabulary: `repository` is the code word for a git repo; `project` means a cross-repo workstream (rename decided 2026-10-12)**: the code used `project` for both, and the rename (`docs/plans/directives/2026-08-31-project-to-repository-rename.md`, site inventory under `docs/plans/directives/assets/`) moves the repository sense to `repository` in five PRs by area (R1 `borg_core/link`, R2 the rest of `borg_core`, R3 `lib/` and `hooks/`, R4 `borg.zsh`, R5 `drone.zsh` plus `merge-tree/`, `evals/`, `templates/` and `install.sh`), with tests and goldens moving in the step whose output they pin. User-facing words change too (help text, messages, placeholders, column headers say "repository" where they mean one); command and flag names never change. Workstream-sense rows (a manifest or chain describes a project) are never renamed. **Kept permanently as contract names: the `.borg-project` marker filename, every `borg link --json` key (`projects`, `total_projects`, the `project` field on directive, assimilated and cortex_pending records) and `BORG_PROJECT_NAME`.** Why: they are on-disk and cross-repo wire names, so renaming them buys nothing a reader sees and breaks consumers outside this repo, including the distributed plugin (the `borg-link` skill's MARKER-WALK block reads the marker and its `--json` reader reads the keys). A Python variable or keyword argument may be renamed while the key string it reads stays, which is why `assemble(projects=...)` still mirrors the document. The registry key `projects` migrates LAST, in its own PRs: a reader that accepts both `projects` and `repositories`, then the file migration, then dropping the old key (expand, migrate, contract). Expand has shipped: every reader accepts either key (Python through `borg_core.paths.normalize_registry`, shell and hooks through `BORG_REGISTRY_NORM_JQ` and `borg_registry_normalized` in `lib/reaper.sh`), every writer still writes `projects`, and `python3 -m borg_core.registry.cli migrate-key [--dry-run]` renames the key in a registry file (timestamped backup first, a no-op when it already has `repositories`); it has not been run against any real registry.
 - **A worktree is a VIEW of a repo, and `repo` is the key that says so**: `borg add` used to identify
   a project by directory basename and nothing else (`registry/cli.py`'s `name = _basename(ppath)`,
   with no git call in the add path), so a git worktree was not a view of a project, it WAS one —
@@ -438,7 +439,9 @@ docs/
   a brief consumed once at spawn, a scope gate and a return contract, so there is no "before the
   artifact" moment to hook and two more load points would be seams nothing sits at. **The scope gate
   is NOT extensible**: an extension may add instructions, never widen what the agent may touch,
-  raise its deliverable ceiling, or relax bounded termination.
+  raise its deliverable ceiling, or relax bounded termination. **One sanctioned exception**: the
+  MACHINE-layer `- Prefer-tool:` may name the Skill target for step 3 (opening the PR) only, gated by
+  `hooks/borg-nanoprobe-guard.sh`, which also denies nanoprobe writes under `borg/extensions/`.
 - **THE SHIM LAYER: two tiers, one direction.** borg composes with an employer plugin layer through
   exactly two sockets, and which socket a shim belongs in is decided by whether it MUST happen or
   merely shapes judgment.
@@ -495,23 +498,10 @@ docs/
   divergence AC7 ends), resolves the package script-relative or via `$BORG_ROOT`, and **no-ops when
   neither is present** — so an empty log in a plugin-only install means "not instrumented", not
   "no bypasses".
-- **Manifests are read from two roots**: `<repo>/.borg/chains/` (borg's own) and the tool-neutral
-  `<repo>/.stacks/`. `scaffold` creates in `.stacks/` always -- whether `.stacks/` exists, `.borg/chains/` (or legacy
-  `.borg/programs/`) exists, git ignores `.borg/`, or none of these (`placement.choose_scaffold_root`, facts from
-  `shell.scaffold_root`) -- unless `--root borg` asks for borg's own directory. It never creates inside a `.stacks/` that git
-  ignores: it refuses by name, naming the ignore and `--root borg`, never silently falling back. It prints
-  `root: <folder> (<reason>)` after its `scaffolded:` line (an `exists:` line has none). `borg stack` is the sweep verb
-  (`borg chain` forwards to it until the chain -> stack rename's contract step).
-  So a repository shared with people who do not run borg need
-  not carry a `.borg/`; a stem declared in both is refused by name, never picked, an in-place edit
-  writes back to the file it found, two roots that are one directory (a symlink) are read once, and an
-  unreadable root or parent is a named warning, never silence (`scaffold`, the one creator, refuses by
-  name rather than create beside a root it cannot read). `borg_core` and `borg chain` both read both roots
-  (`merge-tree/coordinator.py` reads through `borg_core.manifest`; `merge-tree/programs.py` is gone), and
-  `borg chain sync` rewrites a `.stacks/` manifest in place.
+- **Manifests are read from ONE root: `<repo>/.stacks/`** (the contract step of the chain -> stack rename, 2026-10-14). `<repo>/.borg/chains/` and the older `<repo>/.borg/programs/` are no longer read, and `--root borg` is refused by name. A repository that still holds `*.json` there gets a named warning (the repository and `borg stack migrate`) through the same channel an unreadable root uses, in `borg link` (`--json` and the page) and in `borg stack`'s sweep, never silence and never an empty `▸ STACKS` presented as the truth; the legacy manifest itself is never parsed. Detection is a directory listing with no fork, so the `--local` fork count is untouched. `scaffold` always creates in `.stacks/` and refuses by name when git ignores it (`placement.choose_scaffold_root`, facts from `shell.scaffold_root`); it prints `root: <folder> (<reason>)` after its `scaffolded:` line. `borg stack` is the sweep verb; `borg chain` and `borg program` die pointing at it, and `--chains-dir` and `--programs-dir` are refused by name. An in-place edit writes back to the file it found, two roots that are one directory (a symlink) are read once, and an unreadable root or parent is a named warning, never silence. `merge-tree/coordinator.py` reads through `borg_core.manifest`, and `borg stack sync` rewrites a `.stacks/` manifest in place.
 - **`borg link` is ONE renderer, not three (AC2)**: there is a single human renderer,
   `render.document()`, which iterates a module-level `SECTIONS` tuple — header, `▸ IN FOCUS`,
-  `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS`, `▸ WAITING ON YOU` — with
+  `▸ REPOSITORIES`, `▸ STACKS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS`, `▸ WAITING ON YOU` — with
   **no branch on mode or emptiness**, and since 2026-10-13 scope picks WHICH tuple (see the reversal
   below). (`▸ NEXT` is AC4's, inserted between SHIPPED and SIGNALS so the page
   reads history-then-future; adding it turned the spine test red on purpose, which AC2's directive
@@ -524,7 +514,7 @@ docs/
   a section prints, never which sections exist; the contexts differ in breadth only" — WAS REVERSED
   2026-10-13 for repository scope, on purpose (Noah: the overview belongs to the Queen).** Standing in a
   worktree of `borg-collective`, `borg link` printed the whole `REPOSITORIES` board, the repository's pull
-  requests and its CHAINS, and led with a sibling worktree's checkpoint: a page about "here" that was about
+  requests and its STACKS, and led with a sibling worktree's checkpoint: a page about "here" that was about
   everywhere. Three root causes, each now closed: the checkpoint and summary reads were a repo-group UNION
   (`core.repo_sources`; `focus` now reads `worktree.own_source`, the directory alone), the board was
   scope-invariant, and the repository-level sections were keyed on the GitHub slug, which every worktree of a
@@ -535,7 +525,7 @@ docs/
   `REPOSITORY_SECTIONS`, STRICTLY that directory: a scope label (`<name> — worktree of <repo>` or `— main
   checkout`), identity (path, branch, worktree-of), live session and status, its OWN checkpoints, its own
   waiting row (the session row only, no repository PR rows), the next-action line, and one line pointing at
-  `borg link --overview`. No board, no other worktree or repository, no CHAINS, NEXT, QUEUED, SHIPPED, plan or
+  `borg link --overview`. No board, no other worktree or repository, no STACKS, NEXT, QUEUED, SHIPPED, plan or
   SIGNALS. The vocabulary is fixed: a *repository* is the git repo, a *worktree* is a linked checkout
   registered on its own and carrying a project, and the orchestrator session is called the Queen in
   user-facing text while every internal name (`scope.kind` `orchestrator`, `BORG_ORCHESTRATOR_ROOT`, the

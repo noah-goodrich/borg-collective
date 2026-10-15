@@ -21,6 +21,9 @@ setup_temp_dirs() {
     # line above sandboxes, and an exported override would point every `borg link` and `borg next` here at a
     # REAL map. A case that needs a map sets it inline, to a directory it built.
     unset BORG_MAP_DIR
+    # NO_COLOR is ambient state borg reads (borg.zsh's palette, link/cli.py). A developer who exports it would
+    # turn every coloured golden and ESC assertion red, so drop it; tests/no_color.bats sets it inline.
+    unset NO_COLOR
 
     # GIVE THE SANDBOX A GIT IDENTITY. HOME is redirected on the line above, so `~/.gitconfig` is
     # gone by construction -- and recon_adapter_github.bats's case "adapter: a linked worktree is

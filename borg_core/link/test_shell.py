@@ -889,3 +889,10 @@ def test_read_git_identity_states_nothing_for_a_head_that_is_neither_a_branch_no
             handle.write(head)
         identity = shell.read_git_identity(path, [("odd", os.path.realpath(path))])
         assert identity["branch"] == "" and "detached" not in identity
+
+
+def test_directive_with_frontmatter_is_titled_by_its_heading_not_the_fence(isolated_env):
+    docs = isolated_env / "docs" / "plans" / "directives"
+    docs.mkdir(parents=True)
+    (docs / "2026-10-14-fm.md").write_text("---\nstatus: open\n---\n\n# Real Title\nbody\n")
+    assert [d["title"] for d in shell.read_directives(isolated_env)] == ["Real Title"]

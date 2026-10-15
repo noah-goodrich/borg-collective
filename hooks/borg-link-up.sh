@@ -31,8 +31,17 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
 
 [[ -z "$CWD" ]] && exit 0
 
+# >>> borg-hooks.sh: script-relative first, installed copy second (build-plugin.sh inlines the lib over this block)
+_borg_lib_dir="${BASH_SOURCE[0]%/*}"
+[[ "$_borg_lib_dir" == "${BASH_SOURCE[0]}" ]] && _borg_lib_dir=.
+_borg_lib="$_borg_lib_dir/../lib/borg-hooks.sh"
+# The lib sources its reaper.sh sibling unguarded, and on bash 3.2 that failure kills the hook: usable = both files.
+[[ -f "$_borg_lib" && -f "${_borg_lib%/*}/reaper.sh" ]] || _borg_lib="${HOME}/.claude/lib/borg-hooks.sh"
 # shellcheck source=../lib/borg-hooks.sh
-source "${HOME}/.claude/lib/borg-hooks.sh"
+[[ -f "$_borg_lib" && -f "${_borg_lib%/*}/reaper.sh" ]] && source "$_borg_lib" 2>/dev/null || true
+# <<< borg-hooks.sh
+# Fail open: every write below goes through the lib's state helpers, so without it there is nothing to do.
+declare -F _borg_session_mode >/dev/null || exit 0
 
 # Orchestrator-mode sessions touch no per-repository state: no registry writes,
 # uncommitted-changes scans, or checkpoint nudges. Checkpoints written via
@@ -129,7 +138,7 @@ _new_state=$(printf '%s' "$_cur_state" | jq \
     --argjson dirty "$DIRTY_FLAG" \
     --argjson diverged "$CLOCK_DIVERGED" \
     --argjson delta "$CLOCK_DELTA" \
-    '.status = "idle" | .last_activity = $now |
+    '.status = "idle" | .last_activity = $now | del(.waiting_reason) |
      .has_uncommitted_changes = $dirty |
      .clock_divergence = {detected: $diverged, delta_seconds: $delta} |
      (if $sid != "" then .claude_session_id = $sid else . end)')
@@ -157,7 +166,8 @@ if [[ -d "$CHECKPOINT_DIR" ]]; then
     _recent_cp=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "*.md" -mmin -60 2>/dev/null | head -1 || true)
     if [[ -z "$_recent_cp" ]]; then
         _warn "▸ No checkpoint in the last hour for ${REPOSITORY}
-  Run /borg-link-up next session to save state for future resumption."
+  Run /borg-link-up next session to save state for future resumption.
+  Better still, checkpoint before the session goes idle, while its cache is still warm: a checkpoint after a long idle gap pays to reload the whole context."
     fi
 fi
 

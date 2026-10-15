@@ -1,0 +1,34 @@
+{
+  "desc": "Cut CLAUDE.md to 8 KB or less with nothing dropped, and the borg-link skill to at most 9 KB per run in repository scope and 42 KB in the Queen view, behind a size guard",
+  "program": "2026-10-14-context-diet",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#392",
+      "status": "merged",
+      "why": "The plan: six criteria and four slices for #382 and #383"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#393",
+      "status": "merged",
+      "why": "S2: borg-link jq pipe runs -c and drops eight unread project fields"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#394",
+      "status": "merged",
+      "why": "S1: directive and shipped-plan titles skip YAML frontmatter, never ---"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#398",
+      "status": "merged",
+      "why": "S4a: build-plugin.sh mirrors whole skill directories so references/ ship"
+    }
+  ]
+}

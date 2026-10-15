@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # borg-notify.sh — Claude Code Notification hook
-# Fires when Claude Code needs user input (session is waiting).
+# Fires on Claude Code notifications.
 #
-# Updates state.json: status=waiting
+# Updates state.json: status=waiting, but ONLY for permission_prompt, elicitation_dialog, or a
+# payload with no notification_type. idle_prompt, auth_success and any other type exit untouched.
 # Fires macOS notification (augments notify.sh, does NOT replace it)
 # Registered as a Notification hook in ~/.claude/settings.json alongside notify.sh
 
@@ -14,12 +15,32 @@ BORG_REGISTRY="$BORG_DIR/registry.json"
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' 2>/dev/null || echo "")
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
-MESSAGE=$(echo "$INPUT" | jq -r '.message // ""' 2>/dev/null || echo "")
+# One jq call for both fields (unit-separator joined) so the hook spawns no extra process.
+_msg_raw=$(echo "$INPUT" | jq -r '(.notification_type // "") + "\u001f" + (.message // "")' 2>/dev/null || echo "")
+NOTIFICATION_TYPE=${_msg_raw%%$'\x1f'*}
+MESSAGE=${_msg_raw#*$'\x1f'}
 
 [[ -z "$CWD" ]] && exit 0
 
+# Only a real ask marks the session waiting. idle_prompt fires ~60s after EVERY turn ends, so
+# treating it as waiting would list every idle session as needing the user. An empty type (older
+# Claude Code that sends none) keeps the old behavior.
+case "$NOTIFICATION_TYPE" in
+    ""|permission_prompt|elicitation_dialog) ;;
+    *) exit 0 ;;
+esac
+
+# >>> borg-hooks.sh: script-relative first, installed copy second (build-plugin.sh inlines the lib over this block)
+_borg_lib_dir="${BASH_SOURCE[0]%/*}"
+[[ "$_borg_lib_dir" == "${BASH_SOURCE[0]}" ]] && _borg_lib_dir=.
+_borg_lib="$_borg_lib_dir/../lib/borg-hooks.sh"
+# The lib sources its reaper.sh sibling unguarded, and on bash 3.2 that failure kills the hook: usable = both files.
+[[ -f "$_borg_lib" && -f "${_borg_lib%/*}/reaper.sh" ]] || _borg_lib="${HOME}/.claude/lib/borg-hooks.sh"
 # shellcheck source=../lib/borg-hooks.sh
-source "${HOME}/.claude/lib/borg-hooks.sh"
+[[ -f "$_borg_lib" && -f "${_borg_lib%/*}/reaper.sh" ]] && source "$_borg_lib" 2>/dev/null || true
+# <<< borg-hooks.sh
+# Fail open: every write below goes through the lib's state helpers, so without it there is nothing to do.
+declare -F _borg_session_mode >/dev/null || exit 0
 
 # Orchestrator-mode sessions do not flip status=waiting on any repository.
 if [[ "$(_borg_session_mode "$CWD")" == "orchestrator" ]]; then

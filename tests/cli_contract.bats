@@ -379,6 +379,10 @@ EOF
     # 29 SINCE 2026-10-13: `pr` (gate, merge-train) is a deliberate addition, a thin delegate to
     # borg_core/gh/cli.py (shell-command-hygiene directive, slice V1). The floor reading still holds.
     #
+    # 30 SINCE 2026-10-14: `checkpoint-prepare` is a deliberate addition, the host half of the link-up cost fix
+    # (docs/plans/directives/2026-10-14-link-up-prepare.md, slice S1). It sits beside `checkpoint-name`. The floor
+    # reading still holds.
+    #
     # THE CRITERION IS STILL MET, and that is why the constant moves rather than the assertion.
     # AC1 asked for "net one command shorter than at plan start" — 27 at plan start, so anything
     # at or below 26 satisfies it, and the comment above already records that this is a FLOOR on
@@ -388,7 +392,7 @@ EOF
     # answer is on the line above. Keep it exact.
     run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
     [ "$status" -eq 0 ]
-    [ "$output" = "29" ]
+    [ "$output" = "30" ]
 }
 
 # The count alone reaches 26 if someone deletes `doctor` instead of `recon` — and four dispatch
@@ -2336,7 +2340,7 @@ EOF
 # (ledger) is the modal case — 13 of ~14 registered repositories.
 #
 # `infra` deliberately has NO git repository, so `borg link infra` exercises the first of the three
-# CHAINS diagnoses (no origin -> nothing to scope a chain to) without a fixture of its own.
+# STACKS diagnoses (no origin -> nothing to scope a stack to) without a fixture of its own.
 _link_build_grid_ws() {
     local root="${BATS_TEST_TMPDIR}/ws" p
     export BORG_ORCHESTRATOR_ROOT="$root"
@@ -2348,9 +2352,9 @@ _link_build_grid_ws() {
     done
     mkdir -p "$root/infra" "$root/atlas" "$root/relay" "$root/archive-tools"
 
-    mkdir -p "$root/platform/.borg/programs" "$root/warehouse/.borg/programs"
-    cp "${LINK_GOLDEN_DIR}/manifests/auth-hardening.json" "$root/platform/.borg/programs/"
-    cp "${LINK_GOLDEN_DIR}/manifests/warehouse-rollout.json" "$root/warehouse/.borg/programs/"
+    mkdir -p "$root/platform/.stacks" "$root/warehouse/.stacks"
+    cp "${LINK_GOLDEN_DIR}/manifests/auth-hardening.json" "$root/platform/.stacks/"
+    cp "${LINK_GOLDEN_DIR}/manifests/warehouse-rollout.json" "$root/warehouse/.stacks/"
 
     mkdir -p "$root/platform/docs/plans/directives" "$root/platform/docs/plans/assimilated" \
              "$root/warehouse/docs/plans/directives" "$root/warehouse/docs/plans/assimilated" \
@@ -3353,14 +3357,14 @@ _link_spine_matches() {
 # B5/B6. THE `Status:` INVARIANT, AND IT IS STRUCTURAL RATHER THAN LEXICAL. `sweep-acme.json`
 # deliberately carries a pull request titled `chore(auth): Status: normalise the rollout report`,
 # which is what a real sweep can hand the renderer at any moment. IN FOCUS being SECTION 2 — above
-# REPOSITORIES and above CHAINS — is what keeps `grep -m1` landing on the session status instead of
-# on a stranger's PR title. Move IN FOCUS below CHAINS and both halves go red.
+# REPOSITORIES and above STACKS — is what keeps `grep -m1` landing on the session status instead of
+# on a stranger's PR title. Move IN FOCUS below STACKS and both halves go red.
 @test "contract: exactly one Status: line in repository context and none in orchestrator context" {
     _link_setup_grid
     _link_grid_seams
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/repo.txt" link platform
-    # A DIRECTORY'S PAGE CARRIES NO WIRE TEXT AT ALL since 2026-10-13: CHAINS and the repository PR rows are
+    # A DIRECTORY'S PAGE CARRIES NO WIRE TEXT AT ALL since 2026-10-13: STACKS and the repository PR rows are
     # repository-level, so the poisoned title is simply not on it, and the card's line is the ONLY `Status:`.
     run bash -c "grep -c 'Status: normalise the rollout report' '${BATS_TEST_TMPDIR}/repo.txt' || true"
     [ "$output" = "0" ]
@@ -3496,7 +3500,7 @@ _link_spine_matches() {
     run bash -c "ls -A '$BORG_RECON_ADAPTER_PATH' | wc -l | tr -d ' '"
     [ "$output" = "0" ]
     # ...and the render really did happen, so this is not passing on an empty run.
-    run grep -c '▸ CHAINS' "${BATS_TEST_TMPDIR}/traced.txt"
+    run grep -c '▸ STACKS' "${BATS_TEST_TMPDIR}/traced.txt"
     [ "$output" = "1" ]
 }
 
@@ -3525,7 +3529,7 @@ _link_spine_matches() {
 # B14. Node ids are a JUMP TARGET: each appears exactly twice on the page — once in a picture cell,
 # once as a detail heading — so `*` in vim toggles between them with no plugin. Numbering per manifest
 # instead of globally puts four `n1`s on the orchestrator page and breaks the jump for both repositories.
-# Only the Queen's page draws a picture now (CHAINS is repository-level), so the directory goldens are
+# Only the Queen's page draws a picture now (STACKS is repository-level), so the directory goldens are
 # asserted to carry NONE: a node id on a directory's page means a repository-level section came back.
 @test "contract: every node id appears exactly twice in each Queen golden, and never on a directory's page" {
     local g
@@ -3553,7 +3557,7 @@ _link_spine_matches() {
     done
 }
 
-# The widest `▸ CHAINS` picture row on a rendered page, in VISIBLE columns, printed to stdout.
+# The widest `▸ STACKS` picture row on a rendered page, in VISIBLE columns, printed to stdout.
 #
 # ONE COPY, TWO CALLERS (B15 and B15b), because the two cases must be measuring the same thing: B15
 # compares the measurement to `PICTURE_BUDGET` and B15b compares it to the number the `--json` side
@@ -3570,7 +3574,7 @@ from borg_core.link import picture
 # that blows the budget by 22 columns while every picture row fits.
 frame = set("✔✗○●◌│├┤┬┴┼┌┐└┘─")
 rows = []
-# SCOPED TO THE CHAINS SECTION, and that scoping arrived with AC4 rather than being belt-and-braces.
+# SCOPED TO THE STACKS SECTION, and that scoping arrived with AC4 rather than being belt-and-braces.
 # `▸ NEXT` renders indented rows whose first visible character is a state glyph -- the exact
 # heuristic below -- but they carry FULL refs, not the picture`s short ones, so measuring them
 # reported the page as blowing PICTURE_BUDGET while every actual picture row fit. The old scan
@@ -3580,7 +3584,7 @@ inside = False
 for line in open(sys.argv[1], encoding="utf-8").read().split("\n"):
     plain = picture._SGR_RE.sub("", picture._OSC8_RE.sub("", line))
     if plain.startswith("▸ "):
-        inside = plain.startswith("▸ CHAINS")
+        inside = plain.startswith("▸ STACKS")
         continue
     if inside and plain.startswith(" " * picture.INDENT) and plain.strip()[:1] in frame:
         rows.append(line)
@@ -3647,7 +3651,7 @@ _link_picture_budget() {
     # The page must actually HAVE a picture, or both sides agree on nothing and the case is decoration.
     [ "$measured" -gt 0 ] || { echo "the rendered page carried no picture rows" >&2; false; }
     [ "$published" = "$measured" ] || {
-        echo "grid.picture_width=${published} but the rendered page's widest CHAINS row is ${measured}" >&2
+        echo "grid.picture_width=${published} but the rendered page's widest STACKS row is ${measured}" >&2
         false
     }
     [ "$published" -le "$(_link_picture_budget)" ]
@@ -3689,7 +3693,7 @@ _link_picture_budget() {
     _link_setup_grid
     _link_grid_seams
 
-    # THE QUEEN'S PAGE, not `link --local platform`: CHAINS is a repository-level section and a directory's
+    # THE QUEEN'S PAGE, not `link --local platform`: STACKS is a repository-level section and a directory's
     # page no longer prints it (2026-10-13). The Queen selects both manifests, so the count is every ref across
     # them that declared no state of its own (12 of the 13; `acme/warehouse#75` declares `merged`), not
     # `platform`'s seven.
@@ -3731,12 +3735,12 @@ _link_picture_budget() {
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/ledger.txt" link ledger
     # TWO `▸` HEADERS SINCE 2026-10-13 (IN FOCUS, WAITING ON YOU): a directory's page is strictly the
-    # directory, so CHAINS and its three diagnoses left it. They were EIGHT before. The diagnosis inputs are
+    # directory, so STACKS and its three diagnoses left it. They were EIGHT before. The diagnosis inputs are
     # still on the wire, which is where this pins them: `grid.slug` and `grid.manifests` are what
     # `render._grid_placeholder` reads on the Queen's page, and what a `--json` consumer reads anywhere.
     run grep -c '▸ ' "${BATS_TEST_TMPDIR}/ledger.txt"
     [ "$output" = "2" ]
-    run bash -c "grep -c 'no chain manifest declares work' '${BATS_TEST_TMPDIR}/ledger.txt' || true"
+    run bash -c "grep -c 'no stack manifest declares work' '${BATS_TEST_TMPDIR}/ledger.txt' || true"
     [ "$output" = "0" ]
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/ledger.json" link ledger --json
     run jq -c '[.grid.slug, (.grid.manifests | length), .grid.scope_kind]' "${BATS_TEST_TMPDIR}/ledger.json"
@@ -3762,7 +3766,7 @@ _link_picture_budget() {
         "$root/solo" > "$BORG_REGISTRY"
 
     _link_grid_run "$root" "${BATS_TEST_TMPDIR}/orch-empty.txt" link
-    run grep -c 'no chain manifests in the registry yet' "${BATS_TEST_TMPDIR}/orch-empty.txt"
+    run grep -c 'no stack manifests in the registry yet' "${BATS_TEST_TMPDIR}/orch-empty.txt"
     [ "$output" = "1" ]
     run bash -c "grep -c 'no GitHub origin' '${BATS_TEST_TMPDIR}/orch-empty.txt' || true"
     [ "$output" = "0" ]
@@ -4422,60 +4426,38 @@ _repo_norm() {
     [ "$output" = "owner/repo" ]
 }
 
-# ── guards: borg program arg handling (opus round-2 findings 3-5, round-3 finding 3) ──────────────
+# ── guards: borg stack arg handling (opus round-2 findings 3-5, round-3 finding 3) ─────────────────
 # These bugs are the class only execution catches: zsh hard-errors a bare `shift` at $#==0 (bash
 # does not), and set -e turns that into a silent death. Same blind-spot shape as the BORG_REGISTRY
-# inheritance bug — reading the code proved nothing until a test ran it.
-
-@test "contract: argless 'borg chain' reaches the list default instead of a shift crash" {
-    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
-    mkdir -p "$BATS_TEST_TMPDIR/proj"
-    run zsh -c "'$BORG' chain"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"0 chain(s)"* ]] || false
-}
-
-@test "contract: 'borg chain list' sweeps a registry manifest end to end" {
-    mkdir -p "$BATS_TEST_TMPDIR/proj/.borg/programs"
-    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
-    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
-        > "$BATS_TEST_TMPDIR/proj/.borg/programs/auth.json"
-    run zsh -c "'$BORG' chain list"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"auth: 1 row(s)"* ]] || false
-}
+# inheritance bug — reading the code proved nothing until a test ran it. They were written against
+# `borg chain`; the contract step of the chain -> stack rename moved each one onto `borg stack`.
 
 @test "contract: --recon outside plan dies named, not via argparse exit 2" {
     echo '{"projects": {}}' > "$BORG_REGISTRY"
-    run zsh -c "'$BORG' chain list --recon /tmp/x.json"
+    run zsh -c "'$BORG' stack list --recon /tmp/x.json"
     [ "$status" -ne 0 ]
     [[ "$output" == *"--recon is only valid with 'plan'"* ]] || false
 }
 
-@test "contract: a trailing valueless --programs-dir dies named, not via a shift crash" {
-    run zsh -c "'$BORG' chain plan --programs-dir"
+@test "contract: a trailing valueless --stacks-dir dies named, not via a shift crash" {
+    run zsh -c "'$BORG' stack plan --stacks-dir"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"--programs-dir needs a path"* ]] || false
+    [[ "$output" == *"--stacks-dir needs a path"* ]] || false
     [[ "$output" != *"shift count"* ]] || false
 }
 
-@test "contract: an unknown chain action prints usage including --recon" {
-    run zsh -c "'$BORG' chain bogus"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"list|plan|sync"* ]] || false
-}
-
-# ── borg stack: the chain -> stack rename, EXPAND step ───────────────────────────────────────────
-# `borg stack` is the verb; `borg chain` is a dispatch arm that forwards to it (cmd_stack) until the
-# CONTRACT step. These mirror the three `borg chain` cases above, so the two spellings stay pinned to
-# the same behaviour. docs/plans/directives/2026-10-13-chain-to-stack-rename.md, section (a).
+# ── borg stack: the chain -> stack rename ────────────────────────────────────────────────────────
+# `borg stack` is the verb. `borg chain` and `borg program` are dispatch arms that DIE pointing at it
+# (the CONTRACT step), and `<repository>/.borg/chains/` is no longer read. The first cases mirror what
+# the `borg chain` cases pinned before the contract, now on `borg stack`.
+# docs/plans/directives/2026-10-13-chain-to-stack-rename.md, sections (a) and (c).
 
 @test "contract: argless 'borg stack' reaches the list default instead of a shift crash" {
     echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
     mkdir -p "$BATS_TEST_TMPDIR/proj"
     run zsh -c "'$BORG' stack"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"0 chain(s)"* ]] || false
+    [[ "$output" == *"0 stack(s)"* ]] || false
 }
 
 @test "contract: 'borg stack list' sweeps a registry manifest end to end" {
@@ -4495,28 +4477,41 @@ _repo_norm() {
     [[ "$output" == *"--recon"* ]] || false
 }
 
-@test "contract: 'borg stack' and 'borg chain' print the same document over the same registry" {
+@test "contract: a manifest only under .borg/chains renders nowhere and borg stack names the repository and borg stack migrate" {
     mkdir -p "$BATS_TEST_TMPDIR/proj/.borg/chains"
     echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
     echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
         > "$BATS_TEST_TMPDIR/proj/.borg/chains/auth.json"
     run zsh -c "'$BORG' stack list"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"auth: 1 row(s)"* ]] || false
-    stack_output="$output"
-    run zsh -c "'$BORG' chain list"
-    [ "$status" -eq 0 ]
-    [ "$output" = "$stack_output" ]
+    [[ "$output" != *"auth: 1 row(s)"* ]] || false
+    [[ "$output" == *"0 stack(s)"* ]] || false
+    [[ "$output" == *"$BATS_TEST_TMPDIR/proj"* ]] || false
+    [[ "$output" == *"borg stack migrate"* ]] || false
 }
 
-@test "contract: --stacks-dir is a spelling of the manifests-dir flag, and its refusal names it" {
+@test "contract: borg link names the repository and borg stack migrate for a manifest only under .borg/chains" {
+    mkdir -p "$BATS_TEST_TMPDIR/proj/.borg/chains"
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
+        > "$BATS_TEST_TMPDIR/proj/.borg/chains/auth.json"
+    run zsh -c "'$BORG' link --local --overview --json"
+    [ "$status" -eq 0 ]
+    run jq -r '.grid.warnings[]' <<<"$output"
+    [[ "$output" == *"$BATS_TEST_TMPDIR/proj"* ]] || false
+    [[ "$output" == *"borg stack migrate"* ]] || false
+    run zsh -c "'$BORG' link --local --overview"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"STACKS"* ]] || false
+    [[ "$output" == *"borg stack migrate"* ]] || false
+    [[ "$output" != *"no stack manifests in the registry yet"* ]] || false
+}
+
+@test "contract: --stacks-dir is the manifests-dir flag, and its refusal names it" {
     mkdir -p "$BATS_TEST_TMPDIR/proj/.stacks"
     echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
         > "$BATS_TEST_TMPDIR/proj/.stacks/auth.json"
     run zsh -c "'$BORG' stack list --stacks-dir '$BATS_TEST_TMPDIR/proj'"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"auth: 1 row(s)"* ]] || false
-    run zsh -c "'$BORG' chain list --stacks-dir '$BATS_TEST_TMPDIR/proj'"
     [ "$status" -eq 0 ]
     [[ "$output" == *"auth: 1 row(s)"* ]] || false
     run zsh -c "'$BORG' stack plan --stacks-dir"
@@ -4629,9 +4624,64 @@ _migrate_repo() {
 @test "contract: 'borg program' is renamed, not removed, and forwards its args (AC7)" {
     run zsh -c "'$BORG' program list"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"renamed to 'borg chain'"* ]] || false
-    [[ "$output" == *"Run: borg chain list"* ]] || false
+    [[ "$output" == *"renamed to 'borg stack'"* ]] || false
+    [[ "$output" == *"Run: borg stack list"* ]] || false
+    [[ "$output" != *"borg chain"* ]] || false
     [[ "$output" != *"unknown command"* ]] || false
+}
+
+# The same pointer for `borg chain`, in the same pattern, for EVERY argument shape the arm used to
+# forward: bare (the old list default), an action, --help and migrate. Each dies non-zero, names
+# `borg stack`, carries its arguments, and never reaches the coordinator (no "stack(s)" document).
+@test "contract: 'borg chain' is renamed, not removed, and points at borg stack for every argument shape" {
+    run zsh -c "'$BORG' chain"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"'borg chain' was renamed to 'borg stack'"* ]] || false
+    [[ "$output" == *"Run: borg stack"* ]] || false
+    [[ "$output" != *"stack(s)"* ]] || false
+    [[ "$output" != *"unknown command"* ]] || false
+
+    run zsh -c "'$BORG' chain list"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Run: borg stack list"* ]] || false
+
+    run zsh -c "'$BORG' chain bogus"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Run: borg stack bogus"* ]] || false
+
+    run zsh -c "'$BORG' chain --help"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Run: borg stack --help"* ]] || false
+
+    run zsh -c "'$BORG' chain migrate --dry-run"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Run: borg stack migrate --dry-run"* ]] || false
+}
+
+@test "contract: 'borg chain' does not read a registry manifest it used to sweep" {
+    mkdir -p "$BATS_TEST_TMPDIR/proj/.stacks"
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
+        > "$BATS_TEST_TMPDIR/proj/.stacks/auth.json"
+    run zsh -c "'$BORG' chain list"
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"auth: 1 row(s)"* ]] || false
+    run zsh -c "'$BORG' stack list"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+}
+
+@test "contract: borg help names chain in REMOVED, points the program entry at borg stack, and lists neither in COMMANDS" {
+    run zsh "$BORG" help
+    [ "$status" -eq 0 ]
+    removed="$(printf '%s\n' "$output" | awk '/^  REMOVED$/{f=1;next} f && /^  [A-Z]/{f=0} f')"
+    [[ "$removed" == *"chain renamed to stack"* ]] || false
+    [[ "$removed" != *"Run: borg chain"* ]] || false
+    [[ "$output" != *"Run: borg chain"* ]] || false
+    commands="$(printf '%s\n' "$output" | awk '/^  COMMANDS$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{print $1}')"
+    [[ "$commands" == *stack* ]] || false
+    [[ "$commands" != *chain* ]] || false
+    [[ "$commands" != *program* ]] || false
 }
 
 # ── scope + --local (S1) ─────────────────────────────────────────────────────
@@ -4792,13 +4842,23 @@ EOF
     # MUTATION-VERIFIED, not assumed: restoring `echo` on cmd_status's own `| jq` lines turns this
     # red with exit 5 and `jq: parse error: Invalid string: control characters from U+0000 through
     # U+001F must be escaped`. Measured before and after on this fixture.
+    #
+    # RE-POINTED when cmd_status stopped printing the registry's stored summary (it prints the newest
+    # checkpoint's tl;dr, see tests/checkpoint_summary_readers.bats). The registry row KEEPS the newline
+    # summary, so the entry cmd_status pipes through jq is exactly as hostile as before and the mutation
+    # still bites; what it must render is now the checkpoint's line, and the stored one must not appear.
     _link_mock_tmux ""
     _printf_jq_registry ""
+    mkdir -p "${BATS_TEST_TMPDIR}/alpha-ws/.borg/checkpoints"
+    printf '**tl;dr** -- checkpoint line one\n' > "${BATS_TEST_TMPDIR}/alpha-ws/.borg/checkpoints/2026-10-01-0900.md"
+    jq --arg p "${BATS_TEST_TMPDIR}/alpha-ws" '.projects.alpha.path = $p' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
+    mv "${BORG_REGISTRY}.new" "$BORG_REGISTRY"
 
     run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_status alpha\" 2>&1"
     [ "$status" -eq 0 ] || { printf 'cmd_status exited %s\n%s\n' "$status" "$output" >&2; false; }
     [[ "$output" != *"parse error"* ]] || { printf 'jq still parsing echo output:\n%s\n' "$output" >&2; false; }
-    [[ "$output" == *"first line"* ]] || { printf 'no repository detail rendered:\n%s\n' "$output" >&2; false; }
+    [[ "$output" == *"checkpoint line one"* ]] || { printf 'no repository detail rendered:\n%s\n' "$output" >&2; false; }
+    [[ "$output" != *"first line"* ]] || { printf 'stored summary rendered:\n%s\n' "$output" >&2; false; }
 }
 
 @test "contract: _borg_do_switch survives a newline summary on the NO-tmux_window fallback arm" {
@@ -4851,25 +4911,28 @@ EOF
     [ -z "$bad" ] || { echo "printf '%b' into jq restores the defect:$bad"; false; }
 }
 
-@test "contract: the legacy --programs-dir spelling is still accepted after the chains rename" {
-    # EXPAND PHASE, PINNED AT THE CLI. `.borg/programs` became `.borg/chains` (AC7), and
-    # `--chains-dir` is the primary spelling -- but a caller's muscle memory, a checkpoint, or a
-    # skill written last week all say `--programs-dir`. Dropping it would break them silently: zsh's
-    # case dispatch would fall through to the pass-through arm and hand the flag to coordinator.py,
-    # whose argparse would then fail on an unrecognised argument with no mention of the rename.
+@test "contract: the retired --programs-dir spelling is refused by name, pointing at --stacks-dir" {
+    # CONTRACT PHASE, PINNED AT THE CLI. `--programs-dir` and `--chains-dir` were accepted beside
+    # `--stacks-dir` until step (c) of the chain -> stack rename. A caller's muscle memory, a
+    # checkpoint, or a skill written last week still says them, and falling through to coordinator.py's
+    # argparse would fail on an anonymous "unrecognized arguments" with no mention of the rename.
     #
-    # MUTATION: remove `|--programs-dir` from the case arm and this goes red.
-    run zsh -c "'$BORG' chain plan --programs-dir"
+    # MUTATION: restore `--programs-dir` to the `--stacks-dir` case arm and this goes red.
+    run zsh -c "'$BORG' stack plan --programs-dir"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"--programs-dir needs a path"* ]] || false
+    [[ "$output" == *"--programs-dir was renamed to --stacks-dir"* ]] || false
+    [[ "$output" != *"shift count"* ]] || false
 }
 
-@test "contract: the refusal names the spelling the caller typed, not the canonical one" {
-    # A user who typed the legacy flag and is told "--chains-dir needs a path" has to work out that
-    # the two are the same flag. `die "borg chain: $1 needs a path"` uses the typed spelling.
-    run zsh -c "'$BORG' chain plan --chains-dir"
+@test "contract: the refusal names the spelling the caller typed, and carries a path through" {
+    # The refusal names the flag the user typed (`$1`), so a stale `--chains-dir <path>` is told its
+    # replacement rather than "unrecognized arguments", with or without a value after it.
+    run zsh -c "'$BORG' stack list --chains-dir '$BATS_TEST_TMPDIR/proj'"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"--chains-dir needs a path"* ]] || false
+    [[ "$output" == *"--chains-dir was renamed to --stacks-dir"* ]] || false
+    run zsh -c "'$BORG' stack plan --chains-dir"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--chains-dir was renamed to --stacks-dir"* ]] || false
 }
 
 # ── borg window ──────────────────────────────────────────────────────────────

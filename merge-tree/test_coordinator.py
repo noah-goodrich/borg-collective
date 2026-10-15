@@ -44,15 +44,16 @@ def _tree_bytes(root):
     return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
 
 
-def _write_manifest_dir(tmp_path, repository, stem, rows, directory="chains", **declared):
-    """A repository whose `.borg/<directory>/<stem>.json` declares `rows` and, by default, NO `program` key.
+def _write_manifest_dir(tmp_path, repository, stem, rows, directory=".stacks", **declared):
+    """A repository whose `<directory>/<stem>.json` (default `.stacks`) declares `rows` and NO `program` key.
 
     The key is left out on purpose. Every fixture here used to set `program` itself, so the code under
     test never had to DERIVE the manifest's identity from the filename -- which is the one thing the
     borg_core reader does, and the reason a repoint that read `m.get("program")` would have passed all
     of them while syncing nothing. A test that needs a declared id passes `program=...` explicitly.
+    A retired directory (`.borg/chains`) can be passed to build the unmigrated shape on purpose.
     """
-    d = tmp_path / repository / ".borg" / directory
+    d = tmp_path / repository / directory
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{stem}.json").write_text(json.dumps({"rows": rows, **declared}))
     return str(tmp_path / repository)
@@ -285,7 +286,7 @@ class TestSyncBorg:
         # two copies of one program that then diverge silently. Sync must rewrite the source file.
         import json as _json
 
-        pdir = tmp_path / "proj" / ".borg" / "chains"
+        pdir = tmp_path / "proj" / ".stacks"
         pdir.mkdir(parents=True)
         m = {"program": "auth-hardening", "rows": [_row("1", "o/r#1")]}
         (pdir / "three-repo-program.json").write_text(_json.dumps(m))
@@ -300,7 +301,7 @@ class TestSyncBorg:
         # not overwrite each other, and the contention is named.
         import json as _json
 
-        pdir = tmp_path / "proj" / ".borg" / "chains"
+        pdir = tmp_path / "proj" / ".stacks"
         pdir.mkdir(parents=True)
         (pdir / "b.json").write_text(_json.dumps({"program": "b", "rows": [_row("1", "o/r#1")]}))
         (pdir / "z.json").write_text(_json.dumps({"program": "b", "rows": [_row("1", "o/r#2")]}))
@@ -321,21 +322,24 @@ class TestSyncBorg:
         d = _write_manifest_dir(tmp_path, "proj", "stem-only", [_row("1", "o/r#1")])
         manifests, _ = shell.discover([d])
         written, warnings = coordinator.sync_borg(manifests)
-        assert written == [str(tmp_path / "proj" / ".borg" / "chains" / "stem-only.json")]
+        assert written == [str(tmp_path / "proj" / ".stacks" / "stem-only.json")]
         assert warnings == []
         assert coordinator.cmd_list(_Args([d])) == 0
         out = capsys.readouterr().out
         assert "stem-only: 1 row(s)" in out and "None" not in out
 
-    def test_the_legacy_programs_directory_is_still_read_and_rewritten_in_place(self, tmp_path):
-        # One legacy case kept deliberately: `.borg/programs` is the pre-AC7 spelling and still resolves
-        # until the contract phase drops it. Sync must rewrite the file where it LIVES, not migrate it.
-        d = _write_manifest_dir(tmp_path, "proj", "old", [_row("1", "o/r#1")], directory="programs")
-        manifests, _ = shell.discover([d])
-        written, warnings = coordinator.sync_borg(manifests)
-        legacy = tmp_path / "proj" / ".borg" / "programs"
-        assert written == [str(legacy / "old.json")] and warnings == []
-        assert not (tmp_path / "proj" / ".borg" / "chains").exists()
+    @pytest.mark.parametrize("retired", [".borg/programs", ".borg/chains"])
+    def test_a_retired_directory_is_neither_read_nor_rewritten_and_the_sweep_warns(self, tmp_path, retired):
+        # The contract step of the chain -> stack rename: `.borg/programs` and `.borg/chains` are no longer
+        # read, so sync has nothing to rewrite there and must not migrate the file behind the author's back.
+        d = _write_manifest_dir(tmp_path, "proj", "old", [_row("1", "o/r#1")], directory=retired)
+        manifests, warnings = shell.discover([d])
+        assert manifests == []
+        assert any(d in w and "borg stack migrate" in w for w in warnings), warnings
+        written, sync_warnings = coordinator.sync_borg(manifests)
+        assert written == [] and sync_warnings == []
+        assert not (tmp_path / "proj" / ".stacks").exists()
+        assert (tmp_path / "proj" / retired / "old.json").exists()
 
     def test_same_program_in_two_repositories_writes_each_to_its_own_home(self, tmp_path):
         # Opus review MERGE-BLOCKER: the old program-keyed map wrote the loser's manifest into
@@ -352,15 +356,15 @@ class TestSyncBorg:
 class TestRepositoryDirOf:
     def test_recovers_repository_root_from_the_discover_stamped_path(self, tmp_path):
         repository_dir = _write_manifest_dir(tmp_path, "proj", "prog-a", [_row("1", "o/r#1")])
-        path = str(tmp_path / "proj" / ".borg" / "chains" / "prog-a.json")
+        path = str(tmp_path / "proj" / ".stacks" / "prog-a.json")
         manifests, _ = shell.discover([repository_dir])
         assert manifests[0]["_path"] == path
         assert coordinator._repository_dir_of(manifests[0]) == repository_dir
 
 
 class _Args:
-    def __init__(self, chains_dir, recon=None):
-        self.chains_dir = chains_dir
+    def __init__(self, stacks_dir, recon=None):
+        self.stacks_dir = stacks_dir
         self.recon = recon
 
 
@@ -369,10 +373,10 @@ class TestCmdList:
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         assert coordinator.cmd_list(_Args([d])) == 0
         out = capsys.readouterr().out
-        assert "a: 1 row(s)" in out and "1 chain(s), 0 skipped" in out
+        assert "a: 1 row(s)" in out and "1 stack(s), 0 skipped" in out
 
     def test_names_a_skipped_manifest_but_still_succeeds(self, tmp_path, capsys):
-        d = tmp_path / "proj" / ".borg" / "chains"
+        d = tmp_path / "proj" / ".stacks"
         d.mkdir(parents=True)
         (d / "bad.json").write_text("{not json")
         assert coordinator.cmd_list(_Args([str(tmp_path / "proj")])) == 0
@@ -383,7 +387,7 @@ class TestCmdList:
 class TestCmdPlan:
     def test_exits_nonzero_on_malformed_input(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        d = tmp_path / "proj" / ".borg" / "chains"
+        d = tmp_path / "proj" / ".stacks"
         d.mkdir(parents=True)
         (d / "bad.json").write_text("{not json")
         assert coordinator.cmd_plan(_Args([str(tmp_path / "proj")])) == 1
@@ -396,7 +400,7 @@ class TestCmdPlan:
         assert rc == 0
         out, err = capsys.readouterr()
         assert "no publish target found" in err
-        assert "plan: 1 chain(s), 1 row(s)" in out
+        assert "plan: 1 stack(s), 1 row(s)" in out
         # PM7: plan is read-only — running it must not add or change any file under the repository.
         assert sorted((tmp_path / "proj").rglob("*")) == before
 
@@ -413,7 +417,7 @@ class TestCmdPlan:
 
 class TestCmdSync:
     def test_refuses_to_sync_malformed_input(self, tmp_path):
-        d = tmp_path / "proj" / ".borg" / "chains"
+        d = tmp_path / "proj" / ".stacks"
         d.mkdir(parents=True)
         (d / "bad.json").write_text("{not json")
         assert coordinator.cmd_sync(_Args([str(tmp_path / "proj")])) == 1
@@ -422,7 +426,7 @@ class TestCmdSync:
         """A repository whose one manifest has three rows, the middle one invalid; returns (repository, file, bytes)."""
         bad = _row("2", "o/r#2", gate={"kind": "decision", "blocked_by": "someone"})
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1"), bad, _row("3", "o/r#3")])
-        path = tmp_path / "proj" / ".borg" / "chains" / "a.json"
+        path = tmp_path / "proj" / ".stacks" / "a.json"
         return d, path, path.read_bytes()
 
     def test_sync_over_a_manifest_with_one_invalid_row_leaves_every_row_on_disk(self, tmp_path, capsys, monkeypatch):
@@ -489,16 +493,24 @@ class TestCmdSync:
 class TestMain:
     def test_list_via_argv(self, tmp_path, capsys, monkeypatch):
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
-        monkeypatch.setattr("sys.argv", ["coordinator.py", "list", "--chains-dir", d])
+        monkeypatch.setattr("sys.argv", ["coordinator.py", "list", "--stacks-dir", d])
         assert coordinator.main() == 0
-        assert "1 chain(s), 0 skipped" in capsys.readouterr().out
+        assert "1 stack(s), 0 skipped" in capsys.readouterr().out
 
-    def test_the_legacy_flag_spelling_is_still_accepted(self, tmp_path, capsys, monkeypatch):
-        # tests/cli_contract.bats pins `--programs-dir` as a spelling `borg chain` forwards untouched.
+    @pytest.mark.parametrize("flag", ["--chains-dir", "--programs-dir"])
+    def test_a_retired_flag_spelling_is_refused_by_name_pointing_at_stacks_dir(
+        self, tmp_path, capsys, monkeypatch, flag
+    ):
+        # The contract step of the chain -> stack rename: the two older spellings were accepted beside
+        # `--stacks-dir` until now. A stale script is told what replaced the flag, not "unrecognized arguments".
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
-        monkeypatch.setattr("sys.argv", ["coordinator.py", "list", "--programs-dir", d])
-        assert coordinator.main() == 0
-        assert "1 chain(s), 0 skipped" in capsys.readouterr().out
+        monkeypatch.setattr("sys.argv", ["coordinator.py", "list", flag, d])
+        with pytest.raises(SystemExit) as raised:
+            coordinator.main()
+        assert raised.value.code == 2
+        err = capsys.readouterr().err
+        assert f"{flag} was renamed to --stacks-dir" in err
+        assert "unrecognized arguments" not in err
 
     def test_requires_a_subcommand(self, monkeypatch):
         monkeypatch.setattr("sys.argv", ["coordinator.py"])
@@ -584,10 +596,11 @@ class TestRepositoryDirOfUnrecognised:
         # returns the WHOLE PATH -- so an unrecognised layout produced a non-empty wrong "root".
         assert coordinator._repository_dir_of({"_path": "/tmp/x/.borg/elsewhere/p.json"}) == ""
 
-    def test_both_recognised_names_still_resolve(self):
-        assert coordinator._repository_dir_of({"_path": "/tmp/x/.borg/chains/p.json"}) == "/tmp/x"
-        assert coordinator._repository_dir_of({"_path": "/tmp/x/.borg/programs/p.json"}) == "/tmp/x"
+    def test_only_the_one_manifest_root_resolves(self):
         assert coordinator._repository_dir_of({"_path": "/tmp/x/.stacks/p.json"}) == "/tmp/x"
+        # The retired roots are no longer recognised: a path there is a path under no manifest root.
+        assert coordinator._repository_dir_of({"_path": "/tmp/x/.borg/chains/p.json"}) == ""
+        assert coordinator._repository_dir_of({"_path": "/tmp/x/.borg/programs/p.json"}) == ""
 
     def test_sync_borg_NAMES_a_dropped_manifest_instead_of_losing_it(self, tmp_path):
         """A bare `continue` lost a manifest at exit 0 -- the confident-empty shape again.
@@ -598,7 +611,7 @@ class TestRepositoryDirOfUnrecognised:
             [{"_id": "p", "_path": str(tmp_path / ".borg" / "elsewhere" / "p.json"), "rows": []}]
         )
         assert written == []
-        assert any("not under .borg/chains, .borg/programs or .stacks" in w for w in warnings), warnings
+        assert any("not under .stacks" in w for w in warnings), warnings
         assert any("p.json" in w for w in warnings), warnings
 
     def test_a_manifest_with_no_path_at_all_stays_silent(self):
@@ -613,15 +626,12 @@ _BAD_GATE = {"kind": "decision", "blocked_by": "someone"}
 def _refusal_repository(tmp_path, kind):
     """A repository holding one GOOD manifest and one the reader refuses for `kind`; returns the repository."""
     repository = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
-    chains = tmp_path / "proj" / ".borg" / "chains"
+    chains = tmp_path / "proj" / ".stacks"
     if kind == "unreadable json":
         (chains / "bad.json").write_text("{not json")
     elif kind == "invalid manifest":
         rows = [_row("1", "o/r#2", gate=_BAD_GATE), _row("2", "o/r#3")]
         (chains / "bad.json").write_text(json.dumps({"rows": rows}))
-    elif kind == "declared in both roots":
-        _write_stacks(tmp_path, "proj", "dup", [_row("1", "o/r#4")])
-        (chains / "dup.json").write_text(json.dumps({"rows": [_row("1", "o/r#5")]}))
     else:
         raise AssertionError(kind)
     return repository
@@ -633,7 +643,7 @@ class TestRefusalsThroughTheRealReader:
     no longer exists in the reader; building the warning by hand is how it came to pass while the real
     wording drifted. MUTATION: replace `fatal` in cmd_sync or cmd_plan with `[]` and these go red."""
 
-    @pytest.mark.parametrize("kind", ["unreadable json", "invalid manifest", "declared in both roots"])
+    @pytest.mark.parametrize("kind", ["unreadable json", "invalid manifest"])
     def test_every_refusal_class_is_fatal_for_sync_and_plan_and_writes_nothing(
         self, tmp_path, capsys, monkeypatch, kind
     ):
@@ -669,13 +679,13 @@ class TestRefusalsThroughTheRealReader:
         # whole-file refusal still protect every real manifest.
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
         repository = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
-        stray = tmp_path / "proj" / ".borg" / "chains" / "settings.json"
+        stray = tmp_path / "proj" / ".stacks" / "settings.json"
         stray.write_text('{"theme": "dark"}')
 
         assert coordinator.cmd_plan(_Args([repository])) == 0
         plan_out, plan_err = capsys.readouterr()
         assert "settings.json" in plan_err and "not a manifest (no rows list)" in plan_err
-        assert "plan: 1 chain(s)" in plan_out and "CAVEAT" not in plan_out
+        assert "plan: 1 stack(s)" in plan_out and "CAVEAT" not in plan_out
 
         assert coordinator.cmd_sync(_Args([repository])) == 0
         assert "wrote 1 manifest(s)" in capsys.readouterr().out
@@ -688,14 +698,31 @@ class TestRefusalsThroughTheRealReader:
 
         assert coordinator.cmd_list(_Args([repository])) == 0
         out, err = capsys.readouterr()
-        assert "MANIFEST SKIPPED" in err and "0 chain(s), 1 skipped" in out
+        assert "MANIFEST SKIPPED" in err and "0 stack(s), 1 skipped" in out
 
         assert coordinator.cmd_plan(_Args([repository])) == 1
 
 
 class TestStacksRoot:
-    """DECISION 3 (Noah, 2026-10-12): list, plan and sync cover both roots, and sync rewrites a `.stacks/`
-    manifest in place."""
+    """DECISION 3 (Noah, 2026-10-12), narrowed by the contract step of the chain -> stack rename: `.stacks/` is
+    the one root list, plan and sync cover, and sync rewrites a `.stacks/` manifest in place."""
+
+    def test_a_retired_twin_is_warned_about_and_never_touched_by_sync(self, tmp_path, capsys, monkeypatch):
+        # Replaces the "declared in both roots" refusal: with one root there is no clash to refuse, but a stem
+        # still sitting under the retired root must neither be picked nor rewritten, and must be NAMED.
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        repository = _write_stacks(tmp_path, "proj", "dup", [_row("1", "o/r#4")])
+        twin = tmp_path / "proj" / ".borg" / "chains" / "dup.json"
+        twin.parent.mkdir(parents=True)
+        twin.write_text(json.dumps({"rows": [_row("1", "o/r#5")]}))
+        before = twin.read_bytes()
+
+        assert coordinator.cmd_sync(_Args([repository])) == 0
+
+        captured = capsys.readouterr()
+        assert "wrote 1 manifest(s)" in captured.out
+        assert repository in captured.err and "borg stack migrate" in captured.err
+        assert twin.read_bytes() == before
 
     def test_list_and_plan_cover_the_stacks_root(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
@@ -704,11 +731,10 @@ class TestStacksRoot:
         assert coordinator.cmd_list(_Args([repository])) == 0
         assert "tool-neutral: 2 row(s)" in capsys.readouterr().out
         assert coordinator.cmd_plan(_Args([repository])) == 0
-        assert "plan: 1 chain(s), 2 row(s)" in capsys.readouterr().out
+        assert "plan: 1 stack(s), 2 row(s)" in capsys.readouterr().out
 
     def test_sync_rewrites_a_stacks_manifest_in_place_and_creates_no_second_file(self, tmp_path, capsys, monkeypatch):
-        # A second copy under `.borg/chains/` would be declared in BOTH roots, which the next read
-        # refuses by name and which makes the following sync exit 1.
+        # A second copy anywhere else (the retired `.borg/chains/`) would leave the author two files for one stem.
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
         repository = _write_stacks(tmp_path, "proj", "tool-neutral", [_row("1", "o/r#1")])
         target = tmp_path / "proj" / ".stacks" / "tool-neutral.json"
@@ -724,11 +750,11 @@ class TestStacksRoot:
 
 
 class TestWhatTheWriterPersists:
-    def _synced(self, tmp_path, monkeypatch, directory="chains", **declared):
+    def _synced(self, tmp_path, monkeypatch, **declared):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        repository = _write_manifest_dir(tmp_path, "proj", "plain", [_row("1", "o/r#1")], directory, **declared)
+        repository = _write_manifest_dir(tmp_path, "proj", "plain", [_row("1", "o/r#1")], **declared)
         assert coordinator.cmd_sync(_Args([repository])) == 0
-        return tmp_path / "proj" / ".borg" / directory / "plain.json"
+        return tmp_path / "proj" / ".stacks" / "plain.json"
 
     def test_written_bytes_gain_no_derived_or_retired_key(self, tmp_path, monkeypatch):
         written = json.loads(self._synced(tmp_path, monkeypatch).read_text())
@@ -743,7 +769,7 @@ class TestWhatTheWriterPersists:
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
         original = (pathlib.Path(REPO_ROOT) / ".stacks" / "viz-program.json").read_bytes()
         assert "\u2013".encode() in original
-        chains = tmp_path / "proj" / ".borg" / "chains"
+        chains = tmp_path / "proj" / ".stacks"
         chains.mkdir(parents=True)
         (chains / "viz-program.json").write_bytes(original)
 
@@ -756,7 +782,7 @@ class TestWhatTheWriterPersists:
         # author wrote it, and no `_`-prefixed key ever does.
         capture = tmp_path / "stdin.json"
         target_dir = _make_target(
-            tmp_path, "capture", "#!/bin/sh\ncat > '" + str(capture) + "'\necho '{\"ok\": true, \"rows\": []}'\n"
+            tmp_path, "capture", "#!/bin/sh\ncat > '" + str(capture) + '\'\necho \'{"ok": true, "rows": []}\'\n'
         )
         monkeypatch.setenv(coordinator.ENV_VAR, target_dir)
         plain = _write_manifest_dir(tmp_path, "one", "plain", [_row("1", "o/r#1")])
@@ -788,11 +814,11 @@ class TestOneChainRegisteredTwice:
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
         first = _write_manifest_dir(tmp_path, "first", "shared", [_row("1", "o/r#1")])
         second = _write_manifest_dir(tmp_path, "second", "shared", [_row("1", "o/r#1")])
-        second_file = tmp_path / "second" / ".borg" / "chains" / "shared.json"
+        second_file = tmp_path / "second" / ".stacks" / "shared.json"
         second_before = second_file.read_bytes()
 
         assert coordinator.cmd_list(_Args([first, second])) == 0
-        assert "1 chain(s), 0 skipped" in capsys.readouterr().out
+        assert "1 stack(s), 0 skipped" in capsys.readouterr().out
 
         assert coordinator.cmd_sync(_Args([first, second])) == 0
         assert "wrote 1 manifest(s)" in capsys.readouterr().out
@@ -809,14 +835,14 @@ class TestSyncKeepsWhatTheAuthorWrote:
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
         repository = self._repository(tmp_path, _comment="hand-written", _note=["a", "b"])
         assert coordinator.cmd_sync(_Args([repository])) == 0
-        written = json.loads((tmp_path / "proj" / ".borg" / "chains" / "plain.json").read_text())
+        written = json.loads((tmp_path / "proj" / ".stacks" / "plain.json").read_text())
         assert written == {"rows": [_row("1", "o/r#1")], "_comment": "hand-written", "_note": ["a", "b"]}
         assert "_id" not in written and "_path" not in written
 
     def test_sync_keeps_a_0644_manifest_0644(self, tmp_path, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
         repository = self._repository(tmp_path)
-        target = tmp_path / "proj" / ".borg" / "chains" / "plain.json"
+        target = tmp_path / "proj" / ".stacks" / "plain.json"
         os.chmod(target, 0o644)
         assert coordinator.cmd_sync(_Args([repository])) == 0
         assert stat.S_IMODE(os.stat(target).st_mode) == 0o644

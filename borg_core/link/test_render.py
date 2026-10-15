@@ -137,7 +137,7 @@ def test_every_section_renders_its_header_on_each_page():
     # only a placeholder in every context for a whole release is the exact 'reads as broken' failure
     # Q10 exists to prevent". NEXT sits below SHIPPED so the page reads history-then-future, and
     # above SIGNALS so the honest "nobody looked" line is the last word on a `--local` render.
-    assert expected == ["IN FOCUS", "REPOSITORIES", "CHAINS", "QUEUED", "SHIPPED", "NEXT", "SIGNALS", "WAITING ON YOU"]
+    assert expected == ["IN FOCUS", "REPOSITORIES", "STACKS", "QUEUED", "SHIPPED", "NEXT", "SIGNALS", "WAITING ON YOU"]
     assert _headers(render.document(_doc())) == expected
     # THE DIRECTORY'S PAGE: strictly one directory -- its card, then what waits on it. MUTATION: add "REPOSITORIES"
     # (or any repository-level section) to REPOSITORY_SECTIONS and this goes red, which is the point.
@@ -157,7 +157,7 @@ def test_an_empty_section_renders_exactly_one_placeholder_line():
             body[current] = []
         elif current is not None and line.strip():
             body[current].append(line)
-    for title in ("IN FOCUS", "CHAINS", "QUEUED", "SHIPPED", "SIGNALS"):
+    for title in ("IN FOCUS", "STACKS", "QUEUED", "SHIPPED", "SIGNALS"):
         assert len(body[title]) == 1, f"{title} rendered {body[title]}"
         assert body[title][0].startswith("  — "), body[title][0]
     # REPOSITORIES on an empty registry is the same rule with the zsh original's own sentence.
@@ -171,10 +171,10 @@ def test_an_empty_section_renders_exactly_one_placeholder_line():
 # `grid.repository_dir` actually produces there rather than a plausible-looking one. Varying `slug`
 # alone -- which is how the spec states this ladder -- passes against a hand-built block while the
 # third arm is unreachable in production, because orchestrator scope has no slug by contract.
-_CHAINS_CASES = [
-    ({"scope_kind": "orchestrator", "slug": ""}, "no chain manifests in the registry yet"),
+_STACKS_CASES = [
+    ({"scope_kind": "orchestrator", "slug": ""}, "no stack manifests in the registry yet"),
     ({"scope_kind": "repository", "slug": ""}, "no GitHub origin"),
-    ({"scope_kind": "repository", "slug": "acme/ledger"}, "no chain manifest declares work in acme/ledger"),
+    ({"scope_kind": "repository", "slug": "acme/ledger"}, "no stack manifest declares work in acme/ledger"),
     # FOURTH ARM, and it carries a slug precisely so it cannot pass by falling through to an earlier
     # one: a refused manifest in a fully-resolved repository is the case every other arm reports as
     # manifest-less.
@@ -182,18 +182,18 @@ _CHAINS_CASES = [
 ]
 
 
-@pytest.mark.parametrize("grid_overrides,expected", _CHAINS_CASES)
-def test_the_four_chains_placeholders_are_four_different_diagnoses(grid_overrides, expected):
-    """An empty CHAINS section is the MODAL case -- 13 of ~14 registered repositories have no
+@pytest.mark.parametrize("grid_overrides,expected", _STACKS_CASES)
+def test_the_four_stacks_placeholders_are_four_different_diagnoses(grid_overrides, expected):
+    """An empty STACKS section is the MODAL case -- 13 of ~14 registered repositories have no
     manifest -- so which of the four it is has to be readable off the page, not inferred."""
     doc = _doc()
     doc["grid"].update(grid_overrides)
     assert expected in render.document(doc)
 
 
-def test_the_four_chains_placeholders_are_actually_distinct():
+def test_the_four_stacks_placeholders_are_actually_distinct():
     sentences = set()
-    for overrides, _ in _CHAINS_CASES:
+    for overrides, _ in _STACKS_CASES:
         doc = _doc()
         doc["grid"].update(overrides)
         sentences.add(render._grid_placeholder(doc["grid"]))  # pylint: disable=protected-access
@@ -203,7 +203,7 @@ def test_the_four_chains_placeholders_are_actually_distinct():
 def test_a_refused_manifest_is_not_reported_as_no_manifest_at_all():
     """The arm's whole reason to exist, stated as the sentence it must NOT print.
 
-    A repository whose only manifest was refused used to render "no chain manifests in the registry
+    A repository whose only manifest was refused used to render "no stack manifests in the registry
     yet. Run /borg-plan in any repository." -- false, and it points the reader at scaffolding a second
     manifest beside the broken one. Asserting the absence rather than only the presence is what stops
     a future reordering of the ladder from silently restoring the old answer.
@@ -212,8 +212,8 @@ def test_a_refused_manifest_is_not_reported_as_no_manifest_at_all():
     doc["grid"].update({"scope_kind": "repository", "slug": "acme/ledger", "refused": 2})
     page = render.document(doc)
     assert "2 manifests could not be read" in page
-    assert "no chain manifests in the registry yet" not in page
-    assert "no chain manifest declares work in acme/ledger" not in page
+    assert "no stack manifests in the registry yet" not in page
+    assert "no stack manifest declares work in acme/ledger" not in page
 
 
 def test_a_refused_count_of_zero_falls_through_to_the_older_arms():
@@ -221,7 +221,7 @@ def test_a_refused_count_of_zero_falls_through_to_the_older_arms():
     every `--json` document written before this arm existed -- must read exactly as it did."""
     doc = _doc()
     doc["grid"].update({"scope_kind": "repository", "slug": "acme/ledger", "refused": 0})
-    assert "no chain manifest declares work in acme/ledger" in render.document(doc)
+    assert "no stack manifest declares work in acme/ledger" in render.document(doc)
     doc_without = _doc()
     doc_without["grid"].update({"scope_kind": "repository", "slug": "acme/ledger"})
     assert render.document(doc_without) == render.document(doc)
@@ -231,7 +231,7 @@ def test_the_refused_arm_outranks_the_registry_wide_sentence():
     """PINS THE LADDER'S ORDER at the one place it is observable.
 
     `refused` is counted for whatever scope resolved -- the whole registry in orchestrator scope --
-    so an orchestrator page with unreadable manifests on disk must not print "no chain manifests in
+    so an orchestrator page with unreadable manifests on disk must not print "no stack manifests in
     the registry yet". Every other placeholder case is repository-scoped, so without this the arm
     could be moved below the scope check and no test would notice.
     """
@@ -239,7 +239,7 @@ def test_the_refused_arm_outranks_the_registry_wide_sentence():
     doc["grid"].update({"scope_kind": "orchestrator", "slug": "", "refused": 3})
     page = render.document(doc)
     assert "3 manifests could not be read" in page
-    assert "no chain manifests in the registry yet" not in page
+    assert "no stack manifests in the registry yet" not in page
 
 
 def test_orchestrator_scope_never_reaches_the_no_origin_diagnosis():
@@ -251,7 +251,7 @@ def test_orchestrator_scope_never_reaches_the_no_origin_diagnosis():
     doc["grid"].update({"scope_kind": "orchestrator", "slug": ""})
     out = render.document(doc)
     assert "no GitHub origin" not in out
-    assert "no chain manifests in the registry yet" in out
+    assert "no stack manifests in the registry yet" in out
 
 
 # ── R6: the two sentences the empty-registry early returns used to print ───────────────────────────
@@ -345,8 +345,8 @@ def test_focus_path_line_omitted_entirely_when_path_is_the_string_null():
 
 def test_status_line_appears_exactly_once_on_the_whole_page_and_ends_in_the_status_word():
     """drone.zsh:964's `grep -m1 'Status:'` reads this line. The fixture below puts the literal
-    `Status:` inside a PR title in CHAINS of the Queen's page, which is the poisoning shape a real sweep
-    produces. A directory's page does not render CHAINS at all, so there the card's line is the only one
+    `Status:` inside a PR title in STACKS of the Queen's page, which is the poisoning shape a real sweep
+    produces. A directory's page does not render STACKS at all, so there the card's line is the only one
     and it is FIRST by construction; the Queen's page has no card, hence no `Status:` line of its own."""
     doc = _repository_doc(focus=_focus(entry={"path": "null", "status": "active"}))
     doc["grid"]["manifests"] = [
@@ -674,7 +674,7 @@ def test_chains_names_the_sweep_window_bound_rather_than_claiming_it_is_the_swee
     note = next(
         line
         for line in plain(render.document(_doc(grid=block))).split("\n")
-        if line.startswith(f"{render.SECTION_MARK}CHAINS")
+        if line.startswith(f"{render.SECTION_MARK}STACKS")
     )
 
     assert f"swept back to {mark}" in note, note
@@ -685,14 +685,14 @@ def test_chains_names_the_sweep_window_bound_rather_than_claiming_it_is_the_swee
     unswept = next(
         line
         for line in plain(render.document(_doc(grid=block))).split("\n")
-        if line.startswith(f"{render.SECTION_MARK}CHAINS")
+        if line.startswith(f"{render.SECTION_MARK}STACKS")
     )
     assert "not swept" in unswept and "back to" not in unswept
 
 
 def _fork_block() -> dict:
     """The approved mock's fork, all the way through grid_manifest -- a real block, not a hand-built
-    one, so CHAINS is exercised against the shape production actually assembles.
+    one, so STACKS is exercised against the shape production actually assembles.
 
     `_id` is stamped here because `manifest.shell._load_manifest` stamps it at LOAD time, not
     validation time, and these tests never load from disk. Without it the block's `id` is "" and the
@@ -733,7 +733,7 @@ def test_a_manifest_with_no_description_or_repositories_renders_neither_line():
     body_text = plain(render.document(doc))
 
     # Drop the header LINE (which carries the section note) before reading the body.
-    body = body_text.split("▸ CHAINS")[1].split("\n", 1)[1].split("▸ QUEUED")[0]
+    body = body_text.split("▸ STACKS")[1].split("\n", 1)[1].split("▸ QUEUED")[0]
     assert "repos:" not in body
     # The heading is immediately followed by the glance strip -- no orphan blank between them.
     lines = [line for line in body.split("\n") if line.strip()]
@@ -1379,10 +1379,10 @@ def test_an_unrecognized_kind_reaches_unsure_through_the_real_loader(tmp_path):
     green if someone reverted the fixture, leaving the golden as the only guard on a row whose whole
     job is to be the guard.
     """
-    # `discover` takes REPOSITORY roots and globs `<root>/.borg/chains/`, so the shipped fixture is
+    # `discover` takes REPOSITORY roots and globs `<root>/.stacks/`, so the shipped fixture is
     # copied into that layout rather than read in place -- the bytes under test are still the
     # fixture's.
-    programs = tmp_path / "warehouse" / ".borg" / "chains"
+    programs = tmp_path / "warehouse" / ".stacks"
     programs.mkdir(parents=True)
     shutil.copy(os.path.join(_LINK_FIXTURES, "manifests", "warehouse-rollout.json"), str(programs))
 
@@ -1704,7 +1704,7 @@ def test_a_worktree_page_is_strictly_that_directory():
         "THE BORG COLLECTIVE",
         "Tip:",
         "REPOSITORIES",
-        "CHAINS",
+        "STACKS",
         "QUEUED",
         "SHIPPED",
         "NEXT",

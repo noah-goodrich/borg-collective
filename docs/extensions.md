@@ -37,6 +37,8 @@ checklist equally:
 | `borg-link-up` | all three | |
 | `borg-review` | `01-context`, `02-output` | **no `03-followup`, on purpose** — see below |
 
+`borg-link-up` does not read its extension files itself: the `borg checkpoint-prepare` verb gathers them (and the collision-proof checkpoint name, with the same code as `borg checkpoint-name`) and the skill reads the printed document. The layers and the precedence rule are unchanged.
+
 `borg-review` has no `03-followup` because its entire contract is to end on exactly ONE action, and
 a hook that runs after the recommendation invites a second. Post-review behaviour belongs in the
 skill the recommendation points at.
@@ -49,7 +51,11 @@ a return contract. There is no "before the artifact" moment to hook.
 | `borg-nanoprobe` | `brief` | read before the scope gate, which is **not** extensible — see below |
 
 The nanoprobe's scope gate is **not** extensible: an extension may add instructions, but never
-widen what the agent may touch, raise its deliverable ceiling, or relax bounded termination.
+widen what the agent may touch, raise its deliverable ceiling, or relax bounded termination. There
+is one sanctioned exception: the **machine-layer** `- Prefer-tool:` may name the Skill target the
+nanoprobe uses at step 3 (opening its PR), and nothing else. `hooks/borg-nanoprobe-guard.sh` enforces
+it: the hook reads the machine-layer brief itself, denies every other Skill call, and denies nanoprobe
+writes under `borg/extensions/`. A repository-layer file never grants a Skill.
 
 ## The `prefer-tool` type
 
@@ -89,6 +95,9 @@ type. The question to answer for any future type is: **who owns the fact being a
 So prose keeps the existing behaviour (repo layered after machine, repo wins) and `prefer-tool`
 inverts it — not as a special case, but because its subject is the environment. A conflict is
 reported only when both layers assert the *same* key, and reported once.
+
+A `prefer-tool` that exists only in the repository layer reports live in `survey`, but the nanoprobe
+ignores it: its Skill gate reads the machine layer alone.
 
 ### What it may and may not do
 

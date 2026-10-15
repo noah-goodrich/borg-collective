@@ -814,13 +814,13 @@ def _cortex_countdowns(doc: dict) -> dict[str, str]:
 
 
 def _grid_placeholder(grid_block: dict) -> str:
-    """FOUR DIFFERENT DIAGNOSES for an empty CHAINS section, read off the grid block's own
+    """FOUR DIFFERENT DIAGNOSES for an empty STACKS section, read off the grid block's own
     self-describing fields (`refused`, `slug`, `scope_kind`, `manifests`) rather than guessed.
 
     REFUSED IS TESTED FIRST, BEFORE SCOPE, and that order is the whole point of the arm. A manifest
     that failed to load is not among `manifests` -- it was refused whole -- so every later arm
     reports on a repository that looks manifest-less and says so: `borg link` in a repository whose
-    only manifest has one bad row rendered "no chain manifests in the registry yet. Run /borg-plan
+    only manifest has one bad row rendered "no stack manifests in the registry yet. Run /borg-plan
     in any repository." That sentence is not merely unhelpful, it is FALSE, and it points the reader
     at scaffolding a second manifest beside the broken one. The `▸ SIGNALS` warning naming the real
     reason is a dim line at the bottom of the page; this section is where the reader is looking.
@@ -832,7 +832,7 @@ def _grid_placeholder(grid_block: dict) -> str:
     counted for whatever scope resolved -- one repository's directory in repository scope, the whole
     registry in orchestrator scope -- so a wording like "manifests are HERE but could not be read"
     would be false on the orchestrator page, and moving the arm below scope to dodge that would let
-    the registry-wide sentence claim "no chain manifests in the registry yet" while three of them
+    the registry-wide sentence claim "no stack manifests in the registry yet" while three of them
     sit on disk unreadable. Saying only that they could not be read is true in both, which is why the
     arm can stay where correctness wants it.
 
@@ -848,7 +848,7 @@ def _grid_placeholder(grid_block: dict) -> str:
     therefore answers "this directory has no GitHub origin" for `borg link` run from the workspace
     root -- a diagnosis about a directory, on the one invocation that is not about a directory --
     and the registry-wide sentence can never render. Found by reading the generated golden rather
-    than by a test, which is why `test_the_four_chains_placeholders_are_four_different_diagnoses`
+    than by a test, which is why `test_the_four_stacks_placeholders_are_four_different_diagnoses`
     now parameterizes `scope_kind` alongside `slug` instead of varying `slug` alone.
     """
     refused = grid_block.get("refused") or 0
@@ -857,15 +857,21 @@ def _grid_placeholder(grid_block: dict) -> str:
             f"{_plural(refused, 'manifest', 'manifests')} could not be read — "
             "see the reasons below, then fix and re-run."
         )
+    unmigrated = grid_block.get("unmigrated") or 0
+    if unmigrated:
+        return (
+            f"manifests in {_plural(unmigrated, 'repository', 'repositories')} are still under .borg/chains and "
+            "are no longer read — see the reasons below, then run borg stack migrate."
+        )
     if grid_block.get("scope_kind") != "repository":
-        return "no chain manifests in the registry yet. Run /borg-plan in any repository."
+        return "no stack manifests in the registry yet. Run /borg-plan in any repository."
     if not grid_block.get("slug"):
-        return "this directory has no GitHub origin — nothing to scope a chain to."
-    return f"no chain manifest declares work in {grid_block['slug']}. Run /borg-plan to scaffold one."
+        return "this directory has no GitHub origin — nothing to scope a stack to."
+    return f"no stack manifest declares work in {grid_block['slug']}. Run /borg-plan to scaffold one."
 
 
 def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str, int]) -> list[str]:
-    """One chain's CHAINS block: its heading, the picture, then one detail block per node.
+    """One stack's STACKS block: its heading, the picture, then one detail block per node.
 
     THE DETAIL BLOCKS ARE IN NODE-ID ORDER, which is picture reading order (manifest, level, column)
     and NOT the wire's `(seq, ref)`. A reader moving between the picture and the details must never
@@ -892,10 +898,10 @@ def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str,
 
 
 def _grid_section(doc: dict) -> tuple[str, list[str]]:
-    """CHAINS: the declared cross-repository topology, one picture and one detail block set per
+    """STACKS: the declared cross-repository topology, one picture and one detail block set per
     chain, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
 
-    The note is UNCONDITIONAL, even when no manifest was selected: `0 chains · 0 refs · 0
+    The note is UNCONDITIONAL, even when no manifest was selected: `0 stacks · 0 refs · 0
     unresolved · swept back to <mark>` is the honest reading of a repository with nothing declared,
     and it is what separates that from a repository nobody swept.
 
@@ -919,7 +925,7 @@ def _grid_section(doc: dict) -> tuple[str, list[str]]:
     since = str(grid_block.get("since") or "")
     freshness = f"swept back to {since}" if grid_block.get("swept") and since else "not swept"
     note = (
-        f"{_plural(len(manifests), 'chain', 'chains')}"
+        f"{_plural(len(manifests), 'stack', 'stacks')}"
         f" · {grid_block.get('declared', 0)} refs"
         f" · {grid_block.get('unresolved', 0)} unresolved"
         f" · {freshness}"
@@ -1069,7 +1075,7 @@ def _next_tally(manifests: list[dict]) -> tuple[dict[str, list[str]], list[str],
     IT DOES NOT COUNT THE DENOMINATOR. `grid.declared` is already on the wire and `_grid_section`'s
     note already prints it, so recomputing `len(nodes)` here would be a second derivation of a
     published number -- the shape `level` was hoisted onto the node to avoid, and the shape that lets
-    CHAINS and NEXT disagree about how many refs a page has.
+    STACKS and NEXT disagree about how many refs a page has.
 
     SPLIT OUT OF `_next_section` BECAUSE RUFF MEASURED IT, not for taste -- the combined function
     came in at complexity 11 against a ceiling of 10. The seam is the honest one anyway: this is the
@@ -1474,10 +1480,10 @@ SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (
     ("", _header_section),  # the cube; no ▸ line
     ("IN FOCUS", _focus_section),  # ABOVE the board -- the `Status:` invariant
     ("REPOSITORIES", _board_section),  # registry-wide in BOTH contexts
-    ("CHAINS", _grid_section),
+    ("STACKS", _grid_section),
     ("QUEUED", _queued_section),
     ("SHIPPED", _shipped_section),
-    # AC4. EIGHT SECTIONS NOW, and the insertion point is deliberate: NEXT reads the same grid CHAINS
+    # AC4. EIGHT SECTIONS NOW, and the insertion point is deliberate: NEXT reads the same grid STACKS
     # draws, and sits below SHIPPED so the page reads history-then-future. Placing it here rather
     # than reserving an always-empty slot in AC2 is what that directive chose, so that the spine test
     # going red is a reviewable event rather than a diff nobody sees.
@@ -1502,7 +1508,7 @@ def _queen_pointer_section(_doc: dict) -> tuple[str, list[str]]:
 
 # THE PAGE OF REPOSITORY SCOPE: strictly one directory (2026-10-13). IN FOCUS carries the scope label, the
 # identity, the live session and the directory's own checkpoints; WAITING ON YOU carries its own session row
-# and the next action. No board, no CHAINS, no NEXT stack rows, no QUEUED, no SHIPPED, no SIGNALS, no cube.
+# and the next action. No board, no STACKS, no NEXT stack rows, no QUEUED, no SHIPPED, no SIGNALS, no cube.
 REPOSITORY_SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (
     ("IN FOCUS", _focus_section),  # FIRST -- the `Status:` invariant
     ("", _queen_pointer_section),

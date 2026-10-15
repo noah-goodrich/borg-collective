@@ -5,7 +5,7 @@
 # Plugin target:   $HOME/dev/claude-plugins/borg-collective/  (or PLUGIN_DIR_OVERRIDE)
 #
 # What this builds:
-#   skills/       — all SKILL.md files (same as sync-plugin.sh, now subsumed)
+#   skills/       — whole skill directories: SKILL.md plus references/ (mirrored, stale files removed)
 #   hooks/        — curated self-contained hooks (NO source of ~/.claude/lib)
 #   agents/       — borg-nanoprobe.md subagent definition
 #   hooks.json    — regenerated hook wiring for all shipped hooks
@@ -13,7 +13,8 @@
 #   marketplace.json — ensure borg-collective entry is present (idempotent)
 #
 # Self-containment contract for hooks that reference borg state/registry:
-#   1. All helpers from lib/borg-hooks.sh are INLINED — no source path references.
+#   1. All helpers from lib/borg-hooks.sh are INLINED — no source path references. A hook marks the
+#      lib-resolution lines it wants replaced with '# >>> borg-hooks.sh' ... '# <<< borg-hooks.sh'.
 #   2. CLI-calling hooks (those that depend on the borg CLI being present) begin with:
 #        command -v borg >/dev/null 2>&1 || exit 0
 #      The lifecycle hooks (borg-link-down/up, borg-notify, borg-nanoprobe-log)
@@ -124,10 +125,8 @@ else
     for skill_dir in "$SKILLS_SRC"/*/; do
         skill_name="${skill_dir%/}"
         skill_name="${skill_name##*/}"
-        src_skill="${skill_dir}SKILL.md"
-        dst_skill="$SKILLS_DST/$skill_name/SKILL.md"
 
-        [[ -f "$src_skill" ]] || continue
+        [[ -f "${skill_dir}SKILL.md" ]] || continue
 
         if [[ ! -d "$SKILLS_DST/$skill_name" ]]; then
             if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -138,14 +137,36 @@ else
             fi
         fi
 
-        if ! diff -q "$src_skill" "$dst_skill" >/dev/null 2>&1; then
-            if [[ "$DRY_RUN" -eq 1 ]]; then
-                _dry "would sync skill: $skill_name"
-            else
-                cp "$src_skill" "$dst_skill"
-                _info "  synced skill: $skill_name"
+        # Mirror the whole skill directory: every regular file (references/ and the like), recursively.
+        while IFS= read -r rel; do
+            rel="${rel#./}"
+            src_file="${skill_dir}${rel}"
+            dst_file="$SKILLS_DST/$skill_name/$rel"
+            if ! diff -q "$src_file" "$dst_file" >/dev/null 2>&1; then
+                if [[ "$DRY_RUN" -eq 1 ]]; then
+                    _dry "would sync skill file: $skill_name/$rel"
+                else
+                    mkdir -p "$(dirname "$dst_file")"
+                    cp "$src_file" "$dst_file"
+                    _info "  synced skill file: $skill_name/$rel"
+                fi
+                skills_changed=$((skills_changed + 1))
             fi
-            skills_changed=$((skills_changed + 1))
+        done < <(cd "$skill_dir" && find . -type f -not -path '*/.*' | LC_ALL=C sort)
+
+        # Remove mirror files whose source is gone, so a deleted reference does not linger.
+        if [[ -d "$SKILLS_DST/$skill_name" ]]; then
+            while IFS= read -r rel; do
+                rel="${rel#./}"
+                [[ -f "${skill_dir}${rel}" ]] && continue
+                if [[ "$DRY_RUN" -eq 1 ]]; then
+                    _dry "would remove skill file: $skill_name/$rel"
+                else
+                    rm -f "$SKILLS_DST/$skill_name/$rel"
+                    _info "  removed skill file: $skill_name/$rel"
+                fi
+                skills_changed=$((skills_changed + 1))
+            done < <(cd "$SKILLS_DST/$skill_name" && find . -type f -not -path '*/.*' | LC_ALL=C sort)
         fi
     done
     if [[ "$skills_changed" -eq 0 ]]; then
@@ -224,8 +245,22 @@ _build_self_contained_hook() {
     } >> "$tmp"
 
     # ── Rest of the original hook (skip shebang; replace source line with lib) ──
-    local in_comment_block=1
+    local in_comment_block=1 skipping_lib_block=0
     while IFS= read -r line; do
+        # A hook that sources the lib carries a marked resolution block (script-relative first, installed
+        # copy second, guarded). The inlined helpers replace the WHOLE block, so the plugin copy keeps no
+        # path resolution and no reference to ~/.claude/lib. Whatever follows the closing marker (the
+        # fail-open `declare -F` checks) stays, and is satisfied by the inlined functions.
+        if [[ "$skipping_lib_block" -eq 1 ]]; then
+            [[ "$line" == "# <<< borg-hooks.sh"* ]] && skipping_lib_block=0
+            continue
+        fi
+        if [[ "$needs_lib" -eq 1 && "$line" == "# >>> borg-hooks.sh"* ]]; then
+            _embedded_lib >> "$tmp"
+            skipping_lib_block=1
+            continue
+        fi
+
         # Track when we leave the leading comment block (first non-blank, non-# line)
         if [[ "$in_comment_block" -eq 1 ]]; then
             if [[ "$line" != "#"* && -n "$line" ]]; then
@@ -250,6 +285,13 @@ _build_self_contained_hook() {
 
         printf '%s\n' "$line" >> "$tmp"
     done < <(tail -n +2 "$src")
+
+    # An opening marker with no closing one would silently drop the rest of the hook: refuse to build.
+    if [[ "$skipping_lib_block" -eq 1 ]]; then
+        rm -f "$tmp"
+        _warn "$label: '# >>> borg-hooks.sh' has no '# <<< borg-hooks.sh' — refusing to build a truncated hook"
+        exit 1
+    fi
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         if ! diff -q "$tmp" "$dst" >/dev/null 2>&1; then
@@ -297,6 +339,9 @@ _build_self_contained_hook "$HOOKS_SRC/borg-supabase-guard.sh" "$HOOKS_DST/borg-
 # borg-verifier-guard.sh is self-contained (python3, stdin JSON only) — copy as-is. agents/borg-verifier.md
 # grants Bash, and this hook is what makes that grant read-only; tests/verifier_guard.bats pins the pair.
 _build_self_contained_hook "$HOOKS_SRC/borg-verifier-guard.sh" "$HOOKS_DST/borg-verifier-guard.sh" 0
+# borg-nanoprobe-guard.sh is self-contained (python3, stdin JSON plus the machine-layer brief) — copy as-is.
+# It gates the nanoprobe's Skill calls and its writes under borg/extensions/; tests/nanoprobe_guard.bats.
+_build_self_contained_hook "$HOOKS_SRC/borg-nanoprobe-guard.sh" "$HOOKS_DST/borg-nanoprobe-guard.sh" 0
 # borg-memory-read-log.sh is self-contained (parses stdin JSON only) — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-memory-read-log.sh" "$HOOKS_DST/borg-memory-read-log.sh" 0
 # borg-prefer-tool-log.sh is NOT self-contained: it delegates to borg_core.extensions.cli rather
@@ -512,6 +557,16 @@ HOOKS_JSON='{
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-verifier-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Skill|Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-nanoprobe-guard.sh",
             "timeout": 5
           }
         ]
