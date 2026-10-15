@@ -224,13 +224,15 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int, tracks_out: lis
     return block
 
 
-def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict]) -> dict:
+def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict], compass: dict | None = None) -> dict:
     """The `waiting` key: the chooser's YOU rows, built by `borg next`'s own functions over THIS page's sweep.
 
     ONE ROUTER FOR "WHAT IS MINE" (decided by Noah 2026-10-09): `nextpick_cli.item_rows` is the call the chooser
     makes, so the rows, their order and the hidden counts match `borg next` exactly. The sweep is the one `_grid`
     already ran, passed in, so there is no second `gh` round trip; `--local` has no sweep and so no PR rows, the
     same as `borg next --local`. NEVER writes next-recs.jsonl: only the row-building half of nextpick runs.
+    `compass` is the block this page renders, handed to the ranking so the compass orders these rows exactly as it
+    orders `borg next`'s.
     In repository scope only that repository's rows are built, because the sweep covered only that repository.
     Fail-open: any failure degrades to an empty block that says why.
     """
@@ -240,7 +242,9 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict]) -
             {repo: repositories[repo]} if scope.get("kind") == "repository" and repo in repositories else repositories
         )
         by_repository = recon_core.merge_by_repository(tracks)
-        rows, _quiet, degraded, hidden = nextpick_cli.item_rows(scoped, local, False, swept=(by_repository, None))
+        rows, _quiet, degraded, hidden = nextpick_cli.item_rows(
+            scoped, local, False, swept=(by_repository, None), compass=compass
+        )
     # JUSTIFICATION: a side block must never take the page down; degrade and say why.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         rows, degraded, hidden = [], f"waiting rows failed: {exc}", {"agent": 0, "stale": 0, "overflow": 0}
@@ -255,12 +259,12 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict]) -
 # JUSTIFICATION: six independent inputs of one assembly step; a container would only relocate the names.
 # pylint: disable-next=too-many-arguments,too-many-positional-arguments
 def _grid_and_waiting(
-    overlaid: dict, repositories: dict, scope: dict, local: bool, moment: int, mode: str
+    overlaid: dict, repositories: dict, scope: dict, local: bool, moment: int, mode: str, compass: dict | None = None
 ) -> tuple[dict, dict | None]:
     """The `grid` block and the `waiting` block, the second built from the sweep the first performed."""
     tracks: list[dict] = []
     block = _grid(overlaid, scope, local, moment, tracks)
-    return block, (None if mode == "porcelain" else _waiting(repositories, scope, local, tracks))
+    return block, (None if mode == "porcelain" else _waiting(repositories, scope, local, tracks, compass))
 
 
 def _aggregates(wanted: bool) -> tuple[list[dict], list[dict]]:
@@ -395,8 +399,17 @@ def _document(  # pylint: disable=too-many-locals
     # per-repository glob, so it is priced with the render rather than with the aggregates.
     cortex_pending = [] if mode == "porcelain" or hint_only else shell.cortex_pending(now=moment)
 
+    # THE COMPASS IS READ ONCE, BEFORE THE WAITING ROWS, because the same block orders them (as it orders `borg
+    # next`) and the page renders it. Not on `--porcelain` (byte-identical to before) and not on the hint page
+    # (which reads nothing). `moment` is the document's one epoch and the reader forks nothing, so `--local`'s
+    # subprocess contract is unchanged. Repository names come from the document already in hand.
+    compass = (
+        None
+        if mode == "porcelain" or hint_only
+        else compass_shell.read_compass(moment, list(repositories), parents=worktree.repository_parents(repositories))
+    )
     block, waiting = (
-        (None, None) if hint_only else _grid_and_waiting(overlaid, repositories, scope, local, moment, mode)
+        (None, None) if hint_only else _grid_and_waiting(overlaid, repositories, scope, local, moment, mode, compass)
     )
     document = core.assemble(
         generated_at=core.format_iso(moment),
@@ -413,13 +426,11 @@ def _document(  # pylint: disable=too-many-locals
         grid=block,
         waiting=waiting,
     )
-    # THE COMPASS RIDES THE `--json` WIRE ONLY, in every scope, ADDITIVELY (DOCUMENT_VERSION stays 2): the
-    # human page ignores it until the render step, and `--porcelain` is byte-identical to before. It is stamped
-    # here rather than inside `core.assemble` because that module sits at pylint's 1000-line ceiling and the map
-    # is an impure read. Repository names come from the document already in hand, `moment` is the document's
-    # one epoch, and the reader forks nothing, so `--local`'s subprocess contract is unchanged.
-    if mode == "json":
-        document["compass"] = compass_shell.read_compass(moment, list(document["projects"]))
+    # THE COMPASS RIDES THE `--json` WIRE AND THE HUMAN PAGE, in every scope, ADDITIVELY (DOCUMENT_VERSION stays 2):
+    # `--porcelain` is byte-identical to before, and the hint page carries none. It is stamped here rather than
+    # inside `core.assemble` because that module sits at pylint's 1000-line ceiling and the map is an impure read.
+    if compass is not None:
+        document["compass"] = compass
     return document
 
 

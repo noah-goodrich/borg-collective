@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from borg_core.compass import core as compass_core
 from borg_core.link import core as link_core
 from borg_core import timefmt
 from borg_core.link import grid, picture, render
@@ -48,8 +49,14 @@ def _score(entry: dict[str, Any]) -> int:
     return score
 
 
-def rank(repositories: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return non-archived repositories best-first, as cmd_next's jq orders them."""
+def rank(repositories: dict[str, dict[str, Any]], compass: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Return non-archived repositories best-first, as cmd_next's jq orders them.
+
+    With a `compass` block (`found` true) the compass decides FIRST, by `compass_core.leg_priority`: repositories on
+    today's leg, then by nearest due date, then undated active, then frozen, done and unmapped. The score and
+    last-activity tie-breaks above are untouched and decide inside each bucket. With no compass, or one that found no
+    map, every repository carries the same prefix and the order is exactly what it was.
+    """
     items = []
     for name in sorted(repositories):
         entry = repositories[name]
@@ -68,7 +75,9 @@ def rank(repositories: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 "repo": _or(entry.get("repo"), ""),
             }
         )
-    items.sort(key=lambda item: (-item["score"], item["last_activity"]))
+    items.sort(
+        key=lambda item: (*compass_core.leg_priority(compass, item["name"]), -item["score"], item["last_activity"])
+    )
     return items
 
 

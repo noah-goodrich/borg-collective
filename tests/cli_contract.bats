@@ -2027,7 +2027,10 @@ _link_mock_tmux() {
 _assert_link_golden() {
     local name="$1"; shift
     local raw="${BATS_TEST_TMPDIR}/${name}.raw" actual="${BATS_TEST_TMPDIR}/${name}.actual"
-    zsh "$BORG" "$@" > "$raw" 2>&1
+    # The map is pinned to a directory that does not exist, so IN FOCUS prints the one `no map at <TMP>/map` line:
+    # the compass renders on every page, and the sandbox's default ($HOME/dev/map) would put a `/home/` path in
+    # the golden, which the no-absolute-path check below rightly refuses.
+    BORG_MAP_DIR="${BATS_TEST_TMPDIR}/map" zsh "$BORG" "$@" > "$raw" 2>&1
     sed -e "s|${BATS_TEST_TMPDIR}|<TMP>|g" \
         -e "s|${BATS_TEST_DIRNAME}|<TESTS>|g" \
         -e '/Last active:/ s|[0-9-]\{10\}T[0-9:]\{8\}Z|<TS>|g' "$raw" > "$actual"
@@ -2492,7 +2495,7 @@ _link_grid_seams() {
 # `zsh borg <args...>` from `$1`, stdout+stderr merged into `$2`.
 _link_grid_run() {
     local dir="$1" out="$2"; shift 2
-    ( cd "$dir" && zsh "$BORG" "$@" ) > "$out" 2>&1
+    ( cd "$dir" && BORG_MAP_DIR="${BATS_TEST_TMPDIR}/map" zsh "$BORG" "$@" ) > "$out" 2>&1
 }
 
 # THE TRIPWIRE, AND IT RUNS BEFORE THE DIFF *AND* ON THE UPDATE PATH.

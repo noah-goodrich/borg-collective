@@ -360,6 +360,28 @@ def test_an_unowned_repository_can_still_be_on_the_leg_by_name():
     assert _build(log=log, names=["stray"])["repositories"]["stray"] == {"destination": None, "on_leg": True}
 
 
+def test_an_inheriting_worktree_takes_the_heads_destination_but_keeps_its_own_on_leg():
+    """A worktree the leg names stays on today's leg when its repository is off it, as before the inheritance."""
+    files = [("destinations/0.md", _destination("beta", extra="repositories:\n  - app\n"))]
+    names = ["app", "scratch", "other"]
+    parents = {"scratch": "app", "other": "app"}
+
+    def block(leg_line: str) -> dict:
+        log = f"## Today's leg\n- {leg_line}\n"
+        return core.build_compass("/map", TODAY, log, files, None, None, names, parents=parents)
+
+    off = block("tidy scratch")
+    assert off["repositories"]["app"] == {"destination": "beta", "on_leg": False}
+    assert off["repositories"]["scratch"] == {"destination": "beta", "on_leg": True}
+    assert off["repositories"]["other"] == {"destination": "beta", "on_leg": False}
+    assert core.leg_priority(off, "scratch") == (0, "")
+    assert core.leg_priority(off, "other") == (2, "")
+
+    on = block("wire up beta")
+    assert [on["repositories"][name]["on_leg"] for name in names] == [True, True, True]
+    assert [core.leg_priority(on, name) for name in names] == [(0, ""), (0, ""), (0, "")]
+
+
 # -- purity ------------------------------------------------------------------------------------------------------
 
 
@@ -383,3 +405,35 @@ def test_core_never_reads_the_clock():
     source = Path(core.__file__).read_text(encoding="utf-8")
     for needle in ("now(", "today()", "utcnow", "time.time", "os.environ", "open("):
         assert needle not in source
+
+
+# -- leg_priority: the sort prefix `borg next` ranks by ------------------------------------------------------------
+
+
+def _prioritised(log, destinations, readme, names):
+    block = core.build_compass("/m", TODAY, log, destinations, readme, None, names)
+    return {name: core.leg_priority(block, name) for name in names}
+
+
+def test_leg_priority_buckets_and_due_dates():
+    readme = "| Destination | Due |\n|---|---|\n| alpha | 2026-04-01 |\n| beta | TBD |\n"
+    destinations = [
+        ("destinations/alpha.md", _destination("alpha", extra="repositories:\n  - dated\n")),
+        ("destinations/beta.md", _destination("beta", extra="repositories:\n  - open\n")),
+        ("destinations/gamma.md", _destination("gamma", status="frozen", extra="repositories:\n  - cold\n")),
+        ("destinations/legged.md", _destination("legged", extra="repositories:\n  - hot\n")),
+    ]
+    log = "## Today's leg\n\n- work on legged\n"
+    got = _prioritised(log, destinations, readme, ["dated", "open", "cold", "hot", "nobody"])
+    assert got == {
+        "dated": (1, "2026-04-01"),
+        "open": (2, ""),
+        "cold": (3, ""),
+        "hot": (0, ""),
+        "nobody": (3, ""),
+    }
+
+
+@pytest.mark.parametrize("block", [None, {}, {"found": False, "map_dir": "/m"}])
+def test_leg_priority_is_a_constant_without_a_map(block):
+    assert core.leg_priority(block, "anything") == (0, "")

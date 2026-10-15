@@ -189,12 +189,32 @@ def test_json_compass_names_the_documents_repositories_in_every_scope(wired, mon
         assert document["compass"]["repositories"] == {"widgets": {"destination": "alpha", "on_leg": True}}
 
 
-def test_porcelain_and_human_documents_carry_no_compass_and_read_no_map(wired, monkeypatch):
-    monkeypatch.setenv("BORG_MAP_DIR", str(_synthetic_map(wired / "map")))
-
+def _refusing_reader(monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("compass was read on a surface that does not carry it")
 
     monkeypatch.setattr(shell, "read_compass", refuse)
-    for mode in ("porcelain", "human"):
-        assert "compass" not in cli._document("", False, mode, True)  # pylint: disable=protected-access
+
+
+def test_porcelain_document_carries_no_compass_and_reads_no_map(wired, monkeypatch):
+    monkeypatch.setenv("BORG_MAP_DIR", str(_synthetic_map(wired / "map")))
+    _refusing_reader(monkeypatch)
+    assert "compass" not in cli._document("", False, "porcelain", True)  # pylint: disable=protected-access
+
+
+def test_human_document_carries_the_compass_the_page_renders(wired, monkeypatch):
+    monkeypatch.setenv("BORG_MAP_DIR", str(_synthetic_map(wired / "map")))
+    document = cli._document("", False, "human", True)  # pylint: disable=protected-access
+    assert document["compass"]["found"] is True
+    assert document["compass"]["leg"] == {"text": "Wire up alpha reporting"}
+
+
+def test_the_hint_page_reads_no_map(wired, monkeypatch):
+    monkeypatch.setenv("BORG_MAP_DIR", str(_synthetic_map(wired / "map")))
+    _refusing_reader(monkeypatch)
+    elsewhere = wired / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    document = cli._document("", False, "human", True)  # pylint: disable=protected-access
+    assert document["scope"]["unregistered"] is True
+    assert "compass" not in document

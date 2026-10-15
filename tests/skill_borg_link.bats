@@ -229,7 +229,7 @@ JSON
     PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
     [ "$status" -eq 0 ]
     run jq -c 'keys' <<<"$output"
-    [ "$output" = '["entry","generated_at","scope","version","waiting"]' ]
+    [ "$output" = '["compass","entry","generated_at","scope","version","waiting"]' ]
     PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
     run jq -r '.entry | has("summary"), .path' <<<"$output"
     [ "${lines[0]}" = "false" ]
@@ -264,6 +264,70 @@ JSON
     [ "$status" -eq 0 ]
     run jq -c '[.order, (.projects | keys), (.directives | map({project, n}))]' <<<"$output"
     [ "$output" = '[["p","q"],["p","q"],[{"project":"p","n":2},{"project":"q","n":1}]]' ]
+}
+
+# --- The compass (the owner's map) ------------------------------------------------------------------
+# The block is synthetic here; the cases RUN the extracted Step 1 pipe, so the whitelist is exercised.
+
+_compass_json() {
+    cat > "${BATS_TEST_TMPDIR}/compass.json" <<'JSON'
+{"version": 2, "generated_at": "t", "order": ["p", "q"], "projects": {"p": {}, "q": {}},
+ "directives": [], "grid": {"warnings": []}, "scope": {"kind": "SCOPE", "repository": "p", "local": false},
+ "focus": {"name": "p", "entry": {"path": "/w/p", "status": "idle"}},
+ "waiting": {"rows": [], "degraded": null},
+ "compass": {"found": true, "map_dir": "/m", "leg": {"text": "ship alpha"},
+   "destinations": [{"id": "alpha", "state": "late"}, {"id": "beta", "state": "on-track"}],
+   "parking": [{"text": "revisit", "due": true}],
+   "repositories": {"p": {"destination": "alpha", "on_leg": true}, "q": {"destination": "beta", "on_leg": false}}}}
+JSON
+    sed -i.bak "s/SCOPE/$1/" "${BATS_TEST_TMPDIR}/compass.json"
+    _stub_borg "${BATS_TEST_TMPDIR}/compass.json"
+}
+
+@test "compass: the repository arm whitelists the leg and this repository's own slice, nothing registry-wide" {
+    _compass_json repository
+    local cmd
+    cmd="$(_step1_command)"
+    cmd="${cmd/ \[<repository>\]/}"
+    PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
+    [ "$status" -eq 0 ]
+    run jq -c '.compass' <<<"$output"
+    [ "$output" = '{"found":true,"map_dir":"/m","leg":{"text":"ship alpha"},"repository":{"destination":"alpha","on_leg":true},"destinations":[{"id":"alpha","state":"late"}]}' ]
+}
+
+@test "compass: the repository arm of an engine with no compass still answers, with nothing in the block" {
+    _compass_json repository
+    jq 'del(.compass)' "${BATS_TEST_TMPDIR}/compass.json" > "${BATS_TEST_TMPDIR}/old.json"
+    _stub_borg "${BATS_TEST_TMPDIR}/old.json"
+    local cmd
+    cmd="$(_step1_command)"
+    cmd="${cmd/ \[<repository>\]/}"
+    PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
+    [ "$status" -eq 0 ]
+    run jq -c '.compass' <<<"$output"
+    [ "$output" = '{"found":null,"map_dir":null,"leg":null,"repository":{},"destinations":[]}' ]
+}
+
+@test "compass: the Queen arm passes the whole compass block through" {
+    _compass_json orchestrator
+    local cmd
+    cmd="$(_step1_command)"
+    cmd="${cmd/ \[<repository>\]/}"
+    PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
+    [ "$status" -eq 0 ]
+    run jq -c '[.compass.parking[0].due, (.compass.destinations | length), (.compass.repositories | keys)]' <<<"$output"
+    [ "$output" = '[true,2,["p","q"]]' ]
+}
+
+@test "compass: the skill says how to read it, and the version gate is untouched" {
+    run cat "$SKILL"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**Reading `.compass`**'* ]] || false
+    [[ "$output" == *'no map at `<map_dir>`'* ]] || false
+    [[ "$output" == *"off route: \`<repository>\` is not on today's leg"* ]] || false
+    [[ "$output" == *'`due == true`'* ]] || false
+    [[ "$output" == *'parking: `<text>` (look again `<look>`, seen `<seen>`)'* ]] || false
+    [[ "$output" == *'- `== 2` → proceed silently.'* ]] || false
 }
 
 @test "scope: Step 1 pipe is compact and its Queen arm deletes eight unread repository fields, keeping the rest" {
