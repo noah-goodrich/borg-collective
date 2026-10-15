@@ -7,6 +7,13 @@
       "order": "1",
       "ref": "noah-goodrich/borg-collective#413",
       "why": "S1: register Cortex hooks in hooks.json, accept lowercase tool names, plan of record"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#418",
+      "status": "open",
+      "why": "S2: session discovery reads the conversations directory Cortex writes"
     }
   ]
 }

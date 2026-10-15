@@ -539,7 +539,7 @@ echo ""
 if command -v cortex &>/dev/null; then
     echo "  CoCo integration: active"
     echo "    borg link shows [X] badge for Cortex Code repositories"
-    echo "    borg scan discovers CoCo sessions from session-log.md"
+    echo "    borg scan discovers CoCo sessions from conversations/"
     echo "    Stop hook fires on CoCo sessions → registry update + checkpoint nudge"
     echo ""
 fi

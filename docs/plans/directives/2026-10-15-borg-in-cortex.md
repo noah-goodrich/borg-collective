@@ -23,9 +23,9 @@ Cortex names its tools in lowercase (`bash`, `read`, `edit`, `write`, `grep`, `g
 - [ ] **AC2: `borg-plan-promote.sh` accepts Cortex's lowercase tool names.** `edit` and `write` behave exactly like `Edit` and `Write`; behaviour under Claude Code names is unchanged. (this PR)
   - Verify: `bats tests/plan_promote.bats` (the lowercase cases sit beside the capitalised ones).
   - Evidence: `bats:tests/plan_promote.bats`
-- [ ] **AC3: Session discovery reads the directory current Cortex writes, so Cortex sessions show on the board with their badge.** `lib/coco.zsh` looks where Cortex 1.2.14 stores sessions (the validation found `conversations/` holding one JSON and one history file per session, carrying a working directory), not the `projects/` directory and `session-log.md` it assumes today. (S2)
+- [x] **AC3: Session discovery reads the directory current Cortex writes, so Cortex sessions show on the board with their badge.** `lib/coco.zsh` looks where Cortex 1.2.14 stores sessions (the validation found `conversations/` holding one JSON and one history file per session, carrying a working directory), not the `projects/` directory and `session-log.md` it assumes today. (S2)
   - Verify: bats over a fixture directory in the current layout.
-  - Evidence: `bats:tests/coco_sessions.bats`
+  - Evidence: `bats:tests/coco_sessions.bats` (7 cases green on 2026-10-15: found by cwd, newest wins, subagent skipped, malformed skipped, absent directory silent, scan registers source coco)
 - [ ] **AC4: The link-up checkpoint keeps a collision-proof name in Cortex.** Cortex expands no dynamic injection and sets no `CLAUDE_SESSION_ID`, so the skill's fallback path writes a checkpoint name without the session suffix, which reopens the two-worktrees collision the suffix closes. The name must carry a session-derived suffix in Cortex too. (S3)
   - Verify: bats over the name verb with Cortex's session id supplied the way Cortex provides it.
   - Evidence: `bats:tests/cortex_checkpoint_name.bats`
@@ -47,7 +47,7 @@ Cortex names its tools in lowercase (`bash`, `read`, `edit`, `write`, `grep`, `g
 | Slice | Content                        | Can start       |
 | ----- | ------------------------------ | --------------- |
 | S1    | AC1, AC2: hooks.json, tools    | now             |
-| S2    | AC3, AC5: discovery, live note | after S1 merges |
+| S2    | AC3, AC5: discovery, live note | AC3 done; AC5 by hand |
 | S3    | AC4, AC6: checkpoint name      | after S1 merges |
 
 ## Scope Boundaries
