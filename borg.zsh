@@ -2018,6 +2018,84 @@ _borg_unregister_hook() {
     info "  $event: $label (removed)"
 }
 
+# The eight hooks borg registers for Cortex Code CLI, as "<event>|<script>" pairs (scripts live in hooks/ and are
+# copied to <cortex dir>/hooks/ by cmd_setup). Order is registration order.
+typeset -ga _BORG_CORTEX_HOOKS=(
+    "SessionStart|borg-link-down.sh"
+    "Stop|borg-link-up.sh"
+    "Notification|notify.sh"
+    "Notification|borg-notify.sh"
+    "PreToolUse|pre-commit-remind.sh"
+    "PreToolUse|bash-guard.sh"
+    "PreToolUse|borg-plan-promote.sh"
+    "SubagentStop|borg-nanoprobe-log.sh"
+)
+
+# Hooks an older borg registered under names it has since dropped (borg-start.sh/borg-stop.sh became
+# borg-link-down.sh/borg-link-up.sh). They are scrubbed from settings.json along with the eight above.
+typeset -ga _BORG_CORTEX_RENAMED_HOOKS=(
+    "SessionStart|borg-start.sh"
+    "Stop|borg-stop.sh"
+)
+
+# Register borg's hooks for Cortex Code CLI in <cortex dir>/hooks.json, the file Cortex's loader reads for user
+# hooks (its bundled HOOKS.md and CONFIGURATION.md name it; <cortex dir>/settings.json is read for permissions,
+# never for hooks). Then remove the stale entries older borg versions wrote into <cortex dir>/settings.json,
+# leaving every other key there alone. The same {"hooks": {<event>: [{matcher, hooks: [...]}]}} shape as a Claude
+# Code settings file, so _borg_register_hook and _borg_unregister_hook apply to both files.
+#
+# Idempotent: with everything registered and nothing stale, no file is written.
+# NOT registered into ~/.claude/settings.json on purpose: Cortex also loads that file, and the borg plugin already
+# registers these hooks there for Claude Code, so a second registration would double-fire.
+# Command paths are absolute (Cortex's HOOKS.md: "use absolute paths for scripts"), unlike the literal $HOME the
+# stale settings.json entries carry.
+# Usage: _borg_register_cortex_hooks <cortex_dir>
+_borg_register_cortex_hooks() {
+    local coco_dir="$1"
+    local hooks_json="$coco_dir/hooks.json" settings="$coco_dir/settings.json"
+    local entry event name
+
+    mkdir -p "$coco_dir"
+    if [[ -f "$hooks_json" ]] && ! jq -e 'type == "object" and ((.hooks // {}) | type == "object")' \
+        "$hooks_json" &>/dev/null; then
+        warn "  $hooks_json is not a JSON object with a hooks object — left untouched, borg hooks NOT registered"
+        warn "  (fix or move that file, then re-run: borg setup)"
+        return 0
+    fi
+    [[ -f "$hooks_json" ]] || echo '{}' > "$hooks_json"
+
+    for entry in "${_BORG_CORTEX_HOOKS[@]}"; do
+        event="${entry%%|*}" name="${entry#*|}"
+        _borg_register_hook "$hooks_json" "$coco_dir/hooks/$name" "$event" "$name"
+    done
+
+    [[ -f "$settings" ]] || return 0
+    local removed=0 stale_cmd
+    local -a events=()
+    for entry in "${_BORG_CORTEX_HOOKS[@]}" "${_BORG_CORTEX_RENAMED_HOOKS[@]}"; do
+        event="${entry%%|*}" name="${entry#*|}"
+        stale_cmd="\$HOME/.snowflake/cortex/hooks/$name"
+        if jq -e --arg evt "$event" --arg cmd "$stale_cmd" \
+            '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd)) | length > 0' \
+            "$settings" &>/dev/null; then
+            _borg_unregister_hook "$settings" "$stale_cmd" "$event" "$name"
+            removed=1
+            events+=("$event")
+        fi
+    done
+    # _borg_unregister_hook leaves an emptied event as `[]`; drop those, and the hooks object if nothing else is in
+    # it, so the file reads as if borg had never written there. Only events borg just emptied are touched.
+    if (( removed )); then
+        local tmp="$settings.tmp.$$" evts_json="[\"${(j:",":)events}\"]"
+        jq --argjson evts "$evts_json" '
+            if .hooks then
+                .hooks |= with_entries(select(((.key as $k | $evts | index($k)) == null) or ((.value | length) > 0)))
+                | if (.hooks | length) == 0 then del(.hooks) else . end
+            else . end
+        ' "$settings" > "$tmp" && mv "$tmp" "$settings"
+    fi
+}
+
 cmd_setup() {
     local CLAUDE_DIR="$HOME/.claude"
     local CLAUDE_HOOKS_DIR="$CLAUDE_DIR/hooks"
@@ -2271,19 +2349,13 @@ CONF
             chmod +x "$COCO_DIR/hooks/$name"
         done
 
-        info "Registering hooks in CoCo settings.json..."
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-link-down.sh"   "SessionStart" "borg-link-down.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-link-up.sh"     "Stop"         "borg-link-up.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/notify.sh"             "Notification"  "notify.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh"  "PreToolUse"   "pre-commit-remind.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/bash-guard.sh"         "PreToolUse"   "bash-guard.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-plan-promote.sh"  "PreToolUse"   "borg-plan-promote.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-nanoprobe-log.sh" "SubagentStop" "borg-nanoprobe-log.sh"
+        # Cortex reads hooks from hooks.json, NOT settings.json (which it reads for permissions only). This also
+        # scrubs the stale entries earlier versions wrote into settings.json, including the renamed
+        # borg-start.sh/borg-stop.sh → borg-link-down.sh/borg-link-up.sh ones.
+        info "Registering hooks in CoCo hooks.json..."
+        _borg_register_cortex_hooks "$COCO_DIR"
 
-        # Migration: rename CoCo borg-start.sh/borg-stop.sh → borg-link-down.sh/borg-link-up.sh
-        _borg_unregister_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh" "SessionStart" "borg-start.sh"
-        _borg_unregister_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-stop.sh" "Stop" "borg-stop.sh"
+        # Migration: the renamed scripts' old copies
         [[ -e "$COCO_DIR/hooks/borg-start.sh" ]] && rm "$COCO_DIR/hooks/borg-start.sh" || true
         [[ -e "$COCO_DIR/hooks/borg-stop.sh" ]] && rm "$COCO_DIR/hooks/borg-stop.sh" || true
 

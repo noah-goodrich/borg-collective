@@ -1,0 +1,5 @@
+{
+  "desc": "Make borg work inside Cortex Code CLI: hooks registered where Cortex reads them, tool names, session discovery, collision-proof checkpoints",
+  "program": "2026-10-15-borg-in-cortex",
+  "rows": []
+}

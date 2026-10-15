@@ -320,3 +320,85 @@ _run_hook_split() {
     [ -d "${FAKE_REPO}/docs/plans" ]
     [ -f "$PLAN_PRIMARY" ]
 }
+
+# ── Cortex Code CLI names its tools in lowercase (edit, write, read, bash ...) ──────────────────────
+# docs/plans/directives/2026-10-15-borg-in-cortex.md AC2: a lowercase edit/write behaves like Edit/Write.
+
+# Same shape as _make_edit_input, with an arbitrary tool_name.
+_make_tool_input() {
+    local tool="$1" session_id="$2" cwd="$3" file_path="$4"
+    jq -nc \
+        --arg tool "$tool" \
+        --arg sid "$session_id" \
+        --arg cwd "$cwd" \
+        --arg fp  "$file_path" \
+        '{tool_name: $tool, session_id: $sid, cwd: $cwd, tool_input: {file_path: $fp}}'
+}
+
+@test "plan_promote: Cortex lowercase edit triggers promotion like Edit" {
+    _write_jsonl_with_plan "$JSONL_PATH" "# Plan\n\nLowercase edit."
+
+    _run_hook "$(_make_tool_input edit "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/main.py")"
+
+    [ "$status" -eq 0 ]
+    [ -f "$PLAN_PRIMARY" ]
+    grep -q "Lowercase edit" "$PLAN_PRIMARY"
+}
+
+@test "plan_promote: Cortex lowercase write triggers promotion like Write" {
+    _write_jsonl_with_plan "$JSONL_PATH" "# Plan\n\nLowercase write."
+
+    _run_hook "$(_make_tool_input write "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/config.yaml")"
+
+    [ "$status" -eq 0 ]
+    [ -f "$PLAN_PRIMARY" ]
+}
+
+@test "plan_promote: lowercase edit notice is the same systemMessage JSON as Edit" {
+    _write_jsonl_with_plan "$JSONL_PATH" "# Plan\n\nGoal: done."
+
+    _run_hook_split "$(_make_tool_input edit "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/app.py")"
+
+    [ "$HOOK_RC" -eq 0 ]
+    [ "$(printf '%s' "$HOOK_OUT" | jq -r 'keys | join(",")')" = "systemMessage" ]
+    _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "auto-promoted in-session plan"
+    [ ! -s "${BATS_TEST_TMPDIR}/hook.err" ]
+}
+
+@test "plan_promote: lowercase edit still respects the gates (existing plan, outside repo)" {
+    _write_jsonl_with_plan "$JSONL_PATH" "# New Plan\n\nShould not overwrite."
+    mkdir -p "${FAKE_REPO}/docs/plans"
+    printf '# Existing Plan\n' > "$PLAN_PRIMARY"
+
+    _run_hook "$(_make_tool_input edit "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/main.py")"
+    [ "$status" -eq 0 ]
+    grep -q "Existing Plan" "$PLAN_PRIMARY"
+    ! grep -q "New Plan" "$PLAN_PRIMARY"
+
+    rm -f "$PLAN_PRIMARY"
+    _run_hook "$(_make_tool_input edit "$SESSION_ID" "$FAKE_REPO" "${BATS_TEST_TMPDIR}/outside/file.py")"
+    [ "$status" -eq 0 ]
+    [ ! -f "$PLAN_PRIMARY" ]
+}
+
+@test "plan_promote: other Cortex tools (read, bash, grep, task) never promote" {
+    _write_jsonl_with_plan "$JSONL_PATH" "# Plan\n\nNot for reads."
+
+    local tool
+    for tool in read bash grep glob task skill; do
+        _run_hook "$(_make_tool_input "$tool" "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/main.py")"
+        [ "$status" -eq 0 ]
+        [ ! -f "$PLAN_PRIMARY" ] || { echo "promoted on tool $tool"; return 1; }
+    done
+}
+
+@test "plan_promote: a Claude Code name in the wrong case is not a tool (Read, Bash stay ignored)" {
+    _write_jsonl_with_plan "$JSONL_PATH" "# Plan\n\nNot for reads."
+
+    local tool
+    for tool in Read Bash MultiEdit; do
+        _run_hook "$(_make_tool_input "$tool" "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/main.py")"
+        [ "$status" -eq 0 ]
+        [ ! -f "$PLAN_PRIMARY" ] || { echo "promoted on tool $tool"; return 1; }
+    done
+}

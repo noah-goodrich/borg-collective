@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # borg-plan-promote.sh — PreToolUse hook: auto-promote in-session plan to PROJECT_PLAN.md
 #
-# Fires on Edit, Write, NotebookEdit tool calls. When Claude Code exits plan mode
-# (ExitPlanMode) and the user proceeds to implementation, this hook captures the plan
+# Fires on Edit, Write, NotebookEdit tool calls (and Cortex Code CLI's lowercase edit, write).
+# When Claude Code exits plan mode (ExitPlanMode) and the user proceeds to implementation, this hook captures the plan
 # and writes it to docs/plans/PROJECT_PLAN.md before the first file edit — silently,
 # without blocking.
 #
@@ -65,7 +65,8 @@ MODE=$(_borg_session_mode "$CWD")
 
 _target_path=""
 case "$TOOL_NAME" in
-    Edit|Write)
+    # Claude Code names its tools Edit/Write; Cortex Code CLI names them in lowercase (edit/write).
+    Edit|Write|edit|write)
         _target_path=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""' 2>/dev/null || true)
         ;;
     NotebookEdit)
