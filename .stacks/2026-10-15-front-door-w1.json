@@ -52,6 +52,13 @@
       "why": "registry key migrate step: writers round-trip the key the file has"
     },
     {
+      "lane": "registry",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#426",
+      "status": "open",
+      "why": "registry key contract: the file uses only repositories"
+    },
+    {
       "lane": "release",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#403",
