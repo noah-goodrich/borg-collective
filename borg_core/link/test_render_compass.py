@@ -5,6 +5,8 @@ as a dict: a fixture that handed the renderer the block's shape would prove noth
 actually puts on the wire. The map is synthetic and invented; no real map is read.
 """
 
+import pytest
+
 from borg_core.compass import core as compass_core
 from borg_core.link import render, worktree
 from borg_core.link.test_picture import plain
@@ -267,9 +269,35 @@ def test_the_summary_is_dropped_when_under_four_columns_are_left_for_it():
     assert plain(row) == " · late x..."
 
 
-def test_a_suffix_that_cannot_fit_even_without_a_summary_is_not_printed():
+def test_a_suffix_wider_than_the_budget_is_still_printed_and_the_summary_goes():
     row = render._row_tail("h" * 95, "· late", "x" * 50, "", 98)  # pylint: disable=protected-access
-    assert row == " " + "x" * 50
+    assert plain(row) == " · late"
+
+
+@pytest.mark.parametrize("length", [30, 60])
+@pytest.mark.parametrize("summary", ["s", "x" * 80])
+def test_a_long_repository_name_grows_the_budget_so_every_mapped_row_carries_its_suffix(length, summary):
+    long_name = "w" * length
+    names = [long_name, "gizmos", "orphan"]
+    destinations = [
+        ("destinations/alpha.md", f"---\nid: alpha\nstatus: active\nrepositories:\n  - {long_name}\n---\n"),
+        ("destinations/gamma.md", "---\nid: gamma\nstatus: active\nrepositories:\n  - gizmos\n---\n"),
+    ]
+    block = compass_core.build_compass(MAP_DIR, TODAY, LOG, destinations, README, None, names)
+    repositories = {name: _entry(summary) for name in names}
+
+    def board(compass):
+        page = plain(render.document(_queen(compass, repositories))).split("\n")
+        return {name: next(line for line in page if line.strip(" *").startswith(name + " ")) for name in names}
+
+    rows = board(block)
+    bare = board(None)
+    assert " · late" in rows[long_name]
+    assert " · off leg" in rows["gizmos"]
+    assert "·" not in rows["orphan"]
+    widest_mapped_head = max(len(rows[name].partition(" " + summary[0])[0]) for name in (long_name, "gizmos"))
+    budget = max(render._BOARD_RULE, widest_mapped_head, *(len(row) for row in bare.values()))  # pylint: disable=protected-access
+    assert all(len(row) <= budget for row in rows.values())
 
 
 def test_a_board_without_a_map_is_the_board_there_always_was():

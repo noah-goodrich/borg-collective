@@ -352,16 +352,15 @@ def _row_tail(head: str, suffix: str, summary: str, mark: str, budget: int) -> s
 
     No suffix: ` <summary><mark>`, exactly as before. A suffix goes first, in a column that is the same on every
     row, and the summary gives way: it is cut to what is left of `budget` (ending `...`) or dropped when under
-    four columns remain. A suffix that cannot fit even with no summary is not printed (a row is never widened
-    and never wrapped), which takes a repository name far wider than the board's floor.
+    four columns remain. THE SUFFIX IS NEVER DROPPED: when the head plus the suffix alone is wider than `budget`
+    the summary is gone and the suffix is printed anyway. The board does not let that happen on a normal render,
+    because it grows `budget` to the widest head plus suffix (`_board_section`), so this branch is the floor
+    under a caller that passes a smaller one, never a way for a long repository name to hide a state.
     """
     plain_tail = f"{' ' + summary if summary else ''}{mark}"
     if not suffix:
         return plain_tail
-    fixed = picture.visible_len(head) + 1 + len(suffix) + picture.visible_len(mark)
-    if fixed > budget:
-        return plain_tail
-    room = budget - fixed - 1
+    room = budget - (picture.visible_len(head) + 1 + len(suffix) + picture.visible_len(mark)) - 1
     if len(summary) > room:
         summary = summary[: room - 3].rstrip() + "..." if room > 3 else ""
     shade = YELLOW if suffix in ("· late", "· at risk") else DIM
@@ -387,7 +386,9 @@ def _overview_row(
     and `budget` is the most columns the row's first line may use. The summary is the elastic part: it is cut
     (with `...`) or dropped so that the suffix fits, because the widest rows are the ones with the fullest
     summaries and a suffix that only fit on short rows would be missing from exactly the rows that say the most.
-    With no suffix (or one that cannot fit even with no summary) the row is byte-for-byte what it always was.
+    THE SUFFIX IS NEVER DROPPED: a `budget` too small for the head plus the suffix leaves the row at exactly that
+    width (summary gone), and a budget of 0 is how `_board_section` measures it. With no suffix the row is
+    byte-for-byte what it always was.
 
     `mark` IS APPENDED INSIDE THE ROW'S OWN f-STRING and defaults to "", which keeps every byte of
     this function identical for a caller that does not pass one. It exists so the scoped `◀` lands on
@@ -804,17 +805,25 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     scoped = _scoped_name(doc)
     marks = {name: f" {CYAN}◀{NC}" if name == scoped else "" for name, _ in entries}
     bare = [_overview_row(name, entry, countdowns, marks[name], width, routed.get(name)) for name, entry in entries]
-    # EACH ROW'S DESTINATION STATE, WITHIN THE WIDTH THE BOARD ALREADY HAS. The budget is the rule under the
-    # header or the widest row as drawn without any suffix, whichever is wider, so a suffix can never make the
-    # board wider than it was. It sits BEFORE the summary and the summary yields (`_row_tail`), so the widest
-    # rows, whose summaries are fullest, carry theirs like every other; a row is never wrapped, and a repository
-    # with no destination, or a document with no map, gets nothing and keeps its bare row.
+    # EACH ROW'S DESTINATION STATE, NEVER DROPPED. The budget is the rule under the header or the widest row as
+    # drawn without any suffix, whichever is wider, so on a board whose rows fit a suffix does not widen it. The
+    # suffix sits BEFORE the summary and the summary yields (`_row_tail`), so the widest rows, whose summaries are
+    # fullest, carry theirs like every other. When a row's head plus its suffix is itself wider than that budget
+    # (the name column is shared, so one very long repository name does this to every row) the budget GROWS to
+    # the widest head plus suffix: every mapped row shows its state and no row is wider than the board's own
+    # width. A row is never wrapped, and a repository with no destination, or a document with no map, gets
+    # nothing and keeps its bare row.
     compass = _compass_found(doc)
-    budget = max(_BOARD_RULE, *(picture.visible_len(row.partition("\n")[0]) for row in bare))
+    suffixes = {name: _board_suffix(compass, name) for name, _ in entries}
+    tight = [
+        _overview_row(name, entry, countdowns, marks[name], width, routed.get(name), suffixes[name], 0)
+        for name, entry in entries
+        if suffixes[name]
+    ]
+    budget = max(_BOARD_RULE, *(picture.visible_len(row.partition("\n")[0]) for row in [*bare, *tight]))
     for (name, entry), row in zip(entries, bare):
-        suffix = _board_suffix(compass, name)
-        if suffix:
-            row = _overview_row(name, entry, countdowns, marks[name], width, routed.get(name), suffix, budget)
+        if suffixes[name]:
+            row = _overview_row(name, entry, countdowns, marks[name], width, routed.get(name), suffixes[name], budget)
         lines.append(row)
     return note, lines
 
