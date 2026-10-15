@@ -1,0 +1,12 @@
+{
+  "desc": "Front door W2: fix three surfaces that mislead the owner (review-blocked merge rows, PR links in waiting rows, per-worktree aggregates)",
+  "program": "2026-10-15-front-door-w2",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#426",
+      "why": "W2: review-required routing, PR url in waiting rows, aggregate by repository"
+    }
+  ]
+}
