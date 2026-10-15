@@ -90,7 +90,7 @@ def test_a_runner_that_cannot_be_started_is_unknown_not_fail(tmp_path, monkeypat
     # `bats` may or may not be installed on this machine, so the absence is FORCED rather than
     # assumed -- PATH is emptied, `proc.run_capture` returns None, and production maps None to
     # unknown. Assuming a binary is missing from a system directory is the exact ubuntu-vs-macOS
-    # premise failure docs/agents/learned.md records.
+    # premise failure tests/CLAUDE.md records.
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     _write(tmp_path, "tests/thing.bats", "@test 'x' { true; }\n")
     verdicts = _verdicts(tmp_path, _plan("bats:tests/thing.bats"))

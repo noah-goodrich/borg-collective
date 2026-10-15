@@ -680,7 +680,7 @@ EOF
 # all three suites green. The two cases below redirect the streams to separate files and assert on
 # each — the reason IS on stderr, and is NOT on stdout, which is the half that has teeth. Files
 # rather than `run --separate-stderr` so the pin does not depend on the bats version CI installs.
-# Same family as CLAUDE.md's "`cmd >> file 2>/dev/null` does NOT silence a redirect-open error" and
+# Same family as hooks/CLAUDE.md's "`cmd >> file 2>/dev/null` does NOT silence a redirect-open error" and
 # the zsh-EPIPE-under-`run` note: this repo keeps getting bitten by which stream a byte landed on.
 #
 # THE MOCKS ARE PASS-THROUGHS ON python3, each failing exactly ONE argument. Hiding python3 outright

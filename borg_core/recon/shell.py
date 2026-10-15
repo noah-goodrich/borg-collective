@@ -29,7 +29,7 @@ FALLBACK_WINDOW_SECONDS = 86400
 # inherited an empty value. Nothing caught it: every test reaching this path puts BORG_REGISTRY in
 # the environment itself (tests/test_helper/setup.bash exports it, the pytest suites monkeypatch
 # it), so the resolution path had never once executed under test -- the same shape as the
-# usage-watch and memory-gate blind spots recorded in CLAUDE.md.
+# usage-watch and memory-gate blind spots recorded in docs/agents/learned.md.
 borg_dir = paths.borg_dir
 registry_path = paths.registry_path
 

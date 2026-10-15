@@ -83,7 +83,7 @@ output returns to the Queen, which spawns the next.
   scope gate + 5-read-before-write bound + `CLAUDE_CODE_MAX_OUTPUT_TOKENS:8000`; the main-repo copy lacks them,
   yet `borg setup` installs the main-repo copy to `~/.claude/agents/`. Reconcile: make the source-of-truth copy
   the one `borg setup` installs. See `[[borg-collective-source-of-truth]]`.
-- **`borg-verify` skill** is in CLAUDE.md's skills table but missing from `docs/architecture.md`; its place in
+- **`borg-verify` skill** is in the skills table in docs/agents/files.md but missing from `docs/architecture.md`; its place in
   the shipping pipeline vs `/borg-assimilate` is undocumented.
 - **Procedural-memory gap.** Skills (semantic) don't capture "how Noah does things across sessions" — no
   episodic layer replaced cairn after its 2026-08-08 decommission. Recommended-but-unadopted: an

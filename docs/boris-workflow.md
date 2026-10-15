@@ -363,8 +363,8 @@ the plumbing — borg handles it.
 | `/borg-assimilate` | Skill — evaluates criteria with evidence + ships | "Am I done? Ship it." |
 
 > **Local extensions:** Both skills read per-machine and per-repository markdown files at three load
-> points to absorb context-specific behavior (e.g. JIRA on the work machine). See the "Skill
-> extensions" entry under Key Patterns in [CLAUDE.md](../CLAUDE.md) for the protocol.
+> points to absorb context-specific behavior (e.g. JIRA on the work machine). See the "Local
+> extensions" entry under Key Patterns in [borg_core/extensions/CLAUDE.md](../borg_core/extensions/CLAUDE.md) for the protocol.
 
 | `drone feature <repository> <branch>` | Worktree + branch + Claude in one command | "Start new feature work" |
 | `drone up/down` | Start/stop repository containers | Container lifecycle (resuming existing work) |

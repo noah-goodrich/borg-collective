@@ -386,7 +386,7 @@ def test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_reposito
     whatsoever, which is what pins that nothing else crept into it.
 
     THE REPOSITORY LEG IS ASSERTED AND NOT MERELY NARRATED, which is a correction. Its sentence sat
-    in this docstring with no assertion under it while CLAUDE.md cited the sentence as a gate --
+    in this docstring with no assertion under it while borg_core/link/CLAUDE.md cited the sentence as a gate --
     deleting `manifest.shell.repository_slug`'s fork left the case green, because `record_forks == []`
     only ever ran in orchestrator scope. The exact-argv assertion is the gate: it names the one
     subprocess the opted-down repository path is allowed, so deleting the fork goes red (the slug
@@ -653,7 +653,7 @@ def test_the_sweep_fixture_replaces_the_fanout_and_merges_into_nodes(isolated, m
 
 def test_an_unreadable_sweep_fixture_warns_instead_of_raising(isolated, monkeypatch):
     """A mistyped fixture path must say so. An empty grid a harness mistakes for a correct one is the
-    silent-blindness shape CLAUDE.md records three incidents of."""
+    silent-blindness shape docs/agents/learned.md records three incidents of."""
     dirs = _four_repository_registry(isolated)
     monkeypatch.setenv("BORG_LINK_SWEEP_FIXTURE", str(isolated / "does-not-exist.json"))
     monkeypatch.chdir(dirs["delta"])
@@ -1738,7 +1738,7 @@ def test_a_hanging_gh_does_not_hold_the_process_open_past_the_fetch_deadline(iso
     grid = json.loads(done.stdout)["grid"]
     # DEGRADED DOWN THE LADDER, NOT BLANK: the declared rung still answers and the miss is NAMED. A
     # build that swallowed the deadline would produce an all-unknown grid with zero warnings, which
-    # is the silent-blindness shape CLAUDE.md records three incidents of.
+    # is the silent-blindness shape docs/agents/learned.md records three incidents of.
     assert grid["manifests"][0]["nodes"]["testorg/alpha#11"]["state_source"] == "declared"
     assert grid["fetch"]["status"] == "failed"
     assert any("did not answer within 1s" in w for w in grid["warnings"]), grid["warnings"]

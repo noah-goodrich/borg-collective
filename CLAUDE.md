@@ -5,7 +5,7 @@
 AI development orchestration framework. Two CLIs — `borg` (orchestration) and `drone` (repository
 lifecycle) — that coordinate parallel Claude Code sessions across repositories and containers.
 Cross-session knowledge persists via user-authored checkpoints (`.borg/checkpoints/`) and Claude
-Code's own project-memory system — see "Cairn decommission" under Learned for why a separate
+Code's own project-memory system — see "Cairn decommission" in docs/agents/learned.md for why a separate
 knowledge-graph service was retired.
 
 ## Architecture
@@ -35,7 +35,8 @@ Nested CLAUDE.md files load when you read a file in their directory. The `docs/a
 - `borg_core/extensions/CLAUDE.md`: local extensions, the shim layer, `prefer-tool`.
 - `borg_core/compass/CLAUDE.md`: the compass reader.
 - `tests/CLAUDE.md`: test-environment lessons (git identity, platform premises).
-- Before editing `borg.zsh` or `drone.zsh`, read `docs/agents/cli-rules.md` and `docs/agents/learned.md`.
+- Before editing `borg.zsh`, `drone.zsh`, anything under `lib/` or `bin/`, or window-name code, read `docs/agents/cli-rules.md` and `docs/agents/learned.md`.
+- Before naming anything repository or project in code (`borg_core/`, `lib/`, `hooks/`, `bin/`), help text or messages, read the Vocabulary rule in `docs/agents/cli-rules.md`.
 - Before editing `_borg_print_briefing` or `borg link --brief`, read `docs/agents/link-brief.md`.
 - Before spawning or editing a nanoprobe, or fanning out agents, read `docs/agents/nanoprobes.md`.
 - To look up a command or flag, read `docs/agents/commands.md`; to find a file, read `docs/agents/files.md`.

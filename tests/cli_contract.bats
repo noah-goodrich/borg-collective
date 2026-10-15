@@ -1981,7 +1981,7 @@ _link_iso_ago() {
 # Mock tmux so each repository named in $1 (one per LINE) reads as a live window, exempting it from the
 # reap overlay. TRACE must be exported before _mock_tmux's script runs: its `>> "$TRACE"` would
 # otherwise fail to open and leak a shell error onto stderr, which the golden diff would catch as a
-# spurious mismatch (same redirect-open-order trap documented in CLAUDE.md).
+# spurious mismatch (same redirect-open-order trap documented in hooks/CLAUDE.md).
 _link_mock_tmux() {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
