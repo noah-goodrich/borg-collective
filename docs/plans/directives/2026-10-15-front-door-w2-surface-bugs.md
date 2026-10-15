@@ -18,6 +18,7 @@ The front door tells the owner what to do next. Three surfaces mislead:
 - `_pr_row` routes a `REVIEW_REQUIRED` PR as waiting on a review (`await review #N`, owner `—`, ready `… wait`), after the CI and conflict rules and before the merge rule. The owner `—` is the existing "nobody to act" value, so the row is counted in the hidden summary and not as a decision.
 - The GitHub adapter emits `url`; the nextpick row carries it; `.waiting.rows[]` exposes it; the borg-link skill renders the PR ref as a markdown link.
 - The directive and ship aggregates in `borg link` group by the registry `repo` key. The per-directory repository page is unchanged.
+- The GitHub recon sweep is chunked (AC4), a separate PR stacked on this one: a registry of about 30 repositories timed out as one GraphQL request.
 
 ## Non-Goals
 
@@ -33,7 +34,9 @@ The front door tells the owner what to do next. Three surfaces mislead:
   - Verify: `bats tests/recon_adapter_github.bats tests/context_budget.bats` and the pytest cases for the row.
 - [ ] **AC3: `borg link` aggregates by repository, not by registered directory.** Three linked worktrees of one repository show each directive title once. (parking-lot item)
   - Verify: `python3 -m pytest borg_core/link -k counts_a_repository_once` and `borg link --json` on a registry holding worktrees.
-- [ ] **AC4: 0.9.9 is cut with these fixes and the registry contract step, and the plugin mirror is rebuilt.** A separate release PR after this one merges.
+- [ ] **AC4: The GitHub recon sweep works on a registry of about 30 repositories.** The adapter splits the registry into chunks of 5 repositories run 8 at a time, so no single request nears GitHub's server timeout and the sweep fits `DEFAULT_SWEEP_TIMEOUT_SECONDS`. A failed request shows gh's own trimmed error text, and one failed chunk keeps the other chunks' items and names the repositories it covered. (Issue #424)
+  - Verify: `bats tests/recon_adapter_github.bats` (the cases under "chunked sweep") and the measurements in the PR body.
+- [ ] **AC5: 0.9.9 is cut with these fixes and the registry contract step, and the plugin mirror is rebuilt.** A separate release PR after this one merges.
   - Verify: the release and the mirror commit exist.
 
 ## Scope Boundaries
@@ -43,4 +46,4 @@ The front door tells the owner what to do next. Three surfaces mislead:
 
 ## Promotion Trigger
 
-`PROJECT_PLAN.md` holds another plan. This directive is executed in place from `docs/plans/directives/` and is assimilated on its own when AC1 to AC4 are ticked.
+`PROJECT_PLAN.md` holds another plan. This directive is executed in place from `docs/plans/directives/` and is assimilated on its own when AC1 to AC5 are ticked.
