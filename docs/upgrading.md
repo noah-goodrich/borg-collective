@@ -2,7 +2,7 @@
 
 A runbook for bringing a machine from an older borg to the current release, or for installing borg on a fresh machine. It is written so that a person, or a Claude Code session with no other context, can follow it top to bottom. The GitHub release notes for each version describe what changed; this page holds the per-machine steps, and a future release that needs anything from you adds a row to the migration table in section 5 instead of rewriting the notes.
 
-This page was last checked against release 0.9.7.
+This page was last checked against release 0.9.8.
 
 ## 1. Who this is for and how to use it with Claude Code
 
@@ -108,12 +108,13 @@ Find the row for the version you started from. If you skipped several releases, 
 | 0.9.5 or earlier | Stack manifests, below |
 | 0.9.6 | None |
 | 0.9.7 | Registry key, below |
+| 0.9.8 | None |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
 
-### From 0.9.7 to main after 2026-10-15: registry key
+### From 0.9.7 to 0.9.8: registry key
 
-The registry file (`~/.config/borg/registry.json`, or under `XDG_CONFIG_HOME`) keeps its repositories under a top-level key. The key is moving from `projects` to `repositories` in three steps. Step one, in 0.9.6, made every reader accept both. Step two, merged to main on 2026-10-15 as noah-goodrich/borg-collective#420, made every writer keep whichever key the file already has, so a renamed file stays renamed. Step three, in a later release, will drop the old key; that release's row will say so. Do this step once per machine, after the normal upgrade has pulled a borg-collective checkout that includes #420 (`git -C <BORG> log --oneline -1 -- lib/registry.zsh` names it).
+The registry file (`~/.config/borg/registry.json`, or under `XDG_CONFIG_HOME`) keeps its repositories under a top-level key. The key is moving from `projects` to `repositories` in three steps. Step one, in 0.9.6, made every reader accept both. Step two, in 0.9.8 as noah-goodrich/borg-collective#420, made every writer keep whichever key the file already has, so a renamed file stays renamed. Step three, in a later release, will drop the old key; that release's row will say so. Do this step once per machine, after the normal upgrade to 0.9.8.
 
 1. Preview the change. It prints one line and writes nothing:
 
