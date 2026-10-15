@@ -34,6 +34,23 @@ _borg_registry_write() {
         /bin/rm -f "$tmp"
         return 1
     fi
+    # MIGRATE phase: round-trip the entry-map key the file on disk already has. Readers normalize to
+    # `.projects`, so the incoming document says `projects`; when the file on disk holds `repositories`
+    # (after `migrate-key`) rename it back on the way out. Costs no fork unless the file mentions it.
+    if [[ -f "$BORG_REGISTRY" ]]; then
+        case "$(< "$BORG_REGISTRY")" in
+            *'"repositories"'*)
+                if jq -e 'type == "object" and has("repositories") and (has("projects") | not)' "$BORG_REGISTRY" >/dev/null 2>&1; then
+                    if ! jq 'if type == "object" and has("projects") and (has("repositories") | not) then (.repositories = .projects | del(.projects)) else . end' "$tmp" > "$tmp.k"; then
+                        /bin/rm -f "$tmp" "$tmp.k"
+                        warn "registry write blocked: could not keep the repositories key"
+                        return 1
+                    fi
+                    /bin/mv "$tmp.k" "$tmp"
+                fi
+                ;;
+        esac
+    fi
     /bin/mv "$tmp" "$BORG_REGISTRY"
 }
 

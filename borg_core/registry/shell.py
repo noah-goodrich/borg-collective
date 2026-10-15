@@ -47,6 +47,25 @@ def read_registry() -> dict:
     return normalized
 
 
+def _keep_disk_key(data: dict, path: Path) -> dict:
+    """MIGRATE phase: write the entry map under the key the file on disk already has.
+
+    Readers hand writers a document normalized to `projects`. When the file on disk holds `repositories`
+    (after `migrate-key`) and not `projects`, a document carrying `projects` and not `repositories` is
+    renamed on the way out, so the migration sticks. A new file, an old-key file, an unreadable file and a
+    document that already says `repositories` (migrate-key's own write) are all written as given.
+    """
+    if "projects" not in data or "repositories" in data:
+        return data
+    try:
+        on_disk = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return data
+    if not isinstance(on_disk, dict) or "repositories" not in on_disk or "projects" in on_disk:
+        return data
+    return {("repositories" if key == "projects" else key): value for key, value in data.items()}
+
+
 def write_registry(data: dict) -> None:
     """Atomically write the registry: sanitize, tmp file + rename.
 
@@ -55,8 +74,9 @@ def write_registry(data: dict) -> None:
     failure mode doesn't exist here since `data` is an already-valid dict, not raw text from an
     external process, so `json.dumps` can never produce empty output for it.
     """
-    text = core.strip_control_chars(json.dumps(data))
     path = registry_path()
+    data = _keep_disk_key(data, path)
+    text = core.strip_control_chars(json.dumps(data))
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.parent / f"{path.name}.tmp.{os.getpid()}"
     tmp.write_text(text, encoding="utf-8")
