@@ -341,6 +341,9 @@ def _pr_row(item: dict[str, Any]) -> dict[str, Any]:
         step, owner, ready = f"#{number} CI", "AGENT", "… run"
     elif item.get("review_decision") == "CHANGES_REQUESTED":
         step, owner, ready = f"address review #{number}", "AGENT", "○"
+    elif item.get("review_decision") == "REVIEW_REQUIRED":
+        # GitHub blocks the merge until a reviewer approves, so it is not a decision the owner can act on.
+        step, owner, ready = f"await review #{number}", "—", "… wait"
     else:
         step, owner, ready = f"merge #{number}", "YOU", "✔ now"
     return {
