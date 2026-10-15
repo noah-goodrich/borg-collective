@@ -29,6 +29,13 @@
       "ref": "noah-goodrich/borg-collective#398",
       "status": "merged",
       "why": "S4a: build-plugin.sh mirrors whole skill directories so references/ ship"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#404",
+      "status": "merged",
+      "why": "S4b: borg-link SKILL.md becomes an 8 KB router; Queen view, fallback and rationale move to references/"
     }
   ]
 }
