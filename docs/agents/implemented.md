@@ -2,7 +2,7 @@
 
 Reference moved verbatim from the top-level CLAUDE.md.
 
-## Current State (v2, release v0.9.7)
+## Current State (v2, release v0.9.8)
 
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
