@@ -57,6 +57,13 @@
       "ref": "noah-goodrich/borg-collective#417",
       "status": "open",
       "why": "close out W1: assimilate the finished directives, add this stack"
+    },
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#420",
+      "status": "open",
+      "why": "registry key migrate step: writers round-trip the key the file has"
     }
   ]
 }
