@@ -777,7 +777,7 @@ def test_json_carries_the_aggregates_in_every_scope(isolated_env, monkeypatch):
     DOCUMENT_VERSION. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |=
     (...)'` from inside whatever repository the session happens to be in; scope-gating the
     aggregates would report "Queued: 0 directives" for the whole collective at `.version == 2`,
-    which SKILL.md maps to "CLI path. Never fall back." A wrong answer, not a missing one.
+    which references/fallback.md maps to "CLI path. Never fall back." A wrong answer, not a missing one.
 
     Mutation: `need_aggregate = mode != "porcelain" and scope["kind"] == "orchestrator"`.
     """
