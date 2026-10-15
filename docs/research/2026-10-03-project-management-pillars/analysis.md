@@ -36,6 +36,8 @@ Every term is also defined inline where it first appears. This block is for skim
 
 ## 1. Recommendations
 
+A "Status as of 2026-10-15" section after item 13 maps each recommendation to shipped, partial or not started; the findings are otherwise unchanged.
+
 **Status, 2026-10-07 (main `b34e7e0`; the counts below were taken at `a4bd1c1`).** #274 now appends a top-3 row per
 `borg next` run to `next-recs.jsonl` (`borg_core/nextpick/core.py` `log_row`) and adds a follow-rate gate
 (`gate(min_rows=20, threshold=0.60)`), so the log recommendation 3 asks for exists; #275's chooser uses that gate for
@@ -91,6 +93,28 @@ Ordered by effort, cheapest first (the 80/20 cut). Each names the section that b
     data never enters the public repo; only allow-listed numeric aggregates do (section 3.11).
 13. **Re-run in 90 days, with the pass and fail thresholds written down first**, the way the memory gate pre-registers
     its null (sections 3.11 and 3.12).
+
+### Status as of 2026-10-15
+
+Added on 2026-10-15 against main `387c1c8` and the v0.9.6 release (tag `v0.9.6`, 2026-10-14). The findings, scores and recommendations in this document are unchanged; this section only records what happened to each recommendation afterwards. Tally: 2 shipped, 2 partial, 9 not started. Numbers below match the list above.
+
+1. **Not started.** Nothing computes the six derived numbers on a schedule, and no scorecard code exists in the repository.
+2. **Partial.** The one-off hand triage of the stale directives was done in noah-goodrich/borg-collective#266 (open directives 28 to 24). A per-directive appetite, a review date and a default stop are not built into borg. A plain-file map outside the repository carries the same idea for its own items: waypoints with checkable criteria, parking-lot items with look-again dates, and a side-trail rule (park by default, override with a logged reason).
+3. **Shipped.** noah-goodrich/borg-collective#274 appends the top three of every `borg next` run to a log. noah-goodrich/borg-collective#397 writes the ranking rule down and applies it: repositories on the current leg first, then nearest due date, then undated active work. The rule is urgency by date and leg; value is still the owner's call in the map. The follow-rate gate counts whether the suggestion was opened, not whether the top item shipped first, so that test is not yet computed.
+4. **Shipped, as a restraint.** No scoring formula was adopted. The compass ranks by leg and due-date order, not by a weighted score (noah-goodrich/borg-collective#397).
+5. **Not started.** `borg-assimilate` has no debrief step.
+6. **Not started.** No status-history event is written. noah-goodrich/borg-collective#399 changed what marks a session waiting (idle prompts no longer do) but records no history.
+7. **Not started.** No query or log of `borg-verify` verdicts exists. Adjacent capture fixes (noah-goodrich/borg-collective#334 recovers empty summaries from the transcript; noah-goodrich/borg-collective#308 records model and effort) do not answer whether the gate ever returns FAIL.
+8. **Not started.** No change to spend capture in this repository.
+9. **Partial.** The map's daily log ends each day with a drafted gauge, which is a perception reading. Speed and stability are not shown beside it, and borg does not print it.
+10. **Not started.** No scorecard exists yet, so there is nothing to place out of the agents' reach.
+11. **Not started.** The alternating-weeks test of the ADHD guardrails has not been run.
+12. **Not started.** Of the two-machine design only the gauge line in item 9 exists. There is no pure scoring core and no publish validator, and no work-machine data is in the repository.
+13. **Not started.** No pass and fail thresholds for a day-90 re-run have been written down.
+
+Also shipped since, on ground these recommendations touch but not one-to-one with them. In borg 0.9.6 the compass reader puts the map on the `borg link --json` wire (noah-goodrich/borg-collective#385) and the render shows the current leg and each destination's standing in `borg link` (noah-goodrich/borg-collective#397). `borg next` became a chooser that logs every run (noah-goodrich/borg-collective#274, noah-goodrich/borg-collective#275; plan assimilated in noah-goodrich/borg-collective#391). The chain-to-stack rename completed (noah-goodrich/borg-collective#375, noah-goodrich/borg-collective#376, noah-goodrich/borg-collective#381, noah-goodrich/borg-collective#396), so a repository's PR ordering lives in `.stacks/` manifests read by `borg link` and `borg next`, and `borg pr` gained gate and merge-train verbs (noah-goodrich/borg-collective#366). The context-diet stack trimmed what every session loads (noah-goodrich/borg-collective#392, noah-goodrich/borg-collective#393, noah-goodrich/borg-collective#394, noah-goodrich/borg-collective#398; noah-goodrich/borg-collective#404 merged after the tag), and the link-up checkpoint skill now gathers its inputs in one call (noah-goodrich/borg-collective#401, noah-goodrich/borg-collective#402).
+
+The map itself lives outside this repository and is described here by shape only: plain markdown, one instance per machine, with destinations, waypoints that carry checkable criteria, a parking lot with look-again dates, a daily log whose first line names the current leg, and a side-trail rule. The compass reads it through `BORG_MAP_DIR`. It was built on 2026-10-14.
 
 ---
 
