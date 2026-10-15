@@ -19,6 +19,13 @@
       "order": "3",
       "ref": "noah-goodrich/borg-collective#408",
       "why": "compass counts the destination target date"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#415",
+      "status": "open",
+      "why": "VERSION 0.9.7, release notes, then tag and plugin mirror"
     }
   ]
 }
