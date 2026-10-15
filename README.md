@@ -22,6 +22,8 @@ borg init
 `install.sh` installs the `borg` + `drone` CLIs and runs `borg setup`, which registers Claude Code
 hooks, installs skills, and configures the tmux keybinding. Safe to re-run.
 
+Upgrading an existing machine, or setting one up from scratch? Follow [Upgrading borg on any machine](docs/upgrading.md).
+
 ### First run
 
 ```bash
