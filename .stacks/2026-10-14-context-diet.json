@@ -48,7 +48,7 @@
       "lane": "_default",
       "order": "7",
       "ref": "noah-goodrich/borg-collective#411",
-      "status": "open",
+      "status": "merged",
       "why": "S5: CLAUDE.md cut to 8 KB; rules move verbatim to nested CLAUDE.md files and docs/agents"
     },
     {
@@ -62,7 +62,7 @@
       "lane": "_default",
       "order": "9",
       "ref": "noah-goodrich/borg-collective#416",
-      "status": "open",
+      "status": "merged",
       "why": "S8: repository arm trims the compass leg text so AC4 holds on any day"
     }
   ]
