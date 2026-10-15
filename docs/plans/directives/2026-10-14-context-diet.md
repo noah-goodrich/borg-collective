@@ -69,12 +69,14 @@ The issues were filed against older numbers; these are the ones the criteria are
 | S4b   | AC3 split, AC2 skill guard       | after #386, #397   |
 | S5    | AC1, AC2, AC6 CLAUDE.md cut      | after the queue    |
 | S6    | AC4 Queen pipe trim              | after S4b          |
+| S7    | AC4 collapse finished stacks     | after S6           |
 
 - S3 (drone start) folds into S4b as one SKILL.md line.
 - S4 split in two on 2026-10-14: S4a ships the build fix first, so S4b's `references/` files reach the installed plugin.
 - S5 waits for every open PR that edits CLAUDE.md to merge (#379, #381, #385, #278, and R6 from the front-door wave 2). The AC1 line check runs against the base after they land.
 - S6 was added 2026-10-15 on Noah's word. The Queen pipe output grew from 25,849 bytes after S2 to 38,655 bytes: `compass` (7,502 bytes) arrived with #385 and #397, and `grid` reached 18,658 bytes once every in-flight PR was stacked. So the split alone leaves a Queen run near 58 KB. S6 audits which `grid` and `compass` fields `references/queen-view.md` reads, drops the rest in the Queen arm, adds one bats case per dropped field, and keeps SKILL.md at 8,192 bytes or less.
-- AC4's "after" is measured once S4b and S6 are merged and the plugin mirror is rebuilt.
+- S7 was added 2026-10-15 on Noah's word. After S6 (#409) a Queen run measured 49,483 bytes, still about 6.5 KB over. Of the 11 stacks on the board, 10 had every row merged, and their nodes were 11.8 KB of the 14.4 KB `grid`. Finished stacks are also what grows, one row per merged PR. S7 collapses a stack whose rows are all merged or closed to `{id, desc, repos, rows, done: true}` in the Queen arm, and `references/queen-view.md` mentions such a stack in one line at most. Open stacks pass through unchanged. Shipped work still reaches the Queen view through `assimilated`.
+- AC4's "after" is measured once S4b, S6 and S7 are merged and the plugin mirror is rebuilt.
 
 ## Scope Boundaries
 
@@ -85,12 +87,12 @@ The issues were filed against older numbers; these are the ones the criteria are
 
 ## Ship Definition
 
-Each slice: PR opened, CI green, `/borg-verify` PASS, Noah's word, squash-merged. After S4b and S6: the mirror is rebuilt and the plugin updated (the R6 end-of-day step), then AC4's "after" is measured.
+Each slice: PR opened, CI green, `/borg-verify` PASS, Noah's word, squash-merged. After S4b, S6 and S7: the mirror is rebuilt and the plugin updated (the R6 end-of-day step), then AC4's "after" is measured.
 
 ## Timeline
 
-Target: S1 and S2 on 2026-10-14; S4b, S5 and S6 once their blocking PRs merge, likely 2026-10-15.
-Estimated effort: three sessions (S6 added one).
+Target: S1 and S2 on 2026-10-14; S4b, S5, S6 and S7 once their blocking PRs merge, likely 2026-10-15.
+Estimated effort: three sessions (S6 and S7 added one).
 
 ## Risks
 

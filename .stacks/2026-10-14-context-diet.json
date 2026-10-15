@@ -36,6 +36,13 @@
       "ref": "noah-goodrich/borg-collective#404",
       "status": "merged",
       "why": "S4b: borg-link SKILL.md becomes an 8 KB router; Queen view, fallback and rationale move to references/"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#409",
+      "status": "merged",
+      "why": "S6: the borg-link Queen pipe drops the grid and compass fields the Queen view never reads"
     }
   ]
 }
