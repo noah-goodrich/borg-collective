@@ -107,11 +107,36 @@ Find the row for the version you started from. If you skipped several releases, 
 |----------------|----------------|
 | 0.9.5 or earlier | Stack manifests, below |
 | 0.9.6 | None |
-| 0.9.7 | None |
+| 0.9.7 | Registry key, below |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
 
-Registry key: 0.9.6 accepts a `repositories` key next to `projects` in the registry file, and `python3 -m borg_core.registry.cli migrate-key` can convert a file, but nothing needs to run yet. A later release will drop the old key; its row will say so.
+### From 0.9.7 to main after 2026-10-15: registry key
+
+The registry file (`~/.config/borg/registry.json`, or under `XDG_CONFIG_HOME`) keeps its repositories under a top-level key. The key is moving from `projects` to `repositories` in three steps. Step one, in 0.9.6, made every reader accept both. Step two, merged to main on 2026-10-15 as noah-goodrich/borg-collective#420, made every writer keep whichever key the file already has, so a renamed file stays renamed. Step three, in a later release, will drop the old key; that release's row will say so. Do this step once per machine, after the normal upgrade has pulled a borg-collective checkout that includes #420 (`git -C <BORG> log --oneline -1 -- lib/registry.zsh` names it).
+
+1. Preview the change. It prints one line and writes nothing:
+
+```
+python3 -m borg_core.registry.cli migrate-key --dry-run
+```
+
+   Run it from the borg-collective checkout (`run-in <BORG> ...` or `cd` there first). "nothing to do" means the file already has `repositories`; skip to step 3.
+
+2. Run it for real. It writes a timestamped backup next to the file first:
+
+```
+python3 -m borg_core.registry.cli migrate-key
+```
+
+3. Confirm the board still lists every repository and that doctor is clean:
+
+```
+borg link --overview
+borg doctor
+```
+
+   If the board comes back empty, restore the backup it named (copy it over `registry.json`) and report; nothing else was changed.
 
 ### From 0.9.5 or earlier to 0.9.6: stack manifests
 
