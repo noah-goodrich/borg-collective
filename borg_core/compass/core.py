@@ -327,8 +327,10 @@ def map_repositories(
     repository name as a whole word.
 
     `parents` is `{worktree: repository}` (`link.worktree.repository_parents`): a worktree with no mapping of its own
-    INHERITS its repository's entry whole, destination and `on_leg`, because it is that repository's checkout and not
-    a repository of its own. AN EXPLICIT MAPPING ALWAYS WINS: a worktree the map itself names (listed under a
+    INHERITS its repository's destination, because it is that repository's checkout and not a repository of its own.
+    Its `on_leg` is the repository's OR its own: a worktree whose own name the leg text names stays on today's leg even
+    when its repository is not, exactly as it read before the inheritance existed, so the entry is not copied whole.
+    AN EXPLICIT MAPPING ALWAYS WINS: a worktree the map itself names (listed under a
     destination's `repositories`, or the name of a destination) keeps that entry, so inheritance only fills a hole.
     A head with no mapping hands its unmapped entry only to an unmapped worktree and never erases a mapped one.
     This is the one place the inheritance is applied, and every reader of the block (`borg next`'s ranking, the Queen
@@ -347,7 +349,10 @@ def map_repositories(
             explicit.add(name)
     for child, head in (parents or {}).items():
         if child in mapped and head in mapped and child not in explicit:
-            mapped[child] = dict(mapped[head])
+            mapped[child] = {
+                "destination": mapped[head]["destination"],
+                "on_leg": mapped[head]["on_leg"] or mapped[child]["on_leg"],
+            }
     return mapped
 
 

@@ -360,6 +360,28 @@ def test_an_unowned_repository_can_still_be_on_the_leg_by_name():
     assert _build(log=log, names=["stray"])["repositories"]["stray"] == {"destination": None, "on_leg": True}
 
 
+def test_an_inheriting_worktree_takes_the_heads_destination_but_keeps_its_own_on_leg():
+    """A worktree the leg names stays on today's leg when its repository is off it, as before the inheritance."""
+    files = [("destinations/0.md", _destination("beta", extra="repositories:\n  - app\n"))]
+    names = ["app", "scratch", "other"]
+    parents = {"scratch": "app", "other": "app"}
+
+    def block(leg_line: str) -> dict:
+        log = f"## Today's leg\n- {leg_line}\n"
+        return core.build_compass("/map", TODAY, log, files, None, None, names, parents=parents)
+
+    off = block("tidy scratch")
+    assert off["repositories"]["app"] == {"destination": "beta", "on_leg": False}
+    assert off["repositories"]["scratch"] == {"destination": "beta", "on_leg": True}
+    assert off["repositories"]["other"] == {"destination": "beta", "on_leg": False}
+    assert core.leg_priority(off, "scratch") == (0, "")
+    assert core.leg_priority(off, "other") == (2, "")
+
+    on = block("wire up beta")
+    assert [on["repositories"][name]["on_leg"] for name in names] == [True, True, True]
+    assert [core.leg_priority(on, name) for name in names] == [(0, ""), (0, ""), (0, "")]
+
+
 # -- purity ------------------------------------------------------------------------------------------------------
 
 
