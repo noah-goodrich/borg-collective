@@ -1075,21 +1075,55 @@ cmd_unpin() {
 # treats these as idle non-destructively; this command persists status=idle to
 # the corresponding state.json files (atomic write).
 cmd_reap() {
+    local drop_missing=0 arg
+    for arg in "$@"; do
+        case "$arg" in
+            --drop-missing) drop_missing=1 ;;
+            *) die "reap: unknown argument '$arg' (usage: borg reap [--drop-missing])" ;;
+        esac
+    done
+
     local reaped name from count=0
     reaped=$(borg_reap_persist)
     if [[ -z "$reaped" ]]; then
         info "Nothing to reap — all active/waiting sessions are live or recent."
-        return 0
+    else
+        # tab-safe: name is field 1 of 2 (borg_reap_persist never emits an empty name); an empty
+        # `from` (field 2, last) cannot shift anything after it.
+        while IFS=$'\t' read -r name from; do
+            [[ -z "$name" ]] && continue
+            info "Reaped ${BOLD}$name${NC} ($from → idle) — no live session"
+            count=$((count + 1))
+        done <<< "$reaped"
+        echo
+        info "$count stale session(s) downgraded to idle (threshold: ${BORG_REAP_STALE_HOURS:-12}h)"
     fi
-    # tab-safe: name is field 1 of 2 (borg_reap_persist never emits an empty name); an empty
-    # `from` (field 2, last) cannot shift anything after it.
-    while IFS=$'\t' read -r name from; do
-        [[ -z "$name" ]] && continue
-        info "Reaped ${BOLD}$name${NC} ($from → idle) — no live session"
-        count=$((count + 1))
-    done <<< "$reaped"
-    echo
-    info "$count stale session(s) downgraded to idle (threshold: ${BORG_REAP_STALE_HOURS:-12}h)"
+    _borg_reap_missing "$drop_missing"
+}
+
+# Registry entries whose own directory is gone (a deleted worktree, a removed temp checkout). An entry with no
+# path (a Claude Desktop topic) is not a directory entry and never counts. A worktree entry (it carries a `repo`
+# key) counts only when ITS path is gone: the repository it is a view of is not consulted. Listing is the default;
+# `borg reap --drop-missing` removes exactly the listed entries from the registry and touches nothing on disk.
+_borg_reap_missing() {
+    local drop="$1" name mpath missing=0
+    while IFS=$'\t' read -r name mpath; do
+        [[ -z "$name" || -z "$mpath" ]] && continue
+        [[ -d "$mpath" ]] && continue
+        missing=$((missing + 1))
+        if (( drop )); then
+            borg_registry_remove "$name"
+            info "Dropped ${BOLD}$name${NC} ($mpath) — directory no longer exists"
+        else
+            info "missing: $name ($mpath)"
+        fi
+    done < <(borg_registry_read | jq -r '.projects | to_entries[]
+        | select((.value.path | type) == "string" and .value.path != "")
+        | [.key, .value.path] | @tsv' 2>/dev/null)
+    if (( missing > 0 && ! drop )); then
+        info "run borg reap --drop-missing to remove them"
+    fi
+    return 0
 }
 
 # Remove stale borg-managed nanoprobe worktrees for one or all registered repos.
@@ -2256,6 +2290,8 @@ CONF
     for lib in "$BORG_HOME/lib/"*.sh; do
         cp "$lib" "$HOME/.claude/lib/${lib:t}"
     done
+
+    _borg_warn_unloaded_agents
 
     # ── 3. De-dup: remove literal-path borg hook entries from Claude Code settings.json ──
     # Hook registration is now owned by the borg-collective plugin (hooks/hooks.json).
@@ -3487,7 +3523,7 @@ cmd_help() {
                           gate <n> [--repo R] [--wait]   0 green, 1 failing, 2 pending, 3 cancelled w/o runner
                           merge-train <n...> [--dry-run] Update, wait, rerun once, merge in order; MERGES:
                                                          human or orchestrator main loop only, NEVER agents
-    reap                Persist idle to stale active/waiting sessions (no live window)
+    reap [--drop-missing]  Persist idle to stale sessions; list (or drop) entries whose directory is gone
     reap-worktrees [--dry-run] [p]  Remove stale/merged (incl. squash) nanoprobe worktrees
     doctor              Verify the 4 launchd agents + headless claude -p reachability
     help                Show this message

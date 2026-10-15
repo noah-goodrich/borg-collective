@@ -45,6 +45,7 @@ borg focus               Zoom current pane / repository window
 borg pin / unpin         Pin (or unpin) a repository to the top of borg link
 borg window <p> [short]  Show or set a repository's short tmux window name (registry `tmux_window`)
 borg reap / reap-worktrees  Reap stale active/waiting statuses; clean stale nanoprobe worktrees
+borg reap [--drop-missing]  Also list registry entries whose directory is gone; the flag drops them (registry only)
 borg recon --json        Machine surface only: reconciled sweep JSON (bare `recon` retired; use link)
 borg recon --adapters    List the source adapters discovered on this machine
 borg nanoprobes (np)     List recent ephemeral subagent runs
@@ -54,6 +55,7 @@ borg doctor              Environment/dependency health check
 borg setup               Install/refresh hooks, skills, agents, tmux keybinding
                            NOT launchd — plists are installed by install.sh only, which calls
                            `borg setup` at the end. A new launchd job needs an install.sh run.
+                           `borg setup` warns (one line, never installs) when a shipped agent is not loaded.
 borg store-secret        Patch a repository's secrets.zsh with a new keychain export
 borg down                Tear down everything: windows, containers, shared stacks (`sever` retired)
 borg tidy                Housekeeping pass over registry/checkpoints; `--cairn-leftovers [--dry-run]`

@@ -64,6 +64,10 @@ setup_temp_dirs() {
     # THE ADAPTER-DISCOVERY REGRESSION GATE KEEPS ITS TEETH: cli_contract.bats's two #113 cases and
     # its registry-resolution case all `unset BORG_RECON_ADAPTER_PATH` inside their own `zsh -c`,
     # so they still exercise the real fallback this line hides from everyone else.
+    # The scan skips temp roots (lib/registry.zsh borg_scan_temp_roots), and this sandbox lives under one
+    # (/var/folders on macOS, /tmp on Linux), so every scan case would skip its own fixtures. REPLACE the list
+    # with a directory that holds nothing; the cases that test the skip set it inline.
+    export BORG_SCAN_TEMP_ROOTS="${BATS_TEST_TMPDIR}/.no-temp-roots"
     export BORG_RECON_ADAPTER_PATH="${BATS_TEST_TMPDIR}/no-adapters"
 
     # AC3'S SECOND NETWORK SEAM, NEUTRALIZED ON THE SAME TERMS AND FOR THE SAME REASON.

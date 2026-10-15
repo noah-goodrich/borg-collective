@@ -115,7 +115,7 @@ Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `ho
 
 ### Launchd agents (install.sh)
 
-`install.sh` is the only installer of borg's launchd agents: the resume watcher, the notification daemon, the usage watch, the reaper, the PR watch and the memory gate. `borg setup` installs none of them, and section 4 never runs `install.sh`, so a machine whose previous install predates 0.9.4 (when the resume watcher shipped), or that was upgraded by this page without ever running `install.sh`, has no resume watcher. `borg doctor` shows this as FAIL rows for `resume-watch` and `resume-probe`. Since this repository's `borg setup` also prints a warning naming any shipped agent that is not loaded, the warning is the other way to find it.
+`install.sh` is the only installer of borg's launchd agents: the resume watcher, the notification daemon, the usage watch, the reaper, the PR watch and the memory gate. `borg setup` installs none of them, and section 4 never runs `install.sh`, so a machine whose previous install predates 0.9.4 (when the resume watcher shipped), or that was upgraded by this page without ever running `install.sh`, has no resume watcher. `borg doctor` shows this as FAIL rows for `resume-watch` and `resume-probe`. `borg setup` also prints a warning naming any shipped agent that is not loaded, that warning is the other way to find it.
 
 1. Ask the person, then run the installer from the borg-collective checkout once. Answer `N` to the plugin prompt, because the plugin is handled in section 4:
 
