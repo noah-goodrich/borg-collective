@@ -13,7 +13,7 @@ The repository-scope arm of the jq is a whitelist on purpose. `--json` stays reg
 
 **Why the jq.** The Queen arm (`.directives |= (...)`) does not enumerate a field — it transforms one
 key in place, so anything the document gains later passes through untouched. It collapses the one
-uncapped array (directives, ~121 items live) from 27,298 bytes raw to ~13,935. `-c` drops the pretty-print whitespace, which costs context and tells a model reader nothing, and the named `del()` removes eight per-repository fields the Queen view never reads (`claude_session_id`, `path`, `repo`, `clock_divergence`, `tmux_session`, `source`, `notify_origin`, `last_activity`); it names what to drop rather than what to keep, so a field the document gains later still passes through. The same arm also names, with `del()`, the `.grid` and `.compass` fields no instruction in `queen-view.md` reads: per manifest `path` and `levels` (the nodes already carry `level`), per node `ref` (the object key is the ref), `why`, `order`, `lane`, `next` and `gate` (the manifest's `gates[]` is what routing reads), `.compass.today`, and per destination `domain`, `definition`, `target`, `next_waypoint` and `due` (`state` and `status` carry the tally). `.compass.parking` is filtered to the due items, the only ones the view lists. On a board measured at 45,690 bytes of Queen output this removed 15,454 bytes (to 30,236), nearly all of it `.grid.manifests` (23,744 to 14,443). Every field not named still passes through, and a read field is never dropped to hit a budget. The repository arm is
+uncapped array (directives, ~121 items live) from 27,298 bytes raw to ~13,935. `-c` drops the pretty-print whitespace, which costs context and tells a model reader nothing, and the named `del()` removes eight per-repository fields the Queen view never reads (`claude_session_id`, `path`, `repo`, `clock_divergence`, `tmux_session`, `source`, `notify_origin`, `last_activity`); it names what to drop rather than what to keep, so a field the document gains later still passes through. The same arm also names, with `del()`, the `.grid` and `.compass` fields no instruction in `queen-view.md` reads: per manifest `path` and `levels` (the nodes already carry `level`), per node `ref` (the object key is the ref), `why`, `order`, `lane` and `gate` (the manifest's `gates[]` is what routing reads), `.compass.today`, and per destination `domain`, `definition`, `target`, `next_waypoint` and `due` (`state` and `status` carry the tally). `.compass.parking` is filtered to the due items, the only ones the view lists. On a board measured at 45,690 bytes of Queen output this removed 14,948 bytes (to 30,742), nearly all of it `.grid.manifests` (23,744 to 14,443). Every field not named still passes through, and a read field is never dropped to hit a budget. The repository arm is
 the opposite: an explicit whitelist, and a field the document gains later is invisible until it is
 added there. That is the point of it — it keeps registry-wide data off a page that must be about one
 directory. If `jq` is missing, drop the pipe and read the raw document, and still render only what the
@@ -141,3 +141,9 @@ Everything from here to `## Repository scope` is the cross-repository overview. 
 - Scope is the engine's `scope.kind`, never the `.borg-project` marker and never your own guess from
   the cwd. The repository page names no other worktree, repository or project, and ends on the
   next-action line, after the Queen pointer.
+
+## Former frontmatter description wording
+
+This sentence was cut from the SKILL.md description to stay under the 8 KiB budget:
+
+Runs the `borg link` engine and synthesizes its output; falls back to reading the bind-mounted borg files directly only when the engine cannot run.

@@ -28,7 +28,7 @@ borg link --json [<repository>] | jq -c 'if .scope.unregistered == true
     titles: [limit(5; .[].title)]}))
     | del(.projects[] | .claude_session_id, .path, .repo, .clock_divergence, .tmux_session,
       .source, .notify_origin, .last_activity)
-    | del(.grid.manifests[]? | .path, .levels, (.nodes[]? | .ref, .why, .order, .lane, .next, .gate))
+    | del(.grid.manifests[]? | .path, .levels, (.nodes[]? | .ref, .why, .order, .lane, .gate))
     | del(.compass.today, (.compass.destinations[]? | .domain, .definition, .target, .next_waypoint, .due))
     | if .compass.parking then .compass.parking |= map(select(.due)) else . end)
   else (.scope.repository as $r | (.compass // {}) as $c

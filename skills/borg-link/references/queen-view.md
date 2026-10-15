@@ -40,7 +40,7 @@ mean paying for a network round trip and then rendering the same overview as bef
     not everything it merely references (an apex or an `after:` pointer contributes nothing). Two or
     more entries means the project spans repositories, which is usually the single most useful fact
     about it and belongs in the one-line summary.
-  - `.nodes` is an **object keyed by ref**, not an array. Each node carries `title`, `state`/`state_source`, `level` (topological rank), `seq` (declaration order — the
+  - `.nodes` is an **object keyed by ref**, not an array. Each node carries `title`, `state`/`state_source`, `next`, `level` (topological rank), `seq` (declaration order — the
     row's index as the author wrote it; a declared ref that is not a row sorts past every real one),
     and `parents`/`children` (ordering edges only, both endpoints inside the declared set, sorted by
     `(seq, ref)`).
@@ -71,7 +71,8 @@ mean paying for a network round trip and then rendering the same overview as bef
   `decision` → **theirs** (a person must decide), `verification` → **the agent's** (anyone can run
   it), **ungated → the agent's** (nothing is blocking it). Any other kind is deliberately *neither* —
   report it as unrouted rather than guessing, and name the kind. Do not invent a fourth rule, and do
-  not invent membership beyond `gates[]` and `ready`.
+  not treat `rows[].next` as membership: it is the author's emphasis for ordering among rows that are
+  already ready, never a reason to include one that isn't.
 - **WAITING ON YOU is the board's last block, and you surface it too (inside Claude first).** It reads
   the top-level `.waiting` key, which is `borg next`'s own YOU rows (decided 2026-10-09: link and next
   share one router for "what's mine"). `.waiting.rows[]` are the rows the chooser shows (at most 5, each
