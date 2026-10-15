@@ -347,8 +347,29 @@ def _route_cells(counts: dict[str, int] | None) -> str:
     )
 
 
-# JUSTIFICATION: six inputs, each independent (identity, cortex join, scope mark, measured width, counts).
-# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+def _row_tail(head: str, suffix: str, summary: str, mark: str, budget: int) -> str:
+    """What follows a board row's route cells: ` <suffix> <summary><mark>`, the summary fitted to `budget`.
+
+    No suffix: ` <summary><mark>`, exactly as before. A suffix goes first, in a column that is the same on every
+    row, and the summary gives way: it is cut to what is left of `budget` (ending `...`) or dropped when under
+    four columns remain. THE SUFFIX IS NEVER DROPPED: when the head plus the suffix alone is wider than `budget`
+    the summary is gone and the suffix is printed anyway. The board does not let that happen on a normal render,
+    because it grows `budget` to the widest head plus suffix (`_board_section`), so this branch is the floor
+    under a caller that passes a smaller one, never a way for a long repository name to hide a state.
+    """
+    plain_tail = f"{' ' + summary if summary else ''}{mark}"
+    if not suffix:
+        return plain_tail
+    room = budget - (picture.visible_len(head) + 1 + len(suffix) + picture.visible_len(mark)) - 1
+    if len(summary) > room:
+        summary = summary[: room - 3].rstrip() + "..." if room > 3 else ""
+    shade = YELLOW if suffix in ("· late", "· at risk") else DIM
+    return f" {shade}{suffix}{NC}{' ' + summary if summary else ''}{mark}"
+
+
+# JUSTIFICATION: eight inputs, each independent (identity, cortex join, scope mark, width, counts, suffix, budget),
+# and one named local per column the row prints.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
 def _overview_row(
     name: str,
     entry: dict,
@@ -356,8 +377,18 @@ def _overview_row(
     mark: str = "",
     width: int = _COL_REPOSITORY,
     counts: dict[str, int] | None = None,
+    suffix: str = "",
+    budget: int = 0,
 ) -> str:
     """One board row, plus its cortex pause continuation when the repository has a pending wake.
+
+    `suffix` is the destination state (`· late`), printed right after the route cells and BEFORE the summary,
+    and `budget` is the most columns the row's first line may use. The summary is the elastic part: it is cut
+    (with `...`) or dropped so that the suffix fits, because the widest rows are the ones with the fullest
+    summaries and a suffix that only fit on short rows would be missing from exactly the rows that say the most.
+    THE SUFFIX IS NEVER DROPPED: a `budget` too small for the head plus the suffix leaves the row at exactly that
+    width (summary gone), and a budget of 0 is how `_board_section` measures it. With no suffix the row is
+    byte-for-byte what it always was.
 
     `mark` IS APPENDED INSIDE THE ROW'S OWN f-STRING and defaults to "", which keeps every byte of
     this function identical for a caller that does not pass one. It exists so the scoped `◀` lands on
@@ -380,12 +411,12 @@ def _overview_row(
     pin_mark = "*" if entry.get("pinned") is True else " "
     status_display = "waiting <<<" if status == "waiting" else status
 
-    line = (
+    head = (
         f"{pin_mark}{display:<{width}} {_src_badge(source):<{_COL_SRC}} "
         f"{_status_color(status)}{status_display:<{_COL_STATUS}}{NC} "
         f"{last_activity:<{_COL_LAST_ACTIVE}} {_route_cells(counts)}"
-        f"{' ' + summary_short if summary_short else ''}{mark}\n"
     )
+    line = head + _row_tail(head, suffix, summary_short, mark, budget) + "\n"
     countdown = cortex_by_repository.get(name)
     if countdown:
         # DERIVED FROM `width`, NOT THE 23 SPACES THIS USED TO HARDCODE -- a literal correct for
@@ -492,6 +523,128 @@ def _header_section(doc: dict) -> tuple[str, list[str]]:
     return "", lines
 
 
+# ── the compass: the owner's map, rendered from the `compass` block the document carries ────────────
+#
+# PURE LIKE THE REST OF THIS FILE: every function reads the block already on the document (cli._document read the
+# map once, with the one epoch) and returns text. A document with NO `compass` key (hand-built, or `--porcelain`'s)
+# renders exactly as it did before the compass existed; a block with `found` false renders the one no-map line.
+
+_CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
+
+# The four states of an ACTIVE destination, wire word then the words the page prints, in print order.
+_COMPASS_STATES = (("on-track", "on track"), ("at-risk", "at risk"), ("late", "late"), ("undated", "undated"))
+
+# The rule under the board's header, and the floor of the width a suffix may reach (see `_board_section`).
+_BOARD_RULE = 90
+
+# At most this many due parking items on WAITING ON YOU; the rest are counted on one dim line.
+_PARKING_CAP = 5
+
+
+def _clean(text: object) -> str:
+    """Text out of the owner's map, safe on one page line: control characters (ESC included) become spaces."""
+    return _CONTROL_CHARACTERS.sub(" ", str(text or "")).strip()
+
+
+def _compass(doc: dict) -> dict | None:
+    """The document's `compass` block, or None when it carries none."""
+    block = doc.get("compass")
+    return block if isinstance(block, dict) else None
+
+
+def _compass_found(doc: dict) -> dict | None:
+    """The `compass` block of a map that was found, else None."""
+    block = _compass(doc)
+    return block if block and block.get("found") else None
+
+
+def _compass_tally(compass: dict) -> str:
+    """` · on track N · at risk N · late N · undated N`, a bucket of zero omitted, empty when every bucket is."""
+    counts: dict[str, int] = {}
+    for destination in compass.get("destinations") or []:
+        state = str(destination.get("state") or "")
+        counts[state] = counts.get(state, 0) + 1
+    return "".join(f" · {words} {counts[state]}" for state, words in _COMPASS_STATES if counts.get(state))
+
+
+def _off_route(compass: dict, names: list[str]) -> str:
+    """The first of `names` the map assigns a destination that today's leg does not name, else "".
+
+    NOTHING IS OFF ROUTE WHEN NO LEG WAS CHOSEN: with no route there is nothing to be off, and a warning on every
+    mapped repository for a day the owner has not planned yet would be noise.
+    """
+    if not compass.get("leg"):
+        return ""
+    mapped = compass.get("repositories") or {}
+    for name in names:
+        entry = mapped.get(name) or {}
+        if entry.get("destination"):
+            return "" if entry.get("on_leg") else name
+    return ""
+
+
+def _compass_lines(doc: dict, names: list[str] | None = None) -> list[str]:
+    """IN FOCUS's compass lines. `names` are the repositories of the card they follow; None means no card (the Queen).
+
+    No map: the one `Compass: no map at <dir>` line. Queen: the leg (or `no leg chosen`) and the tally of active
+    destinations by state. A card: the leg, then `off route: <repository> is not on today's leg` when the map
+    assigns this repository a destination the leg does not name. Unlabelled-column text on purpose
+    (`Compass: ...`, no padding): the lines are the contract and a reader greps them.
+    """
+    compass = _compass(doc)
+    if compass is None:
+        return []
+    if not compass.get("found"):
+        return [f"  Compass: no map at {_clean(compass.get('map_dir'))}\n"]
+    leg = _clean((compass.get("leg") or {}).get("text")) or "no leg chosen"
+    if names is None:
+        return [f"  Compass: {leg}{_compass_tally(compass)}\n"]
+    lines = [f"  Compass: {leg}\n"]
+    off = _off_route(compass, names)
+    if off:
+        lines.append(f"  {YELLOW}off route: {off} is not on today's leg{NC}\n")
+    return lines
+
+
+def _board_suffix(compass: dict | None, name: str) -> str:
+    """The destination state a board row carries before its summary (`· late`), plain text, or "" for none.
+
+    The destination's state word, except that a calm one (on track, undated) reads `· off leg` when a leg was
+    chosen and does not name this repository: urgency (late, at risk) and a parked destination (frozen, done)
+    outrank where the leg points, and a calm state off the leg is the fact worth a glance.
+    """
+    if compass is None:
+        return ""
+    entry = (compass.get("repositories") or {}).get(name) or {}
+    owner = next((d for d in compass.get("destinations") or [] if d.get("id") == entry.get("destination")), None)
+    if owner is None:
+        return ""
+    state = str(owner.get("state") or "")
+    if state in ("on-track", "undated") and compass.get("leg") and not entry.get("on_leg"):
+        return "· off leg"
+    return "· " + state.replace("-", " ")
+
+
+def _parking_due(doc: dict) -> tuple[list[dict], int]:
+    """`(items, more)`: the parking-lot items whose look-again date is reached, oldest look first, capped.
+
+    The Queen's page only: a parked thought belongs to the owner, not to a directory, and the page of repository
+    scope is strictly that directory. `more` counts the items past `_PARKING_CAP`.
+    """
+    compass = _compass_found(doc)
+    if compass is None or _is_repository_scope(doc):
+        return [], 0
+    due = sorted((item for item in compass.get("parking") or [] if item.get("due")), key=lambda i: i.get("look") or "")
+    return due[:_PARKING_CAP], max(0, len(due) - _PARKING_CAP)
+
+
+def _parking_line(item: dict) -> str:
+    """`parking: <text> (look again <date>, seen N)`, marked like every other thing that waits on you."""
+    text = _clean(item.get("text"))
+    text = text if len(text) <= _WAITING_TEXT else text[: _WAITING_TEXT - 1].rstrip() + "…"
+    return f"  {YELLOW}▶{NC} parking: {text} (look again {item.get('look')}, seen {int(item.get('seen') or 0)})\n"
+
+
 # JUSTIFICATION: transcribes borg.zsh:415-508 statement by statement for one golden-diffable section.
 def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-many-locals
     """IN FOCUS: the page of repository scope -- ONE directory's card, transcribed from the retired `deep()`.
@@ -507,7 +660,11 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     """
     focus = doc.get("focus") or {}
     if not focus:
-        return "", [_placeholder("no repository in focus. cd into one, or run borg link <name>.")]
+        # With a compass block the section is no longer empty: its line replaces the placeholder (exactly one
+        # line either way, the rule `_placeholder` states).
+        return "", _compass_lines(doc) or [
+            _placeholder("no repository in focus. cd into one, or run borg link <name>.")
+        ]
 
     name = focus.get("name", "")
     entry = focus.get("entry") or {}
@@ -540,6 +697,11 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     out.append(_label("Last active:", str(last_activity)))
     out.append(_label("tmux window:", str(tmux_window)))
     out.append(_label("Session ID:", str(session_id)))
+    # AFTER the `Status:` line, never before it: the leg is text from the owner's map and the `grep -m1 'Status:'`
+    # invariant (module docstring) holds only while nothing the renderer does not control precedes that line.
+    # The names offered are this directory's own and the repository it is a worktree of: the map speaks of the
+    # repository, a worktree is registered under a name of its own.
+    out.extend(_compass_lines(doc, [str(name), str(identity.get("worktree_of") or "")]))
     # No checkpoint states a summary => the block is OMITTED, not filled with a placeholder.
     if summary:
         out.append("\n")
@@ -636,14 +798,33 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
         f"{'LAST ACTIVE':<{_COL_LAST_ACTIVE}} "
         + " ".join(f"{group.upper():>{w}}" for group, w in zip(_ROUTE_GROUPS, _COL_ROUTE))
         + f" SUMMARY{NC}\n",
-        ("─" * 90) + "\n",
+        ("─" * _BOARD_RULE) + "\n",
     ]
     countdowns = _cortex_countdowns(doc)
     routed = _routing_counts(doc)
     scoped = _scoped_name(doc)
-    for name, entry in entries:
-        mark = f" {CYAN}◀{NC}" if name == scoped else ""
-        lines.append(_overview_row(name, entry, countdowns, mark, width, routed.get(name)))
+    marks = {name: f" {CYAN}◀{NC}" if name == scoped else "" for name, _ in entries}
+    bare = [_overview_row(name, entry, countdowns, marks[name], width, routed.get(name)) for name, entry in entries]
+    # EACH ROW'S DESTINATION STATE, NEVER DROPPED. The budget is the rule under the header or the widest row as
+    # drawn without any suffix, whichever is wider, so on a board whose rows fit a suffix does not widen it. The
+    # suffix sits BEFORE the summary and the summary yields (`_row_tail`), so the widest rows, whose summaries are
+    # fullest, carry theirs like every other. When a row's head plus its suffix is itself wider than that budget
+    # (the name column is shared, so one very long repository name does this to every row) the budget GROWS to
+    # the widest head plus suffix: every mapped row shows its state and no row is wider than the board's own
+    # width. A row is never wrapped, and a repository with no destination, or a document with no map, gets
+    # nothing and keeps its bare row.
+    compass = _compass_found(doc)
+    suffixes = {name: _board_suffix(compass, name) for name, _ in entries}
+    tight = [
+        _overview_row(name, entry, countdowns, marks[name], width, routed.get(name), suffixes[name], 0)
+        for name, entry in entries
+        if suffixes[name]
+    ]
+    budget = max(_BOARD_RULE, *(picture.visible_len(row.partition("\n")[0]) for row in [*bare, *tight]))
+    for (name, entry), row in zip(entries, bare):
+        if suffixes[name]:
+            row = _overview_row(name, entry, countdowns, marks[name], width, routed.get(name), suffixes[name], budget)
+        lines.append(row)
     return note, lines
 
 
@@ -1177,7 +1358,13 @@ def _waiting_section(doc: dict) -> tuple[str, list[str]]:
     if waiting.get("degraded"):
         tail.append(_placeholder(f"rows degraded: {waiting['degraded']}"))
     action = _next_action_line(doc, items, unlooked)
-    if not items:
+    # Parked thoughts whose look-again date has come ride AFTER the real items and are not offered by the next-action
+    # line: a parked thought is a reminder to look, not a decision with a command that answers it.
+    parking, more_parked = _parking_due(doc)
+    parked = [_parking_line(item) for item in parking]
+    if more_parked:
+        parked.append(f"  {DIM}+{more_parked} more parked items due{NC}\n")
+    if not items and not parking:
         if unlooked:
             return "nobody looked", [
                 _placeholder("no state on this page was resolved; run without --local."),
@@ -1185,12 +1372,12 @@ def _waiting_section(doc: dict) -> tuple[str, list[str]]:
                 action,
             ]
         return "", [_placeholder("nothing waits on you"), *tail, action]
-    note = _plural(len(items), "item", "items")
+    note = _plural(len(items) + len(parking) + more_parked, "item", "items")
     if unlooked:
         note += " — and some refs nobody looked up"
-    ref_w = max(len(item["label"]) for item in items)
-    repo_w = max(len(item["repository"]) for item in items)
-    return note, [*(_waiting_line(item, ref_w, repo_w) for item in items), *tail, action]
+    ref_w = max((len(item["label"]) for item in items), default=0)
+    repo_w = max((len(item["repository"]) for item in items), default=0)
+    return note, [*(_waiting_line(item, ref_w, repo_w) for item in items), *parked, *tail, action]
 
 
 def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:

@@ -123,3 +123,15 @@ def repository_groups(order: list[str], repositories: dict) -> list[tuple[str, l
             head = _group_head(key, members[key], repositories)
             groups.append((head, [other for other in members[key] if other != head]))
     return groups
+
+
+def repository_parents(repositories: dict) -> dict[str, str]:
+    """`{worktree: head}`: each worktree's repository, resolved through the registry `repo` key.
+
+    THE ONE PLACE a worktree is mapped to its repository for ranking and for the board's destination suffix:
+    the compass block is built with this map (`compass.core.map_repositories`), so `borg next` and the Queen
+    board read one answer. It is `repository_groups` flattened, so it agrees with how the board groups rows; an
+    entry that is a head, or has no `repo`, is absent from the result and stands for itself.
+    """
+    groups = repository_groups(list(repositories), repositories)
+    return {child: head for head, children in groups for child in children}

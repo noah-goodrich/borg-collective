@@ -127,6 +127,20 @@ def test_two_independent_clones_are_two_repositories():
     assert worktree.repository_groups(["one", "two"], repositories) == [("one", []), ("two", [])]
 
 
+def test_repository_parents_name_each_worktrees_head_and_nothing_else():
+    """The ranking and the board suffix both resolve a worktree through this one map, so it must agree with
+    `repository_groups`: a head and a lone entry are absent, and the head is the entry at the main checkout."""
+    repositories = {
+        "door": {"path": "/dev/borg-door", "repo": COMMON},
+        "borg": {"path": "/dev/borg", "repo": COMMON},
+        "probes": {"path": "/dev/borg-probes", "repo": COMMON},
+        "solo": {"path": "/dev/solo"},
+        "legacy": {"path": "/dev/legacy", "repo": ""},
+    }
+    assert worktree.repository_parents(repositories) == {"door": "borg", "probes": "borg"}
+    assert worktree.repository_parents({}) == {}
+
+
 def test_worktree_imports_nothing_but_the_future():
     """The module is on pyproject's Domain list by name. W9004's allow-list would wave a `pathlib` or `os`
     import through, so the exact root set is pinned here, by AST, the way test_render.py pins render.py."""

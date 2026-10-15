@@ -317,22 +317,64 @@ def destination_state(destination: dict, today: datetime.date) -> str:
     return "on-track"
 
 
-def map_repositories(destinations: list[dict], names: list[str], leg: dict | None) -> dict[str, dict]:
+def map_repositories(
+    destinations: list[dict], names: list[str], leg: dict | None, parents: dict[str, str] | None = None
+) -> dict[str, dict]:
     """For each registry repository name: the destination that owns it and whether the leg names it.
 
     A repository belongs to the first destination listing it under `repositories`, else to the destination whose
     id equals its name, else to none. `on_leg` is true when the leg text contains the destination id or the
     repository name as a whole word.
+
+    `parents` is `{worktree: repository}` (`link.worktree.repository_parents`): a worktree with no mapping of its own
+    INHERITS its repository's destination, because it is that repository's checkout and not a repository of its own.
+    Its `on_leg` is the repository's OR its own: a worktree whose own name the leg text names stays on today's leg even
+    when its repository is not, exactly as it read before the inheritance existed, so the entry is not copied whole.
+    AN EXPLICIT MAPPING ALWAYS WINS: a worktree the map itself names (listed under a
+    destination's `repositories`, or the name of a destination) keeps that entry, so inheritance only fills a hole.
+    A head with no mapping hands its unmapped entry only to an unmapped worktree and never erases a mapped one.
+    This is the one place the inheritance is applied, and every reader of the block (`borg next`'s ranking, the Queen
+    board's suffix) gets it from here. A parent that is not among `names` is ignored.
     """
     leg_text = leg["text"] if leg else ""
     mapped: dict[str, dict] = {}
+    explicit: set[str] = set()
     for name in names:
         owner = next((d for d in destinations if name in d["repositories"]), None) or next(
             (d for d in destinations if d["id"] == name), None
         )
         on_leg = _word_in(name, leg_text) or (owner is not None and _word_in(owner["id"], leg_text))
         mapped[name] = {"destination": owner["id"] if owner else None, "on_leg": on_leg}
+        if owner is not None:
+            explicit.add(name)
+    for child, head in (parents or {}).items():
+        if child in mapped and head in mapped and child not in explicit:
+            mapped[child] = {
+                "destination": mapped[head]["destination"],
+                "on_leg": mapped[head]["on_leg"] or mapped[child]["on_leg"],
+            }
     return mapped
+
+
+def leg_priority(compass: dict | None, name: str) -> tuple[int, str]:
+    """`(bucket, due)`: where a repository sorts among candidates for `borg next`. Lower is earlier.
+
+    Bucket 0 is a repository on today's leg; 1 is a repository whose active destination has a due date, ordered by
+    that date (so the nearest, and a late one before any other, comes first); 2 is an active destination with no
+    date; 3 is everything else: a frozen, done, killed or proposed destination, and a repository no destination
+    claims. With no map (None, or `found` false) every repository gets `(0, "")`, a constant, so a stable sort on
+    a key that starts with this is exactly the sort it was before.
+    """
+    if not compass or not compass.get("found"):
+        return 0, ""
+    entry = (compass.get("repositories") or {}).get(name) or {}
+    if entry.get("on_leg"):
+        return 0, ""
+    owner = next((d for d in compass.get("destinations") or [] if d.get("id") == entry.get("destination")), None)
+    if owner is None or owner.get("status") != "active":
+        return 3, ""
+    due = owner.get("due")
+    return (1, due) if as_date(due) else (2, "")
 
 
 def collect_destinations(destination_files: list[tuple[str, str]], warnings: list[str]) -> list[dict]:
@@ -350,8 +392,9 @@ def collect_destinations(destination_files: list[tuple[str, str]], warnings: lis
     return destinations
 
 
-# JUSTIFICATION: the one assembly step of the block; each argument is a distinct file's text or a caller fact.
-# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+# JUSTIFICATION: the one assembly step of the block; each argument is a distinct file's text or a caller fact, and
+# each step of the assembly keeps its own intermediate.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
 def build_compass(
     map_dir: str,
     today: str,
@@ -361,11 +404,13 @@ def build_compass(
     parking_text: str | None,
     repository_names: list[str],
     read_warnings: list[str] | None = None,
+    parents: dict[str, str] | None = None,
 ) -> dict:
     """The `compass` block for a map directory that exists, from the text of its files.
 
     `destination_files` is `(filename, text)` in the order to report them; a later file reusing an earlier id
     is skipped with a warning. `read_warnings` are the shell's (a file it could not read) and lead the list.
+    `parents` is `{worktree: repository}`, see `map_repositories`.
     """
     moment = datetime.date.fromisoformat(today)
     warnings = list(read_warnings or [])
@@ -383,6 +428,6 @@ def build_compass(
         "leg": leg,
         "destinations": destinations,
         "parking": parse_parking(parking_text, moment),
-        "repositories": map_repositories(destinations, repository_names, leg),
+        "repositories": map_repositories(destinations, repository_names, leg, parents),
         "warnings": warnings,
     }
