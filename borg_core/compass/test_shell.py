@@ -158,7 +158,7 @@ def wired(tmp_path, monkeypatch):
     workspace = tmp_path / "ws" / "widgets"
     workspace.mkdir(parents=True)
     (borg_dir / "registry.json").write_text(
-        json.dumps({"projects": {"widgets": {"path": str(workspace)}}}), encoding="utf-8"
+        json.dumps({"repositories": {"widgets": {"path": str(workspace)}}}), encoding="utf-8"
     )
     monkeypatch.setenv("BORG_DIR", str(borg_dir))
     for name in ("XDG_CONFIG_HOME", "BORG_REGISTRY", "BORG_NO_REAP", "BORG_ORCHESTRATOR_ROOT"):

@@ -48,6 +48,6 @@ setup() {
     BORG_DEBUG=1 run zsh "$BORG" scan --no-llm
     [ "$status" -eq 0 ]
     [[ "$output" == *"skipping temp path $BATS_TEST_TMPDIR/tmproot/scratch"* ]] || false
-    run jq -r '.projects | keys | join(",")' "$BORG_REGISTRY"
+    run jq -r '.repositories | keys | join(",")' "$BORG_REGISTRY"
     [ "$output" = "real-repo" ]
 }

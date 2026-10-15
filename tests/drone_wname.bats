@@ -48,7 +48,7 @@ echo "borg $*" >> "$TRACE"
 [[ "$1" == "add" ]] || exit 0
 name="${2##*/}"
 jq --arg n "$name" --arg p "$2" \
-    '.projects[$n] = ((.projects[$n] // {}) + {path: $p, tmux_window: null})' \
+    '.repositories[$n] = ((.repositories[$n] // {}) + {path: $p, tmux_window: null})' \
     "$BORG_REGISTRY" > "$BORG_REGISTRY.n" && mv "$BORG_REGISTRY.n" "$BORG_REGISTRY"
 MOCK
     chmod +x "$MOCK_BIN/borg"
@@ -65,14 +65,14 @@ MOCK
     PROJ="$BATS_TEST_TMPDIR/dev/amber-fox-labs"
     OTHER="$BATS_TEST_TMPDIR/dev/quillmaker-studio"
     mkdir -p "$PROJ" "$OTHER"
-    echo '{"projects":{}}' > "$BORG_REGISTRY"
+    echo '{"repositories":{}}' > "$BORG_REGISTRY"
 }
 
-_reg() { jq -r --arg p "$1" '.projects[$p].tmux_window // "null"' "$BORG_REGISTRY"; }
+_reg() { jq -r --arg p "$1" '.repositories[$p].tmux_window // "null"' "$BORG_REGISTRY"; }
 
 _register() {  # name dir [tmux_window]
     jq --arg n "$1" --arg d "$2" --arg w "${3:-}" \
-        '.projects[$n] = {path: $d, tmux_window: (if $w == "" then null else $w end)}' \
+        '.repositories[$n] = {path: $d, tmux_window: (if $w == "" then null else $w end)}' \
         "$BORG_REGISTRY" > "$BORG_REGISTRY.n" && mv "$BORG_REGISTRY.n" "$BORG_REGISTRY"
 }
 
@@ -218,7 +218,7 @@ MOCK
     chmod +x "$MOCK_BIN/borg"
 }
 
-_entries_for() { jq -r --arg d "$1" '[.projects | to_entries[] | select(.value.path == $d)] | length' "$BORG_REGISTRY"; }
+_entries_for() { jq -r --arg d "$1" '[.repositories | to_entries[] | select(.value.path == $d)] | length' "$BORG_REGISTRY"; }
 
 @test "up twice on a non-basename repository leaves one entry, same name and tmux_window" {
     _real_borg
@@ -234,7 +234,7 @@ _entries_for() { jq -r --arg d "$1" '[.projects | to_entries[] | select(.value.p
     [ "$status" -eq 0 ]
 
     [ "$(_entries_for "$SUB")" = "1" ]
-    [ "$(jq -r '.projects | keys | join(",")' "$BORG_REGISTRY")" = "widgets" ]
+    [ "$(jq -r '.repositories | keys | join(",")' "$BORG_REGISTRY")" = "widgets" ]
     [ "$(_reg widgets)" = "wdg" ]
     [[ "$output" != *"Registered: widget-kit"* ]]
 }

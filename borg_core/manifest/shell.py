@@ -424,8 +424,8 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
     be sitting in (`discover` now warns and reads nothing for it, but a blank must never get that far).
     One entry with no path is skipped silently, matching every other collector in borg_core.
 
-    TYPE-CHECKED, NOT TRUTH-CHECKED. `registry.get("projects") or {}` covers missing, null and empty
-    but not a wrong TYPE: `{"projects": ["/a", "/b"]}` reached `.values()` and raised AttributeError
+    TYPE-CHECKED, NOT TRUTH-CHECKED. `registry.get("repositories") or {}` covers missing, null and empty
+    but not a wrong TYPE: `{"repositories": ["/a", "/b"]}` reached `.values()` and raised AttributeError
     straight out of `discover_registered`, taking down the whole invocation from inside the module
     whose header promises nothing here is ever fatal. `borg_core.registry.shell.read_registry`
     validates JSON syntax and nothing else, so a hand-edited or half-migrated registry arrives here
@@ -440,12 +440,15 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
     """
     if not isinstance(registry, dict):
         return [], [f"registry: not an object ({type(registry).__name__}) -- no repositories swept"]
-    registry = borg_paths.normalize_registry(registry)
-    repositories = registry.get("projects")
+    try:
+        borg_paths.require_registry_key(registry)
+    except ValueError as exc:
+        return [], [f"registry: {exc} -- no repositories swept"]
+    repositories = registry.get("repositories")
     if not repositories:
         return [], []
     if not isinstance(repositories, dict):
-        return [], [f"registry: projects is not an object ({type(repositories).__name__}) -- no repositories swept"]
+        return [], [f"registry: repositories is not an object ({type(repositories).__name__}) -- no repositories swept"]
 
     paths = []
     for entry in repositories.values():

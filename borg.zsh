@@ -132,7 +132,7 @@ _borg_boundary_check() {
 
 # Count repositories with status=waiting or status=active (reads per-repository state.json)
 _borg_active_count() {
-    borg_registry_with_state | jq '[.projects[] | select(.status == "waiting" or .status == "active")] | length'
+    borg_registry_with_state | jq '[.repositories[] | select(.status == "waiting" or .status == "active")] | length'
 }
 
 # Read directives from a repository's own docs/plans/directives/ directory.
@@ -199,7 +199,7 @@ cmd_ls() {
     local registry
     registry=$(borg_registry_with_state)
     local repository_count
-    repository_count=$(printf '%s' "$registry" | jq '.projects | length')
+    repository_count=$(printf '%s' "$registry" | jq '.repositories | length')
 
     if (( repository_count == 0 )); then
         info "No repositories registered. Run: borg scan"
@@ -213,7 +213,7 @@ cmd_ls() {
     # Sort by: pinned DESC, status priority (waiting>active>idle>archived), last_activity
     local sorted_names
     sorted_names=$(printf '%s' "$registry" | jq -r '
-        .projects | to_entries |
+        .repositories | to_entries |
         map(.value.name = .key) |
         map(select(if .value.status == "archived" then '$show_all' == 1 else true end)) |
         sort_by(
@@ -237,7 +237,7 @@ cmd_ls() {
         # waiting_reason, then the relative activity. Never the stored summary (see _borg_checkpoint_summaries).
         registry=$(printf '%s' "$registry" | _borg_checkpoint_summaries)
         while IFS= read -r name; do
-            entry=$(printf '%s' "$registry" | jq -c --arg p "$name" '.projects[$p]')
+            entry=$(printf '%s' "$registry" | jq -c --arg p "$name" '.repositories[$p]')
             source=$(printf '%s' "$entry" | jq -r '.source // "cli"')
             proj_status=$(printf '%s' "$entry" | jq -r '.status // "unknown"')
             last=$(printf '%s' "$entry" | jq -r '.last_activity // ""')
@@ -577,12 +577,12 @@ cmd_scan() {
     local updated=0
 
     local repositories name ppath session_id jsonl cur_activity file_mtime summary new_json
-    repositories=$(printf '%s' "$registry_json" | jq -r '.projects | keys[]')
+    repositories=$(printf '%s' "$registry_json" | jq -r '.repositories | keys[]')
 
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        ppath=$(printf '%s' "$registry_json" | jq -r --arg p "$name" '.projects[$p].path // ""')
-        session_id=$(printf '%s' "$registry_json" | jq -r --arg p "$name" '.projects[$p].claude_session_id // ""')
+        ppath=$(printf '%s' "$registry_json" | jq -r --arg p "$name" '.repositories[$p].path // ""')
+        session_id=$(printf '%s' "$registry_json" | jq -r --arg p "$name" '.repositories[$p].claude_session_id // ""')
 
         if [[ -z "$ppath" || "$ppath" == "null" ]]; then
             dbg "$name: no path, skipping refresh"
@@ -606,14 +606,14 @@ cmd_scan() {
 
         # Seed last_activity from transcript mtime if not already set
         cur_activity=$(printf '%s' "$registry_json" | jq -r --arg p "$name" \
-            '.projects[$p].last_activity // ""')
+            '.repositories[$p].last_activity // ""')
         if [[ -z "$cur_activity" || "$cur_activity" == "null" ]]; then
             file_mtime=$(stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%SZ" "$jsonl" 2>/dev/null) || file_mtime=""
             if [[ -n "$file_mtime" ]]; then
                 registry_json=$(printf '%s' "$registry_json" | jq \
                     --arg p "$name" \
                     --arg t "$file_mtime" \
-                    '.projects[$p].last_activity = $t') || true
+                    '.repositories[$p].last_activity = $t') || true
                 updated=1
             fi
         fi
@@ -625,7 +625,7 @@ cmd_scan() {
                 --arg p "$name" \
                 --arg s "$summary" \
                 --arg sid "$session_id" \
-                '.projects[$p].summary = $s | .projects[$p].claude_session_id = $sid')
+                '.repositories[$p].summary = $s | .repositories[$p].claude_session_id = $sid')
             if [[ -n "$new_json" ]]; then
                 registry_json="$new_json"
                 updated=1
@@ -754,7 +754,7 @@ _borg_checkpoint_summaries() {
     if out=$(printf '%s' "$registry" | _borg_py borg_core.link.overlay --summaries 2>/dev/null) && [[ -n "$out" ]]; then
         printf '%s\n' "$out"
     else
-        printf '%s' "$registry" | jq -c '.projects |= map_values(if type == "object" then .summary = null else . end)'
+        printf '%s' "$registry" | jq -c '.repositories |= map_values(if type == "object" then .summary = null else . end)'
     fi
 }
 
@@ -779,7 +779,7 @@ _borg_clip_summary() {
 # `_borg_next_registry` output), "" when null. Lets a caller holding that registry hand it to `_borg_do_switch
 # --summary` instead of paying a second `overlay --summary` Python call.
 _borg_registry_summary() {
-    printf '%s' "$1" | jq -r --arg p "$2" '.projects[$p].summary // ""' 2>/dev/null || true
+    printf '%s' "$1" | jq -r --arg p "$2" '.repositories[$p].summary // ""' 2>/dev/null || true
 }
 
 # One fail-open log row per `borg next` run (borg_core.nextpick.cli never writes stdout, exits 0).
@@ -792,8 +792,8 @@ _borg_next_log() {
     cur=$(borg_tmux_current_window 2>/dev/null || true)
     if [[ -n "$cur" ]]; then
         active=$(printf '%s' "$registry" | jq -r --arg cur "$cur" '
-            [.projects | to_entries[] | select(.value.tmux_window == $cur)][0].key //
-            [.projects | to_entries[] | select(.key == $cur)][0].key // empty' 2>/dev/null || true)
+            [.repositories | to_entries[] | select(.value.tmux_window == $cur)][0].key //
+            [.repositories | to_entries[] | select(.key == $cur)][0].key // empty' 2>/dev/null || true)
     fi
     local -a args=(--active "$active" --session "${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-$$}}")
     (( do_switch )) && args+=(--switch)
@@ -818,7 +818,7 @@ _borg_next_chooser() {
     names_line="${out##*$'\n'}"
     if [[ "$names_line" != names$'\t'?* ]]; then
         # Genuinely empty registry: nothing to choose, nothing worth a chooser row.
-        if [[ "$(printf '%s' "$registry" | jq -r '[.projects | to_entries[] | select(.value.status != "archived")] | length' 2>/dev/null)" == "0" ]]; then
+        if [[ "$(printf '%s' "$registry" | jq -r '[.repositories | to_entries[] | select(.value.status != "archived")] | length' 2>/dev/null)" == "0" ]]; then
             echo -e "\n${GREEN}▸${NC} All clear. Take a break.\n"
             _borg_next_log "$registry" 0 "" --chooser
             return 0
@@ -885,7 +885,7 @@ _borg_next_surface() {
         open)
             (( chosen )) || die "next --open needs --chosen"
             [[ -n "$repository" ]] || die "next --open needs a repository"
-            printf '%s' "$registry" | jq -e --arg p "$repository" '.projects[$p] != null' >/dev/null 2>&1 ||
+            printf '%s' "$registry" | jq -e --arg p "$repository" '.repositories[$p] != null' >/dev/null 2>&1 ||
                 die "next --open: unknown repository '$repository'"
             _borg_next_log "$registry" 0 "" "${base[@]}" --opened "$repository" --unmeasured
             _borg_do_switch "$repository" --silent --summary "$(_borg_registry_summary "$registry" "$repository")"
@@ -943,7 +943,7 @@ cmd_next() {
     top=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli --top "$(( ${pick:-1} - 1 ))" 2>/dev/null) || top=""
     [[ -n "$top" ]] ||
     top=$(printf '%s' "$registry" | jq -r --argjson idx "$(( ${pick:-1} - 1 ))" '
-        .projects | to_entries |
+        .repositories | to_entries |
         map(select(.value.status != "archived")) |
         map({
             name: .key,
@@ -1038,7 +1038,7 @@ cmd_next() {
 
     # Reaper notice — stale active/waiting sessions auto-downgraded to idle for this view
     local reaped_count
-    reaped_count=$(printf '%s' "$registry" | jq '[.projects[] | select(._reaped_from != null)] | length')
+    reaped_count=$(printf '%s' "$registry" | jq '[.repositories[] | select(._reaped_from != null)] | length')
     if (( reaped_count > 0 )); then
         echo -e "\n  ${DIM}($reaped_count stale session(s) auto-downgraded to idle — run 'borg reap' to persist)${NC}"
     fi
@@ -1117,7 +1117,7 @@ _borg_reap_missing() {
         else
             info "missing: $name ($mpath)"
         fi
-    done < <(borg_registry_read | jq -r '.projects | to_entries[]
+    done < <(borg_registry_read | jq -r '.repositories | to_entries[]
         | select((.value.path | type) == "string" and .value.path != "")
         | [.key, .value.path] | @tsv' 2>/dev/null)
     if (( missing > 0 && ! drop )); then
@@ -1157,7 +1157,7 @@ cmd_reap_worktrees() {
     else
         while IFS= read -r ppath; do
             [[ -n "$ppath" ]] && repo_paths+=("$ppath")
-        done < <(borg_registry_read | jq -r '.projects[].path // empty' 2>/dev/null)
+        done < <(borg_registry_read | jq -r '.repositories[].path // empty' 2>/dev/null)
     fi
 
     if (( ${#repo_paths[@]} == 0 )); then
@@ -1373,7 +1373,7 @@ cmd_tidy() {
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
         local entry
-        entry=$(printf '%s' "$registry" | jq -c --arg p "$name" '.projects[$p]')
+        entry=$(printf '%s' "$registry" | jq -c --arg p "$name" '.repositories[$p]')
         local proj_status
         proj_status=$(printf '%s' "$entry" | jq -r '.status // "unknown"')
         [[ "$proj_status" == "archived" ]] && continue
@@ -1388,7 +1388,7 @@ cmd_tidy() {
             rel=$(_borg_relative_time "$last")
             candidates+=("$name ($rel)")
         fi
-    done < <(printf '%s' "$registry" | jq -r '.projects | keys[]')
+    done < <(printf '%s' "$registry" | jq -r '.repositories | keys[]')
 
     if (( ${#candidates[@]} == 0 )); then
         info "No stale repositories. Everything is fresh."
@@ -1833,7 +1833,7 @@ _borg_orchestrator_context() {
     echo ""
     echo "Repository registry:"
     printf '%s' "$registry" | jq -r '
-        .projects | to_entries |
+        .repositories | to_entries |
         sort_by(
             if .value.status == "waiting" then 0
             elif .value.status == "active" then 1
@@ -1850,7 +1850,7 @@ _borg_orchestrator_context() {
     # Latest checkpoint for top 3 priority repositories
     local top3
     top3=$(printf '%s' "$registry" | jq -r '
-        .projects | to_entries |
+        .repositories | to_entries |
         map(select(.value.status != "archived")) |
         sort_by(
             if .value.status == "waiting" then 0
@@ -1864,7 +1864,7 @@ _borg_orchestrator_context() {
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
         local ppath cp
-        ppath=$(printf '%s' "$registry" | jq -r --arg p "$name" '.projects[$p].path // ""')
+        ppath=$(printf '%s' "$registry" | jq -r --arg p "$name" '.repositories[$p].path // ""')
         [[ -n "$ppath" && -d "$ppath/.borg/checkpoints" ]] || continue
         cp=$(find "$ppath/.borg/checkpoints" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r | head -1 || true)
         [[ -n "$cp" && -f "$cp" ]] || continue
@@ -2130,12 +2130,24 @@ _borg_register_cortex_hooks() {
     fi
 }
 
+# Contract step of the registry key rename: the retired `projects` key is no longer read, so `borg setup`
+# renames it. `migrate-key` is idempotent: a no-op when the key is already `repositories`, and it writes a
+# timestamped backup before it renames. It never creates the file, so a fresh machine prints nothing.
+_borg_migrate_registry_key() {
+    [[ -f "$BORG_REGISTRY" ]] || return 0
+    _borg_py borg_core.registry.cli migrate-key || warn "registry key migration failed; run: python3 -m borg_core.registry.cli migrate-key"
+    return 0
+}
+
 cmd_setup() {
     local CLAUDE_DIR="$HOME/.claude"
     local CLAUDE_HOOKS_DIR="$CLAUDE_DIR/hooks"
     local CLAUDE_SKILLS_DIR="$CLAUDE_DIR/skills"
     local CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
     local DOTFILES_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles"
+
+    # ── 00. Registry key migration (contract step of `projects` -> `repositories`) ──────────────
+    _borg_migrate_registry_key
 
     # ── 0. First-time setup wizard ────────────────────────────────────────────
     # Detect first-time vs returning user. Only prompt when things are missing.
@@ -2512,7 +2524,7 @@ CONF
                 "$_proj_repo"
             info "  Initialised state.json for ${_proj_path##*/}"
         fi
-    done < <(borg_registry_read | jq -r '.projects[] | select((.path // "") != "")
+    done < <(borg_registry_read | jq -r '.repositories[] | select((.path // "") != "")
         | [.path, (.repo // "" | if type == "string" then . else "" end)] | @tsv')
 
     # ── 5. Install bin/ utilities ────────────────────────────────────────────
@@ -3204,6 +3216,22 @@ cmd_doctor() {
     [[ -n "$narrative_hint" ]] && echo -e "   ${DIM}→ $narrative_hint${NC}"
     echo
 
+    # Registry entry-map key (contract step of the `projects` -> `repositories` rename). A file that still
+    # has ONLY the retired key is a FAIL: every other command refuses to read it (see the gate above the
+    # dispatch), and `borg setup` is the fix. Not a launchd agent, so EXIT and FRESH are n/a.
+    printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "CHECK" "KEY" "EXIT" "FRESH" "STATUS"
+    printf '%0.s─' {1..70}; echo
+    local reg_key="repositories" reg_status="OK" reg_color="$GREEN" reg_hint=""
+    if [[ ! -f "$BORG_REGISTRY" ]]; then
+        reg_key="absent"
+    elif borg_registry_legacy_key "$BORG_REGISTRY"; then
+        reg_key="projects"; reg_status="FAIL"; reg_color="$RED"; overall_exit=1
+        reg_hint="registry uses the retired 'projects' key and is no longer read — run 'borg setup' (or: python3 -m borg_core.registry.cli migrate-key)"
+    fi
+    printf " %-14s %-10s %-8s %-10s ${reg_color}%s${NC}\n" "registry-key" "$reg_key" "n/a" "n/a" "$reg_status"
+    [[ -n "$reg_hint" ]] && echo -e "   ${DIM}→ $reg_hint${NC}"
+    echo
+
     # Clock skew: for each running drone container, compare its clock against the host's. A
     # skewed VM clock silently corrupts freshness/mtime checks elsewhere (this is how #98 hid) —
     # catching it here is cheap and proactive. Not a launchd agent, so it borrows the same table
@@ -3393,7 +3421,7 @@ _borg_version_ge() {
 # --stacks-dir args are passed through untouched and suppress the registry sweep.
 #
 # Renamed from `borg program` 2026-08-31 (AC7 decision 2). NOT `borg project`: a project is work that can
-# span repositories, but cmd_stack resolves roots by reading `.projects[].path` from the registry, where
+# span repositories, but cmd_stack resolves roots by reading `.repositories[].path` from the registry, where
 # the entry is a REPOSITORY (the registry key keeps its name) — that verb would mean one thing and do
 # another. The
 # --stacks-dir and --recon TOKENS are coordinator.py's argparse flags; the older --chains-dir and
@@ -3441,7 +3469,7 @@ cmd_stack() {
         local _proj_path
         while IFS= read -r _proj_path; do
             [[ -n "$_proj_path" ]] && _stack_args+=(--stacks-dir "$_proj_path")
-        done < <(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | .projects[].path // empty" "$BORG_REGISTRY")
+        done < <(jq -r '.repositories[].path // empty' "$BORG_REGISTRY")
         (( ${#_stack_args[@]} )) || die "registry has no repository paths — run 'borg add <path>' first"
     fi
 
@@ -4068,6 +4096,13 @@ _borg_link_dispatch() {
     (( _link_overview )) && _link_py_args+=(--overview)
     _borg_py borg_core.link.cli "${_link_py_args[@]}"
 }
+
+# A registry that still has only the retired `projects` key must fail loudly, not read as empty.
+# `setup` migrates it and `doctor` reports it, so both run; so do the verbs that never read the registry.
+case "${1:-help}" in
+    setup|doctor|version|--version|-V|help|--help|-h) ;;
+    *) borg_registry_guard "$BORG_REGISTRY" || exit 1 ;;
+esac
 
 case "${1:-help}" in
     init)     cmd_init ;;

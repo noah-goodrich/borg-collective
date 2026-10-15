@@ -184,7 +184,7 @@ def _write_map(root: Path) -> Path:
 
 
 def _top(monkeypatch, capsys, index: str, stdin: str | None = None) -> tuple[int, str]:
-    payload = json.dumps({"projects": _repositories()}) if stdin is None else stdin
+    payload = json.dumps({"repositories": _repositories()}) if stdin is None else stdin
     monkeypatch.setattr("sys.stdin", io.StringIO(payload))
     code = cli.main(["--top", index])
     return code, capsys.readouterr().out
@@ -214,7 +214,7 @@ def test_top_fails_loudly_when_it_cannot_read_the_registry(monkeypatch, capsys):
 def test_top_fails_loudly_on_any_exception_with_one_stderr_line(monkeypatch, capsys):
     # A number next to ISO strings is a TypeError in the ranking, which no narrow except list names.
     repositories = {"a": _entry(activity=1767780000), "b": _entry(), "c": _entry()}
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"projects": repositories})))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"repositories": repositories})))
     code = cli.main(["--top", "0"])
     captured = capsys.readouterr()
     assert (code, captured.out) == (1, "")

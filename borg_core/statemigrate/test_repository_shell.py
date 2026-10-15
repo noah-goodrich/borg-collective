@@ -28,7 +28,7 @@ def _box(tmp_path, monkeypatch):
 
 
 def _registry(box: Path, repositories: dict) -> None:
-    (box / "config" / "borg" / "registry.json").write_text(json.dumps({"projects": repositories}))
+    (box / "config" / "borg" / "registry.json").write_text(json.dumps({"repositories": repositories}))
 
 
 def _proj(box: Path, name: str, state: str | None = '{"status":"idle"}') -> Path:

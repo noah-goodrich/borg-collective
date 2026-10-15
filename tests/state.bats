@@ -14,7 +14,7 @@ setup() {
     # Seed registry with a real path so state helpers can resolve it
     mkdir -p "$BORG_DIR"
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"myrepo":{"path":"${TEST_PROJ}","source":"cli","summary":null}}}
+{"repositories":{"myrepo":{"path":"${TEST_PROJ}","source":"cli","summary":null}}}
 EOF
 }
 
@@ -100,7 +100,7 @@ EOF
 
 @test "borg_registry_with_state returns registry data when no state.json" {
     result=$(run_zsh_fn registry borg_registry_with_state)
-    name=$(printf '%s' "$result" | jq -r '.projects | keys[0]')
+    name=$(printf '%s' "$result" | jq -r '.repositories | keys[0]')
     [ "$name" = "myrepo" ]
 }
 
@@ -114,8 +114,8 @@ EOF
         > "${TEST_PROJ}/.borg/state.json"
 
     result=$(run_zsh_fn registry borg_registry_with_state)
-    status=$(printf '%s' "$result" | jq -r '.projects.myrepo.status')
-    sid=$(printf '%s' "$result" | jq -r '.projects.myrepo.claude_session_id')
+    status=$(printf '%s' "$result" | jq -r '.repositories.myrepo.status')
+    sid=$(printf '%s' "$result" | jq -r '.repositories.myrepo.claude_session_id')
     [ "$status" = "active" ]
     [ "$sid" = "sess-xyz" ]
 }
@@ -125,8 +125,8 @@ EOF
     echo '{"status":"active"}' > "${TEST_PROJ}/.borg/state.json"
 
     result=$(run_zsh_fn registry borg_registry_with_state)
-    src=$(printf '%s' "$result" | jq -r '.projects.myrepo.source')
-    path=$(printf '%s' "$result" | jq -r '.projects.myrepo.path')
+    src=$(printf '%s' "$result" | jq -r '.repositories.myrepo.source')
+    path=$(printf '%s' "$result" | jq -r '.repositories.myrepo.path')
     [ "$src" = "cli" ]
     [ "$path" = "${TEST_PROJ}" ]
 }

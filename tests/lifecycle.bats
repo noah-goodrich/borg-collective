@@ -39,7 +39,7 @@ setup() {
     # Seed registry with the real test CWD path so hooks can resolve state.json
     mkdir -p "$BORG_DIR"
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"myrepo":{"path":"${TEST_CWD}","status":"idle","source":"cli"}}}
+{"repositories":{"myrepo":{"path":"${TEST_CWD}","status":"idle","source":"cli"}}}
 EOF
 
     # Mock claude: generate a fake debrief
@@ -206,7 +206,7 @@ _two_worktrees() {
     printf '## 4. Blockers\nnone\n\n## 5. Next Session\nB_SIBLING_SENTINEL finish the B branch\n' \
         > "$WT_B/.borg/checkpoints/2026-10-13-1200.md"
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{
+{"repositories":{
   "wt-a":{"path":"${WT_A}","status":"idle","source":"cli","repo":"/shared/repo/.git"},
   "wt-b":{"path":"${WT_B}","status":"idle","source":"cli","repo":"/shared/repo/.git"}}}
 EOF
@@ -330,7 +330,7 @@ EOF
 
     # Registry uses the canonical name "snowfort" with real path so hooks can resolve state.json
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"snowfort":{"path":"${container_dir}","status":"idle","source":"cli"}}}
+{"repositories":{"snowfort":{"path":"${container_dir}","status":"idle","source":"cli"}}}
 EOF
 
     bash "$BORG_START" <<< "$(_start_input "$container_dir")" >/dev/null
@@ -347,7 +347,7 @@ EOF
     echo "snowfort" > "$container_dir/.borg-project"
 
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"snowfort":{"path":"${container_dir}","status":"idle","source":"cli"}}}
+{"repositories":{"snowfort":{"path":"${container_dir}","status":"idle","source":"cli"}}}
 EOF
 
     bash "$BORG_START" <<< "$(_start_input "$sub_dir")" >/dev/null
@@ -363,7 +363,7 @@ EOF
     echo "snowfort" > "$container_dir/.borg-project"
 
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"snowfort":{"path":"${container_dir}","status":"active","source":"cli"}}}
+{"repositories":{"snowfort":{"path":"${container_dir}","status":"active","source":"cli"}}}
 EOF
 
     bash "$BORG_STOP" <<< "$(_stop_input "$sub_dir")" 2>/dev/null

@@ -91,9 +91,9 @@ _session() {
 @test "borg scan registers a Cortex-only repository with the coco source" {
     mkdir -p "$BORG_TEST_HOME/dev/cortexonly" "$BORG_DIR"
     _session cccc9999 "$BORG_TEST_HOME/dev/cortexonly" 202601010100
-    printf '{"projects":{}}' > "$BORG_REGISTRY"
+    printf '{"repositories":{}}' > "$BORG_REGISTRY"
     run zsh "$BORG_HOME/borg.zsh" scan --no-llm
     [ "$status" -eq 0 ]
-    run jq -r '.projects.cortexonly.source' "$BORG_REGISTRY"
+    run jq -r '.repositories.cortexonly.source' "$BORG_REGISTRY"
     [ "$output" = "coco" ]
 }

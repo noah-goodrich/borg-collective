@@ -146,7 +146,7 @@ def _git_repository(directory: Path, slug: str) -> str:
 
 
 def _write_registry(root: Path, repositories: dict) -> None:
-    (root / "borg-dir" / "registry.json").write_text(json.dumps({"projects": repositories}), encoding="utf-8")
+    (root / "borg-dir" / "registry.json").write_text(json.dumps({"repositories": repositories}), encoding="utf-8")
 
 
 def _write_manifest(repository_dir: str, name: str, manifest: dict) -> Path:
@@ -292,7 +292,7 @@ def test_selection_is_scoped_even_though_discovery_is_not(isolated, monkeypatch)
     _four_repository_registry(isolated)
     outsider = _git_repository(isolated / "ws" / "echo", "testorg/echo")
     registry = json.loads((isolated / "borg-dir" / "registry.json").read_text())
-    registry["projects"]["echo"] = {"path": outsider, "status": "idle"}
+    registry["repositories"]["echo"] = {"path": outsider, "status": "idle"}
     (isolated / "borg-dir" / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
     monkeypatch.chdir(outsider)
 
@@ -768,7 +768,7 @@ def test_a_repository_with_no_git_origin_selects_nothing_and_says_so(isolated, m
     bare = isolated / "ws" / "foxtrot"
     bare.mkdir(parents=True)
     registry = json.loads((isolated / "borg-dir" / "registry.json").read_text())
-    registry["projects"]["foxtrot"] = {"path": str(bare), "status": "idle"}
+    registry["repositories"]["foxtrot"] = {"path": str(bare), "status": "idle"}
     (isolated / "borg-dir" / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
     monkeypatch.chdir(bare)
     assert dirs["delta"]  # the fixture's other repositories are still registered and still discovered
@@ -1070,7 +1070,7 @@ def test_scoped_repositories_never_widens_a_narrowed_sweep():
 
     Silently widening is how a reflexive command becomes a 2.3s one with nothing on screen to say why.
     """
-    registry = {"projects": {"a": {"path": "/a"}, "b": {"path": "/b"}}}
+    registry = {"repositories": {"a": {"path": "/a"}, "b": {"path": "/b"}}}
     assert link_grid.scoped_repositories(registry, {"kind": "repository", "repository": "b"}) == {"b": {"path": "/b"}}
     assert link_grid.scoped_repositories(registry, {"kind": "repository", "repository": "zz"}) == {}
     assert sorted(link_grid.scoped_repositories(registry, {"kind": "orchestrator"})) == ["a", "b"]
@@ -1080,7 +1080,7 @@ def test_repository_dir_rejects_jqs_null_sentinel():
     """`jq` renders a JSON null as the four characters `null`, and every zsh reader in the tree guards
     it. Passing it through would make manifest discovery read `null/.borg/chains` relative to
     whatever directory the process is sitting in."""
-    registry = {"projects": {"a": {"path": "null"}, "b": {"path": "/b"}, "c": {}, "d": None}}
+    registry = {"repositories": {"a": {"path": "null"}, "b": {"path": "/b"}, "c": {}, "d": None}}
     assert link_grid.repository_dir(registry, {"kind": "repository", "repository": "a"}) == ""
     assert link_grid.repository_dir(registry, {"kind": "repository", "repository": "b"}) == "/b"
     assert link_grid.repository_dir(registry, {"kind": "repository", "repository": "c"}) == ""

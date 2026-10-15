@@ -10,7 +10,7 @@ setup() {
     PROJ="$BATS_TEST_TMPDIR/dev/proj"
     mkdir -p "$PROJ/.borg"
     printf '{"status":"idle"}' > "$PROJ/.borg/state.json"
-    printf '{"projects":{"proj":{"path":"%s","repo":null}}}' "$PROJ" > "$BORG_REGISTRY"
+    printf '{"repositories":{"proj":{"path":"%s","repo":null}}}' "$PROJ" > "$BORG_REGISTRY"
 }
 
 borg() { zsh "${BATS_TEST_DIRNAME}/../borg.zsh" "$@"; }

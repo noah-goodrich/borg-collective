@@ -90,10 +90,10 @@ setup() {
 
 @test "borg_reap_overlay downgrades a stale repository to idle and records _reaped_from" {
     local json
-    json='{"projects":{"stale":{"status":"active","last_activity":"2020-01-01T00:00:00Z","path":"/tmp/stale"}}}'
+    json='{"repositories":{"stale":{"status":"active","last_activity":"2020-01-01T00:00:00Z","path":"/tmp/stale"}}}'
     result=$(printf '%s' "$json" | run_zsh_fn registry borg_reap_overlay)
-    status=$(printf '%s' "$result" | jq -r '.projects.stale.status')
-    from=$(printf '%s' "$result" | jq -r '.projects.stale._reaped_from')
+    status=$(printf '%s' "$result" | jq -r '.repositories.stale.status')
+    from=$(printf '%s' "$result" | jq -r '.repositories.stale._reaped_from')
     [ "$status" = "idle" ]
     [ "$from" = "active" ]
 }
@@ -101,20 +101,20 @@ setup() {
 @test "borg_reap_overlay preserves a fresh active repository" {
     local now json
     now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    json="{\"projects\":{\"fresh\":{\"status\":\"active\",\"last_activity\":\"${now}\",\"path\":\"/tmp/fresh\"}}}"
+    json="{\"repositories\":{\"fresh\":{\"status\":\"active\",\"last_activity\":\"${now}\",\"path\":\"/tmp/fresh\"}}}"
     result=$(printf '%s' "$json" | run_zsh_fn registry borg_reap_overlay)
-    status=$(printf '%s' "$result" | jq -r '.projects.fresh.status')
-    from=$(printf '%s' "$result" | jq -r '.projects.fresh._reaped_from // "none"')
+    status=$(printf '%s' "$result" | jq -r '.repositories.fresh.status')
+    from=$(printf '%s' "$result" | jq -r '.repositories.fresh._reaped_from // "none"')
     [ "$status" = "active" ]
     [ "$from" = "none" ]
 }
 
 @test "borg_reap_overlay leaves an already-idle repository untouched" {
     local json
-    json='{"projects":{"done":{"status":"idle","path":"/tmp/done"}}}'
+    json='{"repositories":{"done":{"status":"idle","path":"/tmp/done"}}}'
     result=$(printf '%s' "$json" | run_zsh_fn registry borg_reap_overlay)
-    status=$(printf '%s' "$result" | jq -r '.projects.done.status')
-    from=$(printf '%s' "$result" | jq -r '.projects.done._reaped_from // "none"')
+    status=$(printf '%s' "$result" | jq -r '.repositories.done.status')
+    from=$(printf '%s' "$result" | jq -r '.repositories.done._reaped_from // "none"')
     [ "$status" = "idle" ]
     [ "$from" = "none" ]
 }

@@ -22,7 +22,7 @@ def isolated_env(tmp_path, monkeypatch):
     adapters_dir.mkdir()
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters_dir))
     registry = tmp_path / "registry.json"
-    registry.write_text(json.dumps({"projects": {"alpha": {"path": str(tmp_path / "alpha")}}}))
+    registry.write_text(json.dumps({"repositories": {"alpha": {"path": str(tmp_path / "alpha")}}}))
     monkeypatch.setenv("BORG_REGISTRY", str(registry))
     return tmp_path, adapters_dir
 
@@ -59,7 +59,7 @@ def test_run_resolves_registry_from_borg_dir_when_env_override_absent(tmp_path, 
     """
     borg_dir = tmp_path / "borg-dir"
     borg_dir.mkdir()
-    (borg_dir / "registry.json").write_text(json.dumps({"projects": {}}))
+    (borg_dir / "registry.json").write_text(json.dumps({"repositories": {}}))
     monkeypatch.setenv("BORG_DIR", str(borg_dir))
     monkeypatch.delenv("BORG_REGISTRY", raising=False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
@@ -236,7 +236,7 @@ def test_run_repositories_filter_excludes_other_repositories_end_to_end(tmp_path
     registry.write_text(
         json.dumps(
             {
-                "projects": {
+                "repositories": {
                     "alpha": {"path": str(tmp_path / "alpha")},
                     "beta": {"path": str(tmp_path / "beta")},
                 }

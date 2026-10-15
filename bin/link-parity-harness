@@ -141,10 +141,10 @@ def _collect_sample_files(registry_path: Path, limit: int = 40) -> dict:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from borg_core import paths as borg_paths
 
-    registry = borg_paths.normalize_registry(json.loads(registry_path.read_text()))
+    registry = borg_paths.require_registry_key(json.loads(registry_path.read_text()), registry_path)
     plans: list[Path] = []
     assimilated: list[Path] = []
-    for entry in (registry.get("projects") or {}).values():
+    for entry in (registry.get("repositories") or {}).values():
         path = entry.get("path")
         if not path or path == "null":
             continue

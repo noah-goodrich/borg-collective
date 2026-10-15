@@ -21,7 +21,7 @@ def _tracked(src: Path) -> bool:
 def registry_repositories(registry: dict) -> list[tuple[core.Repository, str]]:
     """(precondition view, path) per registry entry. git is forked only for an entry with a null repo."""
     out: list[tuple[core.Repository, str]] = []
-    for name, entry in sorted((registry.get("projects") or {}).items()):
+    for name, entry in sorted((registry.get("repositories") or {}).items()):
         entry = entry or {}
         path = str(entry.get("path") or "")
         repo = entry.get("repo") or None

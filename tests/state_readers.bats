@@ -24,7 +24,7 @@ setup() {
     git -C "$PROJ" commit -q --allow-empty -m x
     COMMON="$(git -C "$PROJ" rev-parse --path-format=absolute --git-common-dir)"
     mkdir -p "$BORG_DIR"
-    printf '{"projects":{"proj":{"path":"%s","repo":"%s","status":"idle","source":"cli"}}}\n' "$PROJ" "$COMMON" \
+    printf '{"repositories":{"proj":{"path":"%s","repo":"%s","status":"idle","source":"cli"}}}\n' "$PROJ" "$COMMON" \
         > "$BORG_REGISTRY"
 }
 
@@ -99,7 +99,7 @@ _bash_read() { bash -c 'source "$1/lib/borg-hooks.sh" && _borg_state_read "$2" $
 
 _zsh_overlay() {
     zsh -c 'source "$1/lib/registry.zsh"; BORG_REGISTRY="$2" BORG_NO_REAP=1 borg_registry_with_state' _ "$ROOT" "$BORG_REGISTRY" \
-        | jq -r '.projects.proj.status'
+        | jq -r '.repositories.proj.status'
 }
 
 @test "zsh overlay: legacy-only is read" {
@@ -123,13 +123,13 @@ _zsh_overlay() {
 }
 
 @test "zsh overlay: a registry entry with no repo field still reads the legacy file" {
-    printf '{"projects":{"proj":{"path":"%s","status":"idle"}}}\n' "$PROJ" > "$BORG_REGISTRY"
+    printf '{"repositories":{"proj":{"path":"%s","status":"idle"}}}\n' "$PROJ" > "$BORG_REGISTRY"
     _legacy '{"status":"waiting"}'
     [ "$(_zsh_overlay)" = "waiting" ]
 }
 
 @test "zsh overlay: a repository with an empty path does not shift the repo column or kill the loop" {
-    printf '{"projects":{"nopath":{"path":""},"proj":{"path":"%s","repo":"%s"}}}\n' "$PROJ" "$COMMON" > "$BORG_REGISTRY"
+    printf '{"repositories":{"nopath":{"path":""},"proj":{"path":"%s","repo":"%s"}}}\n' "$PROJ" "$COMMON" > "$BORG_REGISTRY"
     _new '{"status":"active"}'
     [ "$(_zsh_overlay)" = "active" ]
 }
@@ -184,7 +184,7 @@ _orch_overview() {
 }
 
 @test "link-down orchestrator overview: a repository with an empty path keeps every column" {
-    printf '{"projects":{"nopath":{"path":""},"proj":{"path":"%s","repo":"%s"}}}\n' "$PROJ" "$COMMON" > "$BORG_REGISTRY"
+    printf '{"repositories":{"nopath":{"path":""},"proj":{"path":"%s","repo":"%s"}}}\n' "$PROJ" "$COMMON" > "$BORG_REGISTRY"
     _new '{"status":"active","last_activity":"2026-02-01T00:00:00Z"}'
     out="$(_orch_overview)"
     [[ "$out" == *"proj [active]"* ]]
@@ -193,7 +193,7 @@ _orch_overview() {
 
 @test "link-down capacity count: reads new-then-legacy through the registry repo" {
     printf 'BORG_MAX_ACTIVE=0\n' > "$BORG_DIR/config.zsh"
-    printf '{"projects":{"proj":{"path":"%s","repo":"%s"}}}\n' "$PROJ" "$COMMON" > "$BORG_REGISTRY"
+    printf '{"repositories":{"proj":{"path":"%s","repo":"%s"}}}\n' "$PROJ" "$COMMON" > "$BORG_REGISTRY"
     now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     _legacy '{"status":"idle"}'
     _new "{\"status\":\"active\",\"last_activity\":\"$now\"}"
@@ -244,7 +244,7 @@ print(json.dumps(shell.collect_states(reg), sort_keys=True))' "$BORG_REGISTRY"
 }
 
 @test "python collector: an entry with no repo field reads the legacy file" {
-    printf '{"projects":{"proj":{"path":"%s"}}}\n' "$PROJ" > "$BORG_REGISTRY"
+    printf '{"repositories":{"proj":{"path":"%s"}}}\n' "$PROJ" > "$BORG_REGISTRY"
     _legacy '{"status":"legacy"}'
     _new '{"status":"new"}'
     [ "$(_py_state | jq -r .proj.status)" = "legacy" ]

@@ -177,7 +177,7 @@ def test_collect_states_skips_repositories_without_usable_state(isolated_env):
     good = _repository(isolated_env, "good", state='{"status":"active"}')
     bad = _repository(isolated_env, "bad", state="NOT JSON")
     registry = {
-        "projects": {
+        "repositories": {
             "good": {"path": good},
             "bad": {"path": bad},
             "nopath": {"path": None},
@@ -216,7 +216,7 @@ def test_collect_states_uses_registry_repo_and_forks_no_git(isolated_env, monkey
         raise AssertionError(f"collect_states forked a subprocess: {args}")
 
     monkeypatch.setattr(paths.subprocess, "run", no_fork)
-    registry = {"projects": {"fast": {"path": directory, "repo": "/some/common/dir"}}}
+    registry = {"repositories": {"fast": {"path": directory, "repo": "/some/common/dir"}}}
     assert shell.collect_states(registry) == {"fast": {"status": "new"}}
 
 
@@ -225,7 +225,7 @@ def test_collect_states_null_or_missing_repo_is_path_only_key(isolated_env):
     _seed_new_state(directory, "/some/common/dir", '{"status":"git-keyed"}')
     _seed_new_state(directory, None, '{"status":"path-only"}')
     for entry in ({"path": directory, "repo": None}, {"path": directory}):
-        assert shell.collect_states({"projects": {"nullrepo": entry}}) == {"nullrepo": {"status": "path-only"}}
+        assert shell.collect_states({"repositories": {"nullrepo": entry}}) == {"nullrepo": {"status": "path-only"}}
 
 
 def test_state_read_path_falls_back_to_legacy_when_new_is_absent(isolated_env):
@@ -238,7 +238,7 @@ def test_state_read_path_falls_back_to_legacy_when_new_is_absent(isolated_env):
 
 def _write_registry(root, repositories):
     registry_file = root / "borg-dir" / "registry.json"
-    registry_file.write_text(json.dumps({"projects": repositories}), encoding="utf-8")
+    registry_file.write_text(json.dumps({"repositories": repositories}), encoding="utf-8")
     return registry_file
 
 
@@ -248,8 +248,8 @@ def test_registry_with_state_overlays_and_reaps(isolated_env, monkeypatch):
     monkeypatch.setattr(shell, "live_windows", lambda: [])
 
     result = shell.registry_with_state()
-    assert result["projects"]["proj"]["status"] == "idle"
-    assert result["projects"]["proj"]["_reaped_from"] == "active"
+    assert result["repositories"]["proj"]["status"] == "idle"
+    assert result["repositories"]["proj"]["_reaped_from"] == "active"
 
 
 def test_registry_with_state_keeps_a_live_repository_active(isolated_env, monkeypatch):
@@ -257,7 +257,7 @@ def test_registry_with_state_keeps_a_live_repository_active(isolated_env, monkey
     _write_registry(isolated_env, {"proj": {"path": path}})
     monkeypatch.setattr(shell, "live_windows", lambda: ["proj"])
 
-    assert shell.registry_with_state()["projects"]["proj"]["status"] == "active"
+    assert shell.registry_with_state()["repositories"]["proj"]["status"] == "active"
 
 
 def test_registry_with_state_honors_apply_reap_false(isolated_env, monkeypatch):
@@ -265,7 +265,7 @@ def test_registry_with_state_honors_apply_reap_false(isolated_env, monkeypatch):
     _write_registry(isolated_env, {"proj": {"path": path}})
     monkeypatch.setattr(shell, "live_windows", lambda: [])
 
-    assert shell.registry_with_state(apply_reap=False)["projects"]["proj"]["status"] == "active"
+    assert shell.registry_with_state(apply_reap=False)["repositories"]["proj"]["status"] == "active"
 
 
 def test_registry_with_state_env_wins_over_the_kwarg(isolated_env, monkeypatch):
@@ -274,7 +274,7 @@ def test_registry_with_state_env_wins_over_the_kwarg(isolated_env, monkeypatch):
     monkeypatch.setattr(shell, "live_windows", lambda: [])
     monkeypatch.setenv("BORG_NO_REAP", "1")
 
-    assert shell.registry_with_state(apply_reap=True)["projects"]["proj"]["status"] == "active"
+    assert shell.registry_with_state(apply_reap=True)["repositories"]["proj"]["status"] == "active"
 
 
 def test_registry_with_state_survives_one_malformed_state_json(isolated_env, monkeypatch):
@@ -285,8 +285,8 @@ def test_registry_with_state_survives_one_malformed_state_json(isolated_env, mon
     monkeypatch.setattr(shell, "live_windows", lambda: [])
 
     result = shell.registry_with_state()
-    assert set(result["projects"]) == {"good", "bad"}
-    assert result["projects"]["bad"]["status"] == "idle"
+    assert set(result["repositories"]) == {"good", "bad"}
+    assert result["repositories"]["bad"]["status"] == "idle"
 
 
 def test_registry_with_state_uses_the_injected_now_for_the_reap_decision(isolated_env, monkeypatch):
@@ -298,11 +298,11 @@ def test_registry_with_state_uses_the_injected_now_for_the_reap_decision(isolate
     monkeypatch.setenv("BORG_REAP_STALE_HOURS", "1")
 
     soon = shell.registry_with_state(now=epoch + 60)
-    assert soon["projects"]["proj"]["status"] == "active"
+    assert soon["repositories"]["proj"]["status"] == "active"
 
     later = shell.registry_with_state(now=epoch + 7200)
-    assert later["projects"]["proj"]["status"] == "idle"
-    assert later["projects"]["proj"]["_reaped_from"] == "active"
+    assert later["repositories"]["proj"]["status"] == "idle"
+    assert later["repositories"]["proj"]["_reaped_from"] == "active"
 
 
 # ── directives / assimilated ─────────────────────────────────────────────────
@@ -381,7 +381,7 @@ def test_read_assimilated_reads_each_survivor_exactly_once(isolated_env, monkeyp
 def test_collect_all_directives_prefixes_the_repository_and_keeps_registry_order(isolated_env):
     zed = _repository(isolated_env, "zed", directives=[("d1.md", "# Zed one\n")])
     amy = _repository(isolated_env, "amy", directives=[("d1.md", "# Amy one\n")])
-    registry = {"projects": {"zed": {"path": zed}, "amy": {"path": amy}, "skip": {"path": None}}}
+    registry = {"repositories": {"zed": {"path": zed}, "amy": {"path": amy}, "skip": {"path": None}}}
 
     result = shell.collect_all_directives(registry)
     assert [(e["project"], e["title"]) for e in result] == [("zed", "Zed one"), ("amy", "Amy one")]
@@ -397,7 +397,7 @@ def test_collect_all_assimilated_sorts_globally_across_repositories(isolated_env
         ],
     )
     two = _repository(isolated_env, "two", assimilated=[("2026-02-02-mid.md", "# Mid\nShipped: 2026-02-02\n")])
-    registry = {"projects": {"one": {"path": one}, "two": {"path": two}}}
+    registry = {"repositories": {"one": {"path": one}, "two": {"path": two}}}
 
     result = shell.collect_all_assimilated(registry)
     assert [(e["project"], e["title"]) for e in result] == [
@@ -413,12 +413,12 @@ def test_collect_all_assimilated_respects_max_items(isolated_env):
         "one",
         assimilated=[("a.md", "# A\n"), ("b.md", "# B\n"), ("c.md", "# C\n")],
     )
-    registry = {"projects": {"one": {"path": one}}}
+    registry = {"repositories": {"one": {"path": one}}}
     assert len(shell.collect_all_assimilated(registry, max_items=2)) == 2
 
 
 def test_collectors_skip_unreachable_repositories(isolated_env):
-    registry = {"projects": {"gone": {"path": str(isolated_env / "does-not-exist")}}}
+    registry = {"repositories": {"gone": {"path": str(isolated_env / "does-not-exist")}}}
     assert shell.collect_all_directives(registry) == []
     assert shell.collect_all_assimilated(registry) == []
 
@@ -435,7 +435,7 @@ def test_collectors_skip_unreachable_repositories(isolated_env):
 def test_collectors_and_collect_states_skip_unusable_entries(isolated_env, repositories):
     # The shell guards each of these explicitly (`[[ -z "$name" || -z "$ppath" || ... ]]`), and every
     # guard is its own branch — an empty repository KEY is legal JSON and reaches them.
-    registry = {"projects": repositories}
+    registry = {"repositories": repositories}
     assert shell.collect_all_directives(registry) == []
     assert shell.collect_all_assimilated(registry) == []
     assert shell.collect_states(registry) == {}
@@ -775,7 +775,7 @@ def test_resolved_repository_paths_normalizes_and_preserves_blanks(isolated_env,
     link = tmp_path / "linked-repo"
     link.symlink_to(real)
     registry = {
-        "projects": {
+        "repositories": {
             "linked": {"path": str(link)},
             "pathless": {"path": None},
         }
@@ -790,7 +790,7 @@ def test_resolved_repository_paths_does_not_require_the_path_to_exist(isolated_e
     # realpath is lexical, not a stat. A registry entry pointing at a deleted directory must
     # normalize quietly and simply fail to match -- never raise, never cost a stat per repository on
     # the one path that has to stay reflexive.
-    registry = {"projects": {"gone": {"path": "/nonexistent/deleted/repo"}}}
+    registry = {"repositories": {"gone": {"path": "/nonexistent/deleted/repo"}}}
     assert shell.resolved_repository_paths(registry) == [("gone", "/nonexistent/deleted/repo")]
 
 

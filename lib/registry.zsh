@@ -20,7 +20,7 @@ BORG_LOCK="$BORG_DIR/.registry.lock"
 borg_registry_init() {
     /bin/mkdir -p "$BORG_DIR"
     if [[ ! -f "$BORG_REGISTRY" ]]; then
-        echo '{"projects":{}}' > "$BORG_REGISTRY"
+        echo '{"repositories":{}}' > "$BORG_REGISTRY"
     fi
 }
 
@@ -34,43 +34,28 @@ _borg_registry_write() {
         /bin/rm -f "$tmp"
         return 1
     fi
-    # MIGRATE phase: round-trip the entry-map key the file on disk already has. Readers normalize to
-    # `.projects`, so the incoming document says `projects`; when the file on disk holds `repositories`
-    # (after `migrate-key`) rename it back on the way out. Costs no fork unless the file mentions it.
-    if [[ -f "$BORG_REGISTRY" ]]; then
-        case "$(< "$BORG_REGISTRY")" in
-            *'"repositories"'*)
-                if jq -e 'type == "object" and has("repositories") and (has("projects") | not)' "$BORG_REGISTRY" >/dev/null 2>&1; then
-                    if ! jq 'if type == "object" and has("projects") and (has("repositories") | not) then (.repositories = .projects | del(.projects)) else . end' "$tmp" > "$tmp.k"; then
-                        /bin/rm -f "$tmp" "$tmp.k"
-                        warn "registry write blocked: could not keep the repositories key"
-                        return 1
-                    fi
-                    /bin/mv "$tmp.k" "$tmp"
-                fi
-                ;;
-        esac
-    fi
     /bin/mv "$tmp" "$BORG_REGISTRY"
 }
 
 borg_registry_read() {
     borg_registry_init
-    borg_registry_normalized "$BORG_REGISTRY"
+    # A file with only the retired `projects` key fails here, loudly, instead of reading as empty.
+    borg_registry_guard "$BORG_REGISTRY" || return 1
+    /bin/cat "$BORG_REGISTRY"
 }
 
 borg_registry_list() {
-    borg_registry_read | jq -r '.projects | keys[]' 2>/dev/null
+    borg_registry_read | jq -r '.repositories | keys[]' 2>/dev/null
 }
 
 borg_registry_get() {
     local repository="$1"
-    borg_registry_read | jq -c --arg p "$repository" '.projects[$p] // empty'
+    borg_registry_read | jq -c --arg p "$repository" '.repositories[$p] // empty'
 }
 
 borg_registry_has() {
     local repository="$1"
-    borg_registry_read | jq -e --arg p "$repository" '.projects | has($p)' &>/dev/null
+    borg_registry_read | jq -e --arg p "$repository" '.repositories | has($p)' &>/dev/null
 }
 
 # Set a single key on a repository entry
@@ -80,7 +65,7 @@ borg_registry_set() {
         --arg p "$repository" \
         --arg k "$key" \
         --argjson v "$value" \
-        '.projects[$p][$k] = $v' | _borg_registry_write
+        '.repositories[$p][$k] = $v' | _borg_registry_write
 }
 
 # Merge a JSON object into a repository entry (upserts all fields)
@@ -89,7 +74,7 @@ borg_registry_merge() {
     borg_registry_read | jq \
         --arg p "$repository" \
         --argjson data "$json" \
-        'if .projects[$p] then .projects[$p] += $data else .projects[$p] = $data end' \
+        'if .repositories[$p] then .repositories[$p] += $data else .repositories[$p] = $data end' \
         | _borg_registry_write
 }
 
@@ -119,7 +104,7 @@ borg_registry_add() {
 
 borg_registry_remove() {
     local repository="$1"
-    borg_registry_read | jq --arg p "$repository" 'del(.projects[$p])' | _borg_registry_write
+    borg_registry_read | jq --arg p "$repository" 'del(.repositories[$p])' | _borg_registry_write
 }
 
 # Update status + last_activity timestamp in the repository's state.json.
@@ -131,7 +116,7 @@ borg_registry_set_status() {
     now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     local prepo
     IFS=$'\t' read -r ppath prepo < <(borg_registry_read | jq -r --arg p "$repository" \
-        '.projects[$p] | [(.path // ""), (.repo // "" | if type == "string" then . else "" end)] | @tsv')
+        '.repositories[$p] | [(.path // ""), (.repo // "" | if type == "string" then . else "" end)] | @tsv')
     if [[ -z "$ppath" || "$ppath" == "null" ]]; then
         return 0
     fi
@@ -202,7 +187,7 @@ borg_state_write() {
 borg_registry_with_state() {
     # `merged` is declared HERE, not at its use site inside the loop. A bare `local merged` in a loop
     # body re-declares an already-declared parameter, and zsh's `local` (a `typeset` alias) then
-    # PRINTS it -- `merged=$'{\n  "projects": ...'` lands on stdout from the second iteration onward,
+    # PRINTS it -- `merged=$'{\n  "repositories": ...'` lands on stdout from the second iteration onward,
     # straight into the caller's `jq`, which dies with "Invalid numeric literal". Hit while writing
     # this very fix. _borg_cortex_pending (borg.zsh:2402) has the same latent `local cd` in a loop.
     local raw result name ppath prepo sfile state merged
@@ -229,9 +214,9 @@ borg_registry_with_state() {
         merged=$(printf '%s' "$result" | jq \
             --arg p "$name" \
             --argjson s "$state" \
-            '(.projects[$p].status == "archived") as $arch |
-             .projects[$p] += $s |
-             if $arch then .projects[$p].status = "archived" else . end' \
+            '(.repositories[$p].status == "archived") as $arch |
+             .repositories[$p] += $s |
+             if $arch then .repositories[$p].status = "archived" else . end' \
             2>/dev/null) || merged=""
         # An `[[ ... ]] && result=...` one-liner would return 1 on the empty branch and `set -e`
         # would kill the function mid-loop -- the same trap borg.zsh:172-174 documents for `(( n++ ))`.
@@ -239,11 +224,11 @@ borg_registry_with_state() {
             result="$merged"
         fi
     done < <(printf '%s' "$raw" \
-        | jq -r '.projects | to_entries[]
+        | jq -r '.repositories | to_entries[]
             | [.key, (if (.value.path // "") == "" then "-" else .value.path end), (.value.repo // "")]
             | @tsv' 2>/dev/null)
     # Default status to "idle" for any repository that has neither a state.json nor a registry status
-    result=$(printf '%s\n' "$result" | jq '.projects |= with_entries(.value.status //= "idle")')
+    result=$(printf '%s\n' "$result" | jq '.repositories |= with_entries(.value.status //= "idle")')
     if [[ -z "${BORG_NO_REAP:-}" ]]; then
         result=$(printf '%s' "$result" | borg_reap_overlay)
     fi
@@ -253,7 +238,7 @@ borg_registry_with_state() {
 # Like borg_registry_get but overlays state.json for the named repository.
 borg_registry_get_with_state() {
     local repository="$1"
-    borg_registry_with_state | jq -c --arg p "$repository" '.projects[$p] // empty'
+    borg_registry_with_state | jq -c --arg p "$repository" '.repositories[$p] // empty'
 }
 
 # ─── Reaper: downgrade stale active/waiting sessions to idle ──────────────────
@@ -297,11 +282,11 @@ borg_reap_overlay() {
             json=$(printf '%s' "$json" | jq \
                 --arg p "$name" \
                 --arg from "$st" \
-                '.projects[$p]._reaped_from = $from | .projects[$p].status = "idle"' \
+                '.repositories[$p]._reaped_from = $from | .repositories[$p].status = "idle"' \
                 2>/dev/null) || true
         fi
     done < <(printf '%s' "$json" | jq -r '
-        .projects | to_entries[]
+        .repositories | to_entries[]
         | select(.value.status == "active" or .value.status == "waiting")
         | [.key,
            (if (.value.tmux_window // "") == "" then "-" else .value.tmux_window end),
@@ -323,10 +308,10 @@ borg_reap_persist() {
     # from (field 2, last, always the prior status string) cannot shift anything after it.
     while IFS=$'\t' read -r name from; do
         [[ -z "$name" ]] && continue
-        ppath=$(printf '%s' "$overlaid" | jq -r --arg p "$name" '.projects[$p].path // ""')
+        ppath=$(printf '%s' "$overlaid" | jq -r --arg p "$name" '.repositories[$p].path // ""')
         [[ -z "$ppath" || "$ppath" == "null" ]] && continue
         prepo=$(printf '%s' "$overlaid" | jq -r --arg p "$name" \
-            '.projects[$p].repo // "" | if type == "string" then . else "" end')
+            '.repositories[$p].repo // "" | if type == "string" then . else "" end')
         sf=$(borg_state_read_path "$ppath" "$prepo")
         [[ -f "$sf" ]] || continue
         cur=$(borg_state_read "$ppath" "$prepo")
@@ -335,7 +320,7 @@ borg_reap_persist() {
         printf '%s\t%s\n' "$name" "$from"
         count=$((count + 1))
     done < <(printf '%s' "$overlaid" | jq -r '
-        .projects | to_entries[]
+        .repositories | to_entries[]
         | select(.value._reaped_from != null)
         | [.key, .value._reaped_from] | @tsv' 2>/dev/null)
     return 0
@@ -382,6 +367,6 @@ borg_scan_path_should_skip() {
     while IFS= read -r rp; do
         [[ -z "$rp" ]] && continue
         [[ "$ppath" == "$rp"/* ]] && return 0
-    done < <(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | .projects[].path // empty" "$BORG_REGISTRY" 2>/dev/null)
+    done < <(jq -r '.repositories[].path // empty' "$BORG_REGISTRY" 2>/dev/null)
     return 1
 }

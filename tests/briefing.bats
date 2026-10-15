@@ -64,7 +64,7 @@ setup() {
     recent=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "my-active-repository": {
       "path": "/tmp/my-active-repository",
       "status": "waiting",
@@ -272,7 +272,7 @@ EOF
     recent=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "field-collapse-repository": {
       "path": "/tmp/field-collapse-repository",
       "status": "waiting",
@@ -312,7 +312,7 @@ EOF
 
     cat > "$BORG_REGISTRY" <<'EOF'
 {
-  "projects": {
+  "repositories": {
     "quiet-repository": {
       "path": "/tmp/quiet-repository",
       "status": "idle",
@@ -354,7 +354,7 @@ EOF
         > "$ws/.borg/checkpoints/2026-08-01-0900.md"
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "cp-repository": {
       "path": "$ws",
       "status": "idle",
@@ -388,7 +388,7 @@ EOF
 # paired all-archived case is where the difference bites, and it carries the argument in full.
 
 @test "briefing: empty registry shows scan hint" {
-    echo '{"projects":{}}' > "$BORG_REGISTRY"
+    echo '{"repositories":{}}' > "$BORG_REGISTRY"
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"borg scan"* ]] || false
@@ -415,7 +415,7 @@ EOF
 
     cat > "$BORG_REGISTRY" <<'EOF'
 {
-  "projects": {
+  "repositories": {
     "retired-repository": {
       "path": "/tmp/retired-repository",
       "status": "archived",
@@ -461,7 +461,7 @@ EOF
 
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "alpha": {
       "path": "$ws/alpha",
       "status": "idle",
@@ -627,7 +627,7 @@ EOF
 
     cat > "$BORG_REGISTRY" <<'EOF'
 {
-  "projects": {
+  "repositories": {
     "live-repository": {
       "path": "/tmp/live-repository",
       "status": "idle",

@@ -285,8 +285,8 @@ def load_registry_repositories(registry_file: str, repositories_filter: list[str
     module-level `registry_path` (see the top of the file) and the old parameter name shadowed it.
     """
     with open(registry_file, encoding="utf-8") as f:
-        registry = paths.normalize_registry(json.load(f))
-    repositories: dict = registry.get("projects", {})
+        registry = paths.require_registry_key(json.load(f), registry_file)
+    repositories: dict = registry.get("repositories", {})
     if repositories_filter:
         keep = set(repositories_filter)
         repositories = {k: v for k, v in repositories.items() if k in keep}

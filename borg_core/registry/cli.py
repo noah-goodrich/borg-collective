@@ -77,7 +77,7 @@ def cmd_add(path_arg: str | None, name_arg: str | None = None) -> int:
     """
     ppath = shell.resolve_path(path_arg or ".")
     name = name_arg or _basename(ppath)
-    repositories = shell.read_registry().get("projects") or {}
+    repositories = shell.read_registry().get("repositories") or {}
 
     holders = _path_holders(repositories, ppath)
     if holders and name not in holders:
@@ -155,7 +155,7 @@ def cmd_backfill_repo(dry_run_arg: str | None = None) -> int:
         _die(f"borg: unknown option '{dry_run_arg}' (expected --dry-run)")
 
     data = shell.read_registry()
-    repositories = data.get("projects") or {}
+    repositories = data.get("repositories") or {}
 
     filled, already, skipped = 0, 0, 0
     for name in sorted(repositories):
@@ -175,7 +175,7 @@ def cmd_backfill_repo(dry_run_arg: str | None = None) -> int:
         filled += 1
 
     if filled and not dry_run:
-        data["projects"] = repositories
+        data["repositories"] = repositories
         shell.write_registry(data)
 
     prefix = "would fill" if dry_run else "filled"
@@ -186,9 +186,9 @@ def cmd_backfill_repo(dry_run_arg: str | None = None) -> int:
 def cmd_migrate_key(dry_run_arg: str | None = None) -> int:
     """`migrate-key [--dry-run]` -- rename the registry file's `projects` key to `repositories`.
 
-    The EXPAND phase of the rename ships readers that accept either key while every writer still
-    writes `projects`; this verb is the opt-in step that flips a file. Idempotent and conservative:
-    see `shell.migrate_key`. `--dry-run` reports what would happen and writes nothing.
+    The CONTRACT phase of the rename drops the old key from every reader and writer, so this verb is how
+    a file that still has `projects` is flipped (`borg setup` runs it).
+    Idempotent and conservative: see `shell.migrate_key`. `--dry-run` reports what would happen and writes nothing.
     """
     dry_run = dry_run_arg == "--dry-run"
     if dry_run_arg is not None and not dry_run:
@@ -216,7 +216,7 @@ def cmd_window_name(args: list[str]) -> int:
     if flags[:1] == ["--set"] and len(flags) < 2:
         _die("borg: --set needs a value")
 
-    repositories = shell.read_registry().get("projects") or {}
+    repositories = shell.read_registry().get("repositories") or {}
     if repository not in repositories:
         _die(f"repository '{repository}' not in registry")
     entry = repositories[repository] or {}

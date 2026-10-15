@@ -80,7 +80,7 @@ def _focus(repository: str, registry: dict, now_epoch: int) -> dict | None:
     """
     if not repository:
         return None
-    repositories = registry.get("projects") or {}
+    repositories = registry.get("repositories") or {}
     entry = repositories.get(repository)
     if entry is None:
         raise RepositoryNotFound(repository)
@@ -335,7 +335,7 @@ def _document(  # pylint: disable=too-many-locals
     archived filter; (iv) when the aggregate collectors run, registry.json is read a SECOND time --
     bare, inside `_aggregates`, alongside the state-overlaid `overlaid` here -- on purpose, because
     borg.zsh:163 feeds them borg_registry_read (the RAW registry), not the state-overlaid one; do not
-    collapse it into one read; (v) `total_projects` is `len(overlaid.get("projects"))`, from the UNFILTERED
+    collapse it into one read; (v) `total_projects` is `len(overlaid.get("repositories"))`, from the UNFILTERED
     overlaid map -- NOT from `repositories` (the --all-filtered map) or `order`.
     """
     # `--overview` IS THE QUEEN VIEW FROM ANYWHERE, so it also drops a positional: a request for the whole
@@ -414,7 +414,7 @@ def _document(  # pylint: disable=too-many-locals
     document = core.assemble(
         generated_at=core.format_iso(moment),
         show_all=show_all,
-        total_projects=len(overlaid.get("projects") or {}),
+        total_projects=len(overlaid.get("repositories") or {}),
         capacity=core.capacity(core.active_count(overlaid), shell.max_active()),
         projects=repositories,
         order=order,

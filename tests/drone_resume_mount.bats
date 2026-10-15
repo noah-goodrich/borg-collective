@@ -44,7 +44,7 @@ echo "borg $*" >> "$TRACE"
 [[ "$1" == "add" ]] || exit 0
 name="${2##*/}"
 jq --arg n "$name" --arg p "$2" \
-    '.projects[$n] = ((.projects[$n] // {}) + {path: $p, tmux_window: null})' \
+    '.repositories[$n] = ((.repositories[$n] // {}) + {path: $p, tmux_window: null})' \
     "$BORG_REGISTRY" > "$BORG_REGISTRY.n" && mv "$BORG_REGISTRY.n" "$BORG_REGISTRY"
 MOCK
     cat > "$MOCK_BIN/docker" <<'MOCK'
@@ -57,7 +57,7 @@ MOCK
 
     PROJ="$BATS_TEST_TMPDIR/dev/amber-fox-labs"
     mkdir -p "$PROJ"
-    echo '{"projects":{}}' > "$BORG_REGISTRY"
+    echo '{"repositories":{}}' > "$BORG_REGISTRY"
 }
 
 _claude_keys() { grep -E '^tmux send-keys' "$TRACE" | grep 'claude --model' || true; }

@@ -29,7 +29,7 @@ def _read_registry() -> tuple[Any, str]:
     path = paths.registry_path()
     try:
         with open(path, encoding="utf-8") as handle:
-            return paths.normalize_registry(json.load(handle)), ""
+            return paths.require_registry_key(json.load(handle), path), ""
     except FileNotFoundError:
         return None, f"no registry at {path} -- run 'borg add <path>' first"
     except (OSError, ValueError) as exc:
@@ -38,7 +38,7 @@ def _read_registry() -> tuple[Any, str]:
 
 def _named_directory(registry: Any, name: str) -> str:
     """The directory `name` stands for: its registry path, else `name` itself when it is a directory, else ""."""
-    entries = registry.get("projects") if isinstance(registry, dict) else None
+    entries = registry.get("repositories") if isinstance(registry, dict) else None
     entry = entries.get(name) if isinstance(entries, dict) else None
     registered = str(entry.get("path") or "") if isinstance(entry, dict) else ""
     if registered and registered != "null":

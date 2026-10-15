@@ -83,7 +83,7 @@ setup() {
 # must not need `gh`. The seeded registry is what makes the render non-trivial — against the empty
 # default the overview short-circuits to "No repositories registered" and never builds a document.
 @test "borg link is still dispatched" {
-    printf '%s' '{"projects":{"smoke":{"path":null,"source":"cli","status":"idle","summary":"Smoke."}}}' \
+    printf '%s' '{"repositories":{"smoke":{"path":null,"source":"cli","status":"idle","summary":"Smoke."}}}' \
         > "$BORG_REGISTRY"
 
     # `--overview`: the Queen's page from this (unregistered) cwd. A bare `borg link` here prints the hint page.

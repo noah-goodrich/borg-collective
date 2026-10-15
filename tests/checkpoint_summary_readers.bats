@@ -62,7 +62,7 @@ _write_registry() {
     beta="${BATS_TEST_TMPDIR}/ws/beta"
     mkdir -p "$beta"
     cat > "$BORG_REGISTRY" <<JSON
-{"projects": {
+{"repositories": {
   "alpha": {"path":"$alpha","status":"waiting","source":"cli","tmux_window":"w-alpha",
             "last_activity":"2026-10-05T10:00:00Z","summary":"$STALE","waiting_reason":"needs a reply"},
   "beta":  {"path":"$beta","status":"idle","source":"cli","tmux_window":"w-beta",
@@ -96,7 +96,7 @@ _trace_python() {
 
 @test "next: a repository with no checkpoint prints no summary, only waiting_reason and its relative time" {
     _write_registry
-    jq '.projects.alpha.path = .projects.beta.path' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
+    jq '.repositories.alpha.path = .repositories.beta.path' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
     mv "${BORG_REGISTRY}.new" "$BORG_REGISTRY"
     run bash -c "zsh \"$BORG\" next 2>/dev/null"
     [ "$status" -eq 0 ]
@@ -139,7 +139,7 @@ _trace_python() {
 
 @test "next --switch: with no checkpoint the brief is waiting_reason, never the registry summary" {
     _write_registry
-    jq '.projects.alpha.path = .projects.beta.path' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
+    jq '.repositories.alpha.path = .repositories.beta.path' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
     mv "${BORG_REGISTRY}.new" "$BORG_REGISTRY"
     run bash -c "zsh \"$BORG\" next --switch 2>/dev/null"
     [ "$status" -eq 0 ]
@@ -175,7 +175,7 @@ _trace_python() {
 
 @test "_borg_do_switch: the no-window fallback status page shows the tl;dr and costs no second call" {
     _write_registry
-    jq 'del(.projects.alpha.tmux_window)' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
+    jq 'del(.repositories.alpha.tmux_window)' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
     mv "${BORG_REGISTRY}.new" "$BORG_REGISTRY"
     export TMUX_MOCK_WINDOWS="w-beta"
     _trace_python
@@ -190,7 +190,7 @@ _trace_python() {
 
 @test "picker: column 5 is the checkpoint tl;dr, then waiting_reason, then relative time; never the stored summary" {
     _write_registry
-    jq '.projects.beta.waiting_reason = null' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
+    jq '.repositories.beta.waiting_reason = null' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
     mv "${BORG_REGISTRY}.new" "$BORG_REGISTRY"
     _trace_python
     run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_ls --porcelain\" 2>/dev/null"
@@ -260,7 +260,7 @@ EOF
     run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; borg_registry_with_state | _borg_checkpoint_summaries\" 2>/dev/null"
     [ "$status" -eq 0 ]
     [[ "$output" != *"$STALE"* ]] || false
-    printf '%s' "$output" | jq -e '.projects.alpha.summary == null and .projects.beta.summary == null'
+    printf '%s' "$output" | jq -e '.repositories.alpha.summary == null and .repositories.beta.summary == null'
 }
 
 # ── The 80-character cap on the human-facing one-line summary ─────────────────

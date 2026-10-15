@@ -33,7 +33,7 @@ _seed() {  # json
 }
 
 @test "switch: finds a live window under the short registry name" {
-    _seed '{"projects":{"widget-factory":{"path":null,"source":"cli","tmux_window":"wf"}}}'
+    _seed '{"repositories":{"widget-factory":{"path":null,"source":"cli","tmux_window":"wf"}}}'
     export LIVE_WINDOWS="wf"
     run zsh "$BORG" switch widget-factory
     [ "$status" -eq 0 ]
@@ -41,7 +41,7 @@ _seed() {  # json
 }
 
 @test "switch: finds a live LONG-named window when the registry holds the short name" {
-    _seed '{"projects":{"widget-factory":{"path":null,"source":"cli","tmux_window":"wf"}}}'
+    _seed '{"repositories":{"widget-factory":{"path":null,"source":"cli","tmux_window":"wf"}}}'
     export LIVE_WINDOWS="widget-factory"
     run zsh "$BORG" switch widget-factory
     [ "$status" -eq 0 ]
@@ -49,25 +49,25 @@ _seed() {  # json
 }
 
 @test "switch: still clears a tmux_window equal to the session name" {
-    _seed '{"projects":{"widget-factory":{"path":null,"source":"cli","tmux_window":"wtest"}}}'
+    _seed '{"repositories":{"widget-factory":{"path":null,"source":"cli","tmux_window":"wtest"}}}'
     export LIVE_WINDOWS="wtest"
     run zsh "$BORG" switch widget-factory
     [[ "$output" == *"same as session name"* ]] || false
-    [ "$(jq -r '.projects["widget-factory"].tmux_window' "$BORG_REGISTRY")" = "null" ]
+    [ "$(jq -r '.repositories["widget-factory"].tmux_window' "$BORG_REGISTRY")" = "null" ]
 }
 
 @test "reap: a repository whose SHORT-named window is live is not downgraded" {
     export BORG_REAP_STALE_HOURS=12
-    _seed '{"projects":{"widget-factory":{"path":"/tmp/wf","status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":"wf"}}}'
+    _seed '{"repositories":{"widget-factory":{"path":"/tmp/wf","status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":"wf"}}}'
     export LIVE_WINDOWS="wf"
-    run zsh -c "source '$BORG_HOME/lib/reaper.sh'; source '$BORG_HOME/lib/registry.zsh'; source '$BORG_HOME/lib/tmux.zsh'; cat '$BORG_REGISTRY' | borg_reap_overlay | jq -r '.projects[\"widget-factory\"].status'"
+    run zsh -c "source '$BORG_HOME/lib/reaper.sh'; source '$BORG_HOME/lib/registry.zsh'; source '$BORG_HOME/lib/tmux.zsh'; cat '$BORG_REGISTRY' | borg_reap_overlay | jq -r '.repositories[\"widget-factory\"].status'"
     [ "$output" = "active" ]
 }
 
 @test "reap: a repository whose LONG-named window is live is not downgraded, and a dead one still is" {
     export BORG_REAP_STALE_HOURS=12
-    _seed '{"projects":{"widget-factory":{"path":"/tmp/wf","status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":"wf"}}}'
-    local cmd="source '$BORG_HOME/lib/reaper.sh'; source '$BORG_HOME/lib/registry.zsh'; source '$BORG_HOME/lib/tmux.zsh'; cat '$BORG_REGISTRY' | borg_reap_overlay | jq -r '.projects[\"widget-factory\"].status'"
+    _seed '{"repositories":{"widget-factory":{"path":"/tmp/wf","status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":"wf"}}}'
+    local cmd="source '$BORG_HOME/lib/reaper.sh'; source '$BORG_HOME/lib/registry.zsh'; source '$BORG_HOME/lib/tmux.zsh'; cat '$BORG_REGISTRY' | borg_reap_overlay | jq -r '.repositories[\"widget-factory\"].status'"
     export LIVE_WINDOWS="widget-factory"
     run zsh -c "$cmd"
     [ "$output" = "active" ]
@@ -77,7 +77,7 @@ _seed() {  # json
 }
 
 @test "color: targets the short-named live window" {
-    _seed '{"projects":{"widget-factory":{"path":"/tmp/wf","tmux_window":"wf"}}}'
+    _seed '{"repositories":{"widget-factory":{"path":"/tmp/wf","tmux_window":"wf"}}}'
     export LIVE_WINDOWS="wf"
     run zsh "$BORG" color widget-factory green
     [ "$status" -eq 0 ]

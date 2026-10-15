@@ -57,7 +57,7 @@ _write_registry() {
         mkdir -p "${BATS_TEST_TMPDIR}/p/${name}"
     done
     cat > "$BORG_REGISTRY" <<JSON
-{"projects": {
+{"repositories": {
   "unmapped": {"path":"${BATS_TEST_TMPDIR}/p/unmapped","status":"waiting","tmux_window":"w-unmapped","last_activity":"2026-01-01T10:00:00Z"},
   "frozen":   {"path":"${BATS_TEST_TMPDIR}/p/frozen","status":"waiting","tmux_window":"w-frozen","last_activity":"2026-01-02T10:00:00Z"},
   "undated":  {"path":"${BATS_TEST_TMPDIR}/p/undated","status":"waiting","tmux_window":"w-undated","last_activity":"2026-01-03T10:00:00Z"},
@@ -195,7 +195,7 @@ _write_registry_with_mixed_activity() {
         mkdir -p "${BATS_TEST_TMPDIR}/p/${name}"
     done
     cat > "$BORG_REGISTRY" <<JSON
-{"projects": {
+{"repositories": {
   "late":   {"path":"${BATS_TEST_TMPDIR}/p/late","status":"waiting","tmux_window":"w-late","last_activity":"2026-01-06T10:00:00Z"},
   "on-leg": {"path":"${BATS_TEST_TMPDIR}/p/on-leg","status":"waiting","tmux_window":"w-on-leg","last_activity":1767780000},
   "soon":   {"path":"${BATS_TEST_TMPDIR}/p/soon","status":"waiting","tmux_window":"w-soon","last_activity":"2026-01-05T10:00:00Z"}
@@ -243,7 +243,7 @@ JSON
 _write_registry_with_worktree() {
     mkdir -p "${BATS_TEST_TMPDIR}/p/on-leg" "${BATS_TEST_TMPDIR}/p/on-leg-wt" "${BATS_TEST_TMPDIR}/p/unmapped"
     cat > "$BORG_REGISTRY" <<JSON
-{"projects": {
+{"repositories": {
   "unmapped":  {"path":"${BATS_TEST_TMPDIR}/p/unmapped","status":"waiting","tmux_window":"w-unmapped","last_activity":"2026-01-01T10:00:00Z"},
   "on-leg":    {"path":"${BATS_TEST_TMPDIR}/p/on-leg","repo":"${BATS_TEST_TMPDIR}/p/on-leg/.git","status":"waiting","tmux_window":"w-on-leg","last_activity":"2026-01-07T10:00:00Z"},
   "on-leg-wt": {"path":"${BATS_TEST_TMPDIR}/p/on-leg-wt","repo":"${BATS_TEST_TMPDIR}/p/on-leg/.git","status":"waiting","tmux_window":"w-on-leg-wt","last_activity":"2026-01-08T10:00:00Z"}
@@ -281,7 +281,7 @@ _write_registry_with_named_worktree() {
         mkdir -p "${BATS_TEST_TMPDIR}/p/${name}"
     done
     cat > "$BORG_REGISTRY" <<JSON
-{"projects": {
+{"repositories": {
   "unmapped":  {"path":"${BATS_TEST_TMPDIR}/p/unmapped","status":"waiting","tmux_window":"w-unmapped","last_activity":"2026-01-01T10:00:00Z"},
   "late":      {"path":"${BATS_TEST_TMPDIR}/p/late","status":"waiting","tmux_window":"w-late","last_activity":"2026-01-02T10:00:00Z"},
   "on-leg":    {"path":"${BATS_TEST_TMPDIR}/p/on-leg","repo":"${BATS_TEST_TMPDIR}/p/on-leg/.git","status":"waiting","tmux_window":"w-on-leg","last_activity":"2026-01-07T10:00:00Z"},
@@ -415,7 +415,7 @@ _write_parking() {
 
 @test "link --overview: a parking item that is not due leaves 'nothing waits on you' standing" {
     mkdir -p "${BATS_TEST_TMPDIR}/p/idle"
-    printf '%s\n' '{"projects": {"idle": {"path":"'"${BATS_TEST_TMPDIR}"'/p/idle","status":"idle"}}}' > "$BORG_REGISTRY"
+    printf '%s\n' '{"repositories": {"idle": {"path":"'"${BATS_TEST_TMPDIR}"'/p/idle","status":"idle"}}}' > "$BORG_REGISTRY"
     mkdir -p "$MAP"
     printf '%s\n' '- [ ] not yet | parked: 2026-01-01 | look: 2999-01-01 | seen: 0' > "${MAP}/parking-lot.md"
     BORG_MAP_DIR="$MAP" run zsh "$BORG" link --local --overview
@@ -426,7 +426,7 @@ _write_parking() {
 
 @test "link --overview: a due parking item is something that waits on you" {
     mkdir -p "${BATS_TEST_TMPDIR}/p/idle"
-    printf '%s\n' '{"projects": {"idle": {"path":"'"${BATS_TEST_TMPDIR}"'/p/idle","status":"idle"}}}' > "$BORG_REGISTRY"
+    printf '%s\n' '{"repositories": {"idle": {"path":"'"${BATS_TEST_TMPDIR}"'/p/idle","status":"idle"}}}' > "$BORG_REGISTRY"
     mkdir -p "$MAP"
     _write_parking
     BORG_MAP_DIR="$MAP" run zsh "$BORG" link --local --overview

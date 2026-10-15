@@ -39,10 +39,10 @@ def own_checkpoint_summary(name: str, repositories: dict) -> str | None:
 
 def with_checkpoint_summaries(registry: dict) -> dict:
     """The registry with every repository's `summary` REPLACED by its latest checkpoint's, or null."""
-    repositories = registry.get("projects") or {}
+    repositories = registry.get("repositories") or {}
     return {
         **registry,
-        "projects": {
+        "repositories": {
             name: {**entry, "summary": own_checkpoint_summary(name, repositories)} if isinstance(entry, dict) else entry
             for name, entry in repositories.items()
         },
@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(with_checkpoint_summaries(json.load(sys.stdin))))
         return 0
     if args[:1] == ["--summary"] and len(args) == 2:
-        repositories = shell.read_registry().get("projects") or {}
+        repositories = shell.read_registry().get("repositories") or {}
         entry = repositories.get(args[1])
         print((own_checkpoint_summary(args[1], repositories) if isinstance(entry, dict) else None) or "")
         return 0

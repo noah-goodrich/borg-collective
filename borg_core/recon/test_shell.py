@@ -308,14 +308,14 @@ def test_read_checkpoint_blockers_picks_newest_by_name(tmp_path):
 
 def test_load_registry_repositories_no_filter(tmp_path):
     registry = tmp_path / "registry.json"
-    registry.write_text(json.dumps({"projects": {"a": {"path": "/a"}, "b": {"path": "/b"}}}))
+    registry.write_text(json.dumps({"repositories": {"a": {"path": "/a"}, "b": {"path": "/b"}}}))
     result = shell.load_registry_repositories(str(registry), None)
     assert set(result) == {"a", "b"}
 
 
 def test_load_registry_repositories_with_filter(tmp_path):
     registry = tmp_path / "registry.json"
-    registry.write_text(json.dumps({"projects": {"a": {"path": "/a"}, "b": {"path": "/b"}}}))
+    registry.write_text(json.dumps({"repositories": {"a": {"path": "/a"}, "b": {"path": "/b"}}}))
     result = shell.load_registry_repositories(str(registry), ["a"])
     assert set(result) == {"a"}
 

@@ -94,7 +94,7 @@ MOCK
     chmod +x "$MOCK_BIN/tmux" "$MOCK_BIN/docker"
     PROJ="$BATS_TEST_TMPDIR/dev/amber-fox-labs"
     mkdir -p "$PROJ"
-    echo "{\"projects\":{\"amber-fox-labs\":{\"path\":\"$PROJ\"}}}" > "$BORG_REGISTRY"
+    echo "{\"repositories\":{\"amber-fox-labs\":{\"path\":\"$PROJ\"}}}" > "$BORG_REGISTRY"
 }
 
 @test "drone down marks the repository closed" {

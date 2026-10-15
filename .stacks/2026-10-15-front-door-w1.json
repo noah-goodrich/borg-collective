@@ -45,6 +45,13 @@
       "why": "registry key expand: accept repositories, migrate-key verb"
     },
     {
+      "lane": "registry",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#420",
+      "status": "merged",
+      "why": "registry key migrate step: writers round-trip the key the file has"
+    },
+    {
       "lane": "release",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#403",
@@ -55,15 +62,8 @@
       "lane": "close",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#417",
-      "status": "open",
+      "status": "merged",
       "why": "close out W1: assimilate the finished directives, add this stack"
-    },
-    {
-      "lane": "_default",
-      "order": "1",
-      "ref": "noah-goodrich/borg-collective#420",
-      "status": "open",
-      "why": "registry key migrate step: writers round-trip the key the file has"
     }
   ]
 }

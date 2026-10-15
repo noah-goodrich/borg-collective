@@ -49,7 +49,7 @@ def _stand_at_queen(root, monkeypatch):
 
 def _write_registry(root, repositories):
     registry_file = root / "borg-dir" / "registry.json"
-    registry_file.write_text(json.dumps({"projects": repositories}), encoding="utf-8")
+    registry_file.write_text(json.dumps({"repositories": repositories}), encoding="utf-8")
     return registry_file
 
 
@@ -391,7 +391,7 @@ def test_main_json_mode_clean_error_not_traceback_on_malformed_repository_entry(
 
 def test_main_json_mode_clean_error_not_traceback_on_non_object_projects(isolated_env, capsys):
     registry_file = isolated_env / "borg-dir" / "registry.json"
-    registry_file.write_text(json.dumps({"projects": [1, 2, 3]}), encoding="utf-8")
+    registry_file.write_text(json.dumps({"repositories": [1, 2, 3]}), encoding="utf-8")
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["--json"])
@@ -419,7 +419,7 @@ def test_main_json_mode_clean_error_not_traceback_on_non_object_registry_root(is
 
 def test_main_human_mode_clean_error_not_traceback_on_non_object_projects(isolated_env, capsys):
     registry_file = isolated_env / "borg-dir" / "registry.json"
-    registry_file.write_text(json.dumps({"projects": "nope"}), encoding="utf-8")
+    registry_file.write_text(json.dumps({"repositories": "nope"}), encoding="utf-8")
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["--porcelain"])
@@ -710,7 +710,7 @@ def _scope_registry(root):
     beta.mkdir()
     registry_file = root / "borg-dir" / "registry.json"
     registry_file.write_text(
-        json.dumps({"projects": {"alpha": {"path": str(alpha)}, "beta": {"path": str(beta)}}}),
+        json.dumps({"repositories": {"alpha": {"path": str(alpha)}, "beta": {"path": str(beta)}}}),
         encoding="utf-8",
     )
     return alpha, beta
@@ -940,7 +940,7 @@ def test_focus_of_an_empty_repository_is_none(isolated_env):  # pylint: disable=
     time `repository or scope["repository"]` is evaluated. It stays because the function must be total
     for any future caller, and it is covered DIRECTLY rather than left to look like a live path --
     the same treatment `picture.link_ref` gives its unlinkable arm."""
-    assert cli._focus("", {"projects": {}}, 0) is None  # pylint: disable=protected-access
+    assert cli._focus("", {"repositories": {}}, 0) is None  # pylint: disable=protected-access
 
 
 def test_a_consumer_that_stops_reading_gets_no_traceback(monkeypatch):
@@ -981,7 +981,7 @@ def test_document_scope_survives_an_archived_repository(isolated_env, monkeypatc
     alpha = isolated_env / "alpha"
     alpha.mkdir()
     (isolated_env / "borg-dir" / "registry.json").write_text(
-        json.dumps({"projects": {"alpha": {"path": str(alpha), "status": "archived"}}}),
+        json.dumps({"repositories": {"alpha": {"path": str(alpha), "status": "archived"}}}),
         encoding="utf-8",
     )
     monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))

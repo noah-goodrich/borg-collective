@@ -12,7 +12,7 @@ setup() {
     export XDG_STATE_HOME="${BATS_TEST_TMPDIR}/state"
     STATE="$XDG_STATE_HOME/borg"
     mkdir -p "$BORG_DIR" "$STATE/cairn-inbox"
-    echo {projects:{}} > "$BORG_REGISTRY"
+    echo {repositories:{}} > "$BORG_REGISTRY"
     echo hit > "$BORG_DIR/cairn-hits.log"
     echo 1 > "$STATE/.cairn-last-write"
     echo x > "$STATE/cairn-inbox/item.json"

@@ -109,7 +109,7 @@ run_zsh_borg() {
 # WORDING is asserted separately, by the AC1 case further down this file.
 @test "contract: link is still dispatched and is not itself reported as removed" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
         > "$BORG_REGISTRY"
 
     run_zsh_borg link --local
@@ -124,7 +124,7 @@ run_zsh_borg() {
 # through `str()` at assembly, so the board printed the word None where "(no summary)" belongs.
 @test "contract: a null summary prints no placeholder and no None on the board" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":null}}}' \
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle","summary":null}}}' \
         > "$BORG_REGISTRY"
 
     run_zsh_borg link --local
@@ -145,7 +145,7 @@ run_zsh_borg() {
     local ws="${BATS_TEST_TMPDIR}/ws/greeter"
     mkdir -p "$ws"
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"greeter":{"path":"$ws","source":"cli","status":"idle","summary":"What's up buttercup?"}}}
+{"repositories":{"greeter":{"path":"$ws","source":"cli","status":"idle","summary":"What's up buttercup?"}}}
 EOF
 
     run_zsh_borg link --local
@@ -171,7 +171,7 @@ EOF
         > "$ws/.borg/checkpoints/2026-08-02-1000.md"
     printf '**tl;dr** — An older checkpoint.\n' > "$ws/.borg/checkpoints/2026-08-01-1000.md"
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"shipper":{"path":"$ws","source":"cli","status":"idle","summary":"What's up buttercup?"}}}
+{"repositories":{"shipper":{"path":"$ws","source":"cli","status":"idle","summary":"What's up buttercup?"}}}
 EOF
 
     run_zsh_borg link shipper --local
@@ -193,7 +193,7 @@ EOF
     printf '# Checkpoint\n\n## 1. Goal\n\n- Not this one.\n\n## 2. Accomplished\n\n- Landed the reader.\n- Second thing.\n' \
         > "$ws/.borg/checkpoints/2026-08-02-1000.md"
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"bulleter":{"path":"$ws","source":"cli","status":"idle","summary":"What's up buttercup?"}}}
+{"repositories":{"bulleter":{"path":"$ws","source":"cli","status":"idle","summary":"What's up buttercup?"}}}
 EOF
 
     run_zsh_borg link bulleter --local
@@ -288,7 +288,7 @@ EOF
     # die is what a healthy machine surface produces here — and it is the proof the engine was
     # reached at all, because the retirement gate fires in borg.zsh before any Python runs and says
     # something else entirely. (The two #113 cases above run --adapters with the real search path.)
-    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{}}' > "$BORG_REGISTRY"
 
     run_zsh_borg recon --json
     [[ "$output" != *"was retired"* ]] || false
@@ -563,7 +563,7 @@ exit 1
 EOF
     chmod +x "$MOCK_BIN/tmux"
 
-    printf '%s' '{"projects":{"alpha":{"path":null,"pinned":false},"zulu-pinned":{"path":null,"pinned":true}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"alpha":{"path":null,"pinned":false},"zulu-pinned":{"path":null,"pinned":true}}}' > "$BORG_REGISTRY"
     run_zsh_borg next
     [ "$status" -eq 0 ]
     [[ "$output" == *"Next up: zulu-pinned"* ]] || false
@@ -646,11 +646,11 @@ EOF
     run jq -e '.' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
 
-    run jq -r '.projects["sample-repository"].path' "$BORG_REGISTRY"
+    run jq -r '.repositories["sample-repository"].path' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
     [[ "$output" == *"/sample-repository" ]] || false
 
-    run jq -r '.projects["sample-repository"].source' "$BORG_REGISTRY"
+    run jq -r '.repositories["sample-repository"].source' "$BORG_REGISTRY"
     [ "$output" = "cli" ]
 }
 
@@ -679,7 +679,7 @@ EOF
     [ "$status" -eq 1 ]
     [[ "$output" == *"'widgets'"* ]] || false
 
-    run jq -r '.projects | keys | join(",")' "$BORG_REGISTRY"
+    run jq -r '.repositories | keys | join(",")' "$BORG_REGISTRY"
     [ "$output" = "widgets" ]
 }
 
@@ -700,7 +700,7 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"Registered: cwd-repository"* ]] || false
 
-    run jq -r '.projects["cwd-repository"].path' "$BORG_REGISTRY"
+    run jq -r '.repositories["cwd-repository"].path' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
     [[ "$output" == *"/cwd-repository" ]] || false
 }
@@ -708,65 +708,65 @@ EOF
 # cmd_rm (borg.zsh:993) never shells out (pure registry read/write), so no mocking is needed.
 
 @test "contract: rm removes an existing repository from the registry" {
-    printf '%s' '{"projects":{"keep-me":{"path":"/tmp/keep"},"drop-me":{"path":"/tmp/drop"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"keep-me":{"path":"/tmp/keep"},"drop-me":{"path":"/tmp/drop"}}}' > "$BORG_REGISTRY"
     run_zsh_borg rm drop-me
     [ "$status" -eq 0 ]
     [[ "$output" == *"Removed: drop-me"* ]] || false
 
-    run jq -e '.projects | has("drop-me") | not' "$BORG_REGISTRY"
+    run jq -e '.repositories | has("drop-me") | not' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
-    run jq -e '.projects | has("keep-me")' "$BORG_REGISTRY"
+    run jq -e '.repositories | has("keep-me")' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
 }
 
 @test "contract: rm with no repository argument fails cleanly without touching the registry" {
-    printf '%s' '{"projects":{"keep-me":{"path":"/tmp/keep"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"keep-me":{"path":"/tmp/keep"}}}' > "$BORG_REGISTRY"
     run_zsh_borg rm
     [ "$status" -ne 0 ]
     [[ "$output" == *"usage: borg rm"* ]] || false
 
-    run jq -e '.projects | has("keep-me")' "$BORG_REGISTRY"
+    run jq -e '.repositories | has("keep-me")' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
 }
 
 @test "contract: rm of an unregistered repository dies cleanly and leaves the registry valid" {
-    printf '%s' '{"projects":{"keep-me":{"path":"/tmp/keep"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"keep-me":{"path":"/tmp/keep"}}}' > "$BORG_REGISTRY"
     run_zsh_borg rm ghost-repository
     [ "$status" -ne 0 ]
     [[ "$output" == *"not in registry"* ]] || false
 
     run jq -e '.' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
-    run jq -e '.projects | has("keep-me")' "$BORG_REGISTRY"
+    run jq -e '.repositories | has("keep-me")' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
 }
 
 # cmd_pin/cmd_unpin (borg.zsh:1189, 1197) are pure registry read/write; no mocking needed.
 
 @test "contract: pin sets pinned=true on an existing repository" {
-    printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha","pinned":false}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"alpha":{"path":"/tmp/alpha","pinned":false}}}' > "$BORG_REGISTRY"
     run_zsh_borg pin alpha
     [ "$status" -eq 0 ]
     [[ "$output" == *"Pinned: alpha"* ]] || false
 
-    run jq -r '.projects.alpha.pinned' "$BORG_REGISTRY"
+    run jq -r '.repositories.alpha.pinned' "$BORG_REGISTRY"
     [ "$output" = "true" ]
 }
 
 @test "contract: pin of an unregistered repository dies cleanly without corrupting the registry" {
-    printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
     run_zsh_borg pin ghost
     [ "$status" -ne 0 ]
     [[ "$output" == *"not in registry"* ]] || false
 
-    run jq -e '.projects.alpha' "$BORG_REGISTRY"
+    run jq -e '.repositories.alpha' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
 }
 
 @test "contract: pin with no argument falls back to the cwd basename and fails cleanly if unregistered" {
     local proj_dir="${BATS_TEST_TMPDIR}/unregistered-cwd"
     mkdir -p "$proj_dir"
-    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{}}' > "$BORG_REGISTRY"
 
     run zsh -c "cd '$proj_dir' && '$BORG' pin"
     [ "$status" -ne 0 ]
@@ -774,22 +774,22 @@ EOF
 }
 
 @test "contract: unpin sets pinned=false on an existing repository" {
-    printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha","pinned":true}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"alpha":{"path":"/tmp/alpha","pinned":true}}}' > "$BORG_REGISTRY"
     run_zsh_borg unpin alpha
     [ "$status" -eq 0 ]
     [[ "$output" == *"Unpinned: alpha"* ]] || false
 
-    run jq -r '.projects.alpha.pinned' "$BORG_REGISTRY"
+    run jq -r '.repositories.alpha.pinned' "$BORG_REGISTRY"
     [ "$output" = "false" ]
 }
 
 @test "contract: unpin of an unregistered repository dies cleanly without corrupting the registry" {
-    printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
     run_zsh_borg unpin ghost
     [ "$status" -ne 0 ]
     [[ "$output" == *"not in registry"* ]] || false
 
-    run jq -e '.projects.alpha' "$BORG_REGISTRY"
+    run jq -e '.repositories.alpha' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
 }
 
@@ -810,13 +810,13 @@ exit 0
 EOF
     chmod +x "$MOCK_BIN/tmux"
 
-    printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
     run_zsh_borg color alpha blue
     [ "$status" -eq 0 ]
     [[ "$output" == *"Color for alpha"*"blue"* ]] || false
     [[ "$output" != *"Applied to live tmux window"* ]] || false
 
-    run jq -r '.projects.alpha.color' "$BORG_REGISTRY"
+    run jq -r '.repositories.alpha.color' "$BORG_REGISTRY"
     [ "$output" = "blue" ]
 }
 
@@ -837,7 +837,7 @@ exit 0
 EOF
     chmod +x "$MOCK_BIN/tmux"
 
-    printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
     run_zsh_borg color alpha green
     [ "$status" -eq 0 ]
     [[ "$output" == *"Applied to live tmux window."* ]] || false
@@ -848,14 +848,14 @@ EOF
 }
 
 @test "contract: color with missing arguments dies cleanly with usage" {
-    printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
     run_zsh_borg color alpha
     [ "$status" -ne 0 ]
     [[ "$output" == *"Usage: borg color"* ]] || false
 }
 
 @test "contract: color of an unregistered repository dies cleanly" {
-    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{}}' > "$BORG_REGISTRY"
     run_zsh_borg color ghost blue
     [ "$status" -ne 0 ]
     [[ "$output" == *"Unknown repository: ghost"* ]] || false
@@ -1095,7 +1095,7 @@ EOF
     local proj_dir="${BATS_TEST_TMPDIR}/proj-stale"
     mkdir -p "$proj_dir/.borg"
     printf '{"status":"active","last_activity":"2020-01-01T00:00:00Z"}' > "$proj_dir/.borg/state.json"
-    printf '{"projects":{"proj-stale":{"path":"%s","source":"cli"}}}' "$proj_dir" > "$BORG_REGISTRY"
+    printf '{"repositories":{"proj-stale":{"path":"%s","source":"cli"}}}' "$proj_dir" > "$BORG_REGISTRY"
 
     run_zsh_borg reap
     [ "$status" -eq 0 ]
@@ -1149,7 +1149,7 @@ EOF
     git -C "$repo" worktree add -q "$wt" -b feat-expired
     touch -t 200001010000 "$wt" "$(git -C "$wt" rev-parse --absolute-git-dir)/index"
 
-    printf '{"projects":{"repo-wt":{"path":"%s","source":"cli"}}}' "$repo" > "$BORG_REGISTRY"
+    printf '{"repositories":{"repo-wt":{"path":"%s","source":"cli"}}}' "$repo" > "$BORG_REGISTRY"
 
     run_zsh_borg reap-worktrees repo-wt
     [ "$status" -eq 0 ]
@@ -1226,7 +1226,7 @@ EOF
 
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "demoproj": {
       "path": null,
       "source": "cli",
@@ -1285,7 +1285,7 @@ EOF
 
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "demoproj": {
       "path": null,
       "source": "cli",
@@ -1408,7 +1408,7 @@ EOF
     export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/orchestrator-root"
     mkdir -p "$BORG_ORCHESTRATOR_ROOT"
 
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo.","last_activity":"2026-08-01T10:00:00Z"}}}' \
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo.","last_activity":"2026-08-01T10:00:00Z"}}}' \
         > "$BORG_REGISTRY"
 
     cat > "$MOCK_BIN/claude" <<EOF
@@ -1456,7 +1456,7 @@ EOF
 
     local here="${BATS_TEST_TMPDIR}/ws/here" there="${BATS_TEST_TMPDIR}/ws/there"
     mkdir -p "$here" "$there"
-    printf '{"projects":{"here":{"path":"%s","source":"cli","status":"idle","summary":"Here.","last_activity":"2026-08-01T10:00:00Z"},"there":{"path":"%s","source":"cli","status":"idle","summary":"There.","last_activity":"2026-08-01T10:00:00Z"}}}' \
+    printf '{"repositories":{"here":{"path":"%s","source":"cli","status":"idle","summary":"Here.","last_activity":"2026-08-01T10:00:00Z"},"there":{"path":"%s","source":"cli","status":"idle","summary":"There.","last_activity":"2026-08-01T10:00:00Z"}}}' \
         "$here" "$there" > "$BORG_REGISTRY"
 
     local real_python
@@ -1526,7 +1526,7 @@ EOF
     export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/orchestrator-root"
     mkdir -p "$BORG_ORCHESTRATOR_ROOT"
 
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo.","last_activity":"2026-08-01T10:00:00Z"}}}' \
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo.","last_activity":"2026-08-01T10:00:00Z"}}}' \
         > "$BORG_REGISTRY"
 
     local real_python
@@ -1816,7 +1816,7 @@ EOF
 # both work), but there is no reachable path in this suite to a real archive write.
 
 @test "contract: regenerate reports no stale repositories on a fresh, empty registry" {
-    echo '{"projects":{}}' > "$BORG_REGISTRY"
+    echo '{"repositories":{}}' > "$BORG_REGISTRY"
 
     run_zsh_borg regenerate
 
@@ -1825,7 +1825,7 @@ EOF
 }
 
 @test "contract: regenerate finds a stale repository and fails cleanly (non-interactive) without archiving it" {
-    printf '{"projects":{"stale-proj":{"path":"/tmp/stale-proj","status":"idle","last_activity":"2020-01-01T00:00:00Z"}}}' \
+    printf '{"repositories":{"stale-proj":{"path":"/tmp/stale-proj","status":"idle","last_activity":"2020-01-01T00:00:00Z"}}}' \
         > "$BORG_REGISTRY"
 
     run_zsh_borg regenerate < /dev/null
@@ -2058,18 +2058,18 @@ _assert_link_golden() {
 # render nothing. A repository with a null path is given a directory under cpws/ to hold its checkpoint.
 _link_seed_checkpoints() {
     local name dir
-    jq -r '.projects | to_entries[] | select(.value.summary | type == "string") | .key' "$BORG_REGISTRY" \
+    jq -r '.repositories | to_entries[] | select(.value.summary | type == "string") | .key' "$BORG_REGISTRY" \
         | while read -r name; do
-            dir=$(jq -r --arg n "$name" '.projects[$n].path // empty' "$BORG_REGISTRY")
+            dir=$(jq -r --arg n "$name" '.repositories[$n].path // empty' "$BORG_REGISTRY")
             [ -n "$dir" ] || dir="${BATS_TEST_TMPDIR}/cpws/$name"
             mkdir -p "$dir/.borg/checkpoints"
             {
                 printf '**tl;dr** — '
-                jq -j --arg n "$name" '.projects[$n].summary' "$BORG_REGISTRY"
+                jq -j --arg n "$name" '.repositories[$n].summary' "$BORG_REGISTRY"
                 printf '\n\n## 1. Goal\n\nSeeded by the fixture.\n'
             } > "$dir/.borg/checkpoints/2026-08-01-0900.md"
             jq --arg n "$name" --arg d "$dir" \
-                '.projects[$n] |= (del(.summary) | .path = $d)' "$BORG_REGISTRY" > "$BORG_REGISTRY.tmp" \
+                '.repositories[$n] |= (del(.summary) | .path = $d)' "$BORG_REGISTRY" > "$BORG_REGISTRY.tmp" \
                 && mv "$BORG_REGISTRY.tmp" "$BORG_REGISTRY"
         done
 }
@@ -2089,7 +2089,7 @@ _link_seed_checkpoints() {
 _link_registry_porcelain() {
     cat > "$BORG_REGISTRY" <<'EOF'
 {
-  "projects": {
+  "repositories": {
     "alpha": {"path": null, "source": "cli", "status": "idle",
               "last_activity": "2026-08-01T10:00:00Z",
               "summary": "Alpha porcelain summary running well past the eighty character cut so truncation is pinned."},
@@ -2161,7 +2161,7 @@ _link_registry_overview() {
 
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "alpha": {"path": "$root/alpha", "source": "cli", "status": "idle",
               "last_activity": "$t_alpha",
               "summary": "Alpha carries a long summary so the fifty character overview cut is pinned."},
@@ -2276,7 +2276,7 @@ _link_registry_deep() {
     t_delta=$(_link_iso_ago 10800)  # "3h ago"
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "delta": {
       "path": "$d",
       "source": "cli",
@@ -2311,7 +2311,7 @@ _link_registry_busy() {
     _link_mock_tmux $'p1\np2\np3\np4'
     cat > "$BORG_REGISTRY" <<'EOF'
 {
-  "projects": {
+  "repositories": {
     "p1": {"path": null, "source": "cli", "status": "active", "last_activity": "2026-08-01T10:00:00Z"},
     "p2": {"path": null, "source": "cli", "status": "active", "last_activity": "2026-08-01T10:00:00Z"},
     "p3": {"path": null, "source": "cli", "status": "waiting", "last_activity": "2026-08-01T10:00:00Z"},
@@ -2412,7 +2412,7 @@ _link_registry_grid() {
 
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "platform": {"path": "$root/platform", "source": "cli", "status": "active", "pinned": true,
                  "last_activity": "$t_platform", "tmux_window": "platform",
                  "claude_session_id": "sess-platform-0007",
@@ -2473,9 +2473,9 @@ _link_add_worktree() {
         > "$wt/.borg/checkpoints/2026-07-30-0900.md"
     t_wt=$(_link_iso_ago 600)  # "10m ago"
     jq --arg p "$wt" --arg r "$root/platform/.git" --arg t "$t_wt" \
-        '.projects["platform-feat"] = {"path": $p, "source": "cli", "status": "waiting", "last_activity": $t,
+        '.repositories["platform-feat"] = {"path": $p, "source": "cli", "status": "waiting", "last_activity": $t,
             "tmux_window": "platform-feat", "claude_session_id": "sess-feat-0009", "repo": $r}
-         | .projects.platform.repo = $r' "$BORG_REGISTRY" > "$BORG_REGISTRY.tmp" \
+         | .repositories.platform.repo = $r' "$BORG_REGISTRY" > "$BORG_REGISTRY.tmp" \
         && mv "$BORG_REGISTRY.tmp" "$BORG_REGISTRY"
 }
 
@@ -2707,7 +2707,7 @@ _assert_link_grid_golden() {
 _link_registry_control_chars() {
     cat > "$BORG_REGISTRY" <<'EOF'
 {
-  "projects": {
+  "repositories": {
     "alpha": {"path": null, "source": "cli", "status": "idle",
               "last_activity": "2026-08-01T10:00:00Z", "summary": "top\nbottom"},
     "bravo": {"path": null, "source": "cli", "status": "idle",
@@ -2750,7 +2750,7 @@ EOF
 # behavior (which would push a human sentence into fzf's stream) or drop the silent-exit contract.
 @test "contract: link --porcelain prints nothing at all on an empty registry" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{}}' > "$BORG_REGISTRY"
 
     run_zsh_borg link --porcelain
     [ "$status" -eq 0 ]
@@ -2817,7 +2817,7 @@ EOF
     _link_mock_tmux "held"
     cat > "$BORG_REGISTRY" <<'EOF'
 {
-  "projects": {
+  "repositories": {
     "ghosted": {"path": null, "source": "cli", "status": "active",
                 "last_activity": "2020-01-01T00:00:00Z", "summary": "Stale and unwindowed."},
     "held": {"path": null, "source": "cli", "status": "active",
@@ -2852,7 +2852,7 @@ EOF
     mkdir -p "$good/.borg" "$bad/.borg"
     printf '{"status":"idle","last_activity":"2026-08-01T10:00:00Z"}' > "$good/.borg/state.json"
     printf 'NOT JSON AT ALL' > "$bad/.borg/state.json"
-    printf '{"projects":{"goodproj":{"path":"%s","source":"cli","summary":"Good."},"badproj":{"path":"%s","source":"cli","summary":"Bad."}}}' \
+    printf '{"repositories":{"goodproj":{"path":"%s","source":"cli","summary":"Good."},"badproj":{"path":"%s","source":"cli","summary":"Bad."}}}' \
         "$good" "$bad" > "$BORG_REGISTRY"
 
     run_zsh_borg link
@@ -2883,7 +2883,7 @@ EOF
     _link_mock_tmux $'dotted-name\nplain'
     cat > "$BORG_REGISTRY" <<'EOF'
 {
-  "projects": {
+  "repositories": {
     "dotted.name": {"path": null, "source": "cli", "status": "active",
                     "last_activity": "2020-01-01T00:00:00Z", "summary": "Regex bait."},
     "plain": {"path": null, "source": "cli", "status": "active",
@@ -2926,7 +2926,7 @@ EOF
 
 @test "contract: link overview on an empty registry prints the scan hint and exits 0" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{}}' > "$BORG_REGISTRY"
 
     run_zsh_borg link
     [ "$status" -eq 0 ]
@@ -2940,7 +2940,7 @@ EOF
 # used to lean on by running from wherever bats happened to be.
 @test "contract: link from an unregistered directory prints the hint page, never the overview, and exits 0" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"registered-secret":{"path":null,"source":"cli","status":"idle"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"registered-secret":{"path":null,"source":"cli","status":"idle"}}}' > "$BORG_REGISTRY"
     local stranger="${BATS_TEST_TMPDIR}/stranger"
     mkdir -p "$stranger"
 
@@ -2961,7 +2961,7 @@ EOF
 
 @test "contract: link overview prints the discovery tip when only one repository is registered" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle"}}}' > "$BORG_REGISTRY"
 
     run_zsh_borg link
     [ "$status" -eq 0 ]
@@ -2973,7 +2973,7 @@ EOF
 # also fire and blur which branch produced the output.
 @test "contract: link overview points at --all when every repository is archived" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"a1":{"path":null,"status":"archived"},"a2":{"path":null,"status":"archived"}}}' \
+    printf '%s' '{"repositories":{"a1":{"path":null,"status":"archived"},"a2":{"path":null,"status":"archived"}}}' \
         > "$BORG_REGISTRY"
 
     run_zsh_borg link
@@ -3027,7 +3027,7 @@ EOF
     # TWO repositories, only one paused: the pause row is bound to its repository by an awk join on the
     # repository field (borg.zsh:374). With a single-repository registry a port that printed the row under
     # EVERY repository, or ignored the repository field entirely, passed.
-    printf '%s' '{"projects":{"awake":{"path":null,"source":"cli","status":"idle","summary":"Awake.","last_activity":"2026-08-01T10:00:00Z"},"paused":{"path":null,"source":"coco","status":"idle","summary":"Paused.","last_activity":"2026-08-02T10:00:00Z"}}}' \
+    printf '%s' '{"repositories":{"awake":{"path":null,"source":"cli","status":"idle","summary":"Awake.","last_activity":"2026-08-01T10:00:00Z"},"paused":{"path":null,"source":"coco","status":"idle","summary":"Paused.","last_activity":"2026-08-02T10:00:00Z"}}}' \
         > "$BORG_REGISTRY"
 
     local future
@@ -3067,7 +3067,7 @@ EOF
 # an empty column still satisfies `*"Session ID:"*`.
 @test "contract: link <repository> deep dive omits every optional section for a path-null repository" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"nopath":{"path":null,"source":"desktop","status":"idle"}}}' \
+    printf '%s' '{"repositories":{"nopath":{"path":null,"source":"desktop","status":"idle"}}}' \
         > "$BORG_REGISTRY"
 
     run_zsh_borg link nopath
@@ -3105,7 +3105,7 @@ EOF
 # line, and every line after the first indented.
 @test "contract: link <repository> deep dive wraps and indents a summary longer than 70 columns" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"wordy":{"path":null,"source":"cli","status":"idle","summary":"This summary is deliberately far longer than seventy columns so that the fold pipeline has to break it across at least three separate rendered lines."}}}' \
+    printf '%s' '{"repositories":{"wordy":{"path":null,"source":"cli","status":"idle","summary":"This summary is deliberately far longer than seventy columns so that the fold pipeline has to break it across at least three separate rendered lines."}}}' \
         > "$BORG_REGISTRY"
     _link_seed_checkpoints
 
@@ -3153,7 +3153,7 @@ Nothing here is done yet.
 - [ ] First criterion, outstanding.
 - [ ] Second criterion, outstanding.
 EOF
-    printf '{"projects":{"nox":{"path":"%s","source":"cli","status":"idle","summary":"Fresh plan."}}}' "$d" \
+    printf '{"repositories":{"nox":{"path":"%s","source":"cli","status":"idle","summary":"Fresh plan."}}}' "$d" \
         > "$BORG_REGISTRY"
 
     # THE PLAN LEFT THE HUMAN PAGE on 2026-10-13 (a directory's page is strictly the directory; the plan is a
@@ -3171,7 +3171,7 @@ EOF
 
 @test "contract: link <repository> dies non-zero on a repository that is not registered" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"known":{"path":null,"status":"idle"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"known":{"path":null,"status":"idle"}}}' > "$BORG_REGISTRY"
 
     run_zsh_borg link ghost-repository
     [ "$status" -ne 0 ]
@@ -3222,7 +3222,7 @@ _link_registry_noshipdate() {
     local root="${BATS_TEST_TMPDIR}/ws-noshipdate"
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "kilo": {"path": "$root/kilo", "source": "cli", "status": "idle",
              "summary": "Kilo has one assimilated plan with no Shipped: line."}
   }
@@ -3772,7 +3772,7 @@ _link_picture_budget() {
     local root="${BATS_TEST_TMPDIR}/ws"
     mkdir -p "$root/solo"
     export BORG_ORCHESTRATOR_ROOT="$root"
-    printf '{"projects":{"solo":{"path":"%s","source":"cli","status":"idle","summary":"No manifests here."}}}' \
+    printf '{"repositories":{"solo":{"path":"%s","source":"cli","status":"idle","summary":"No manifests here."}}}' \
         "$root/solo" > "$BORG_REGISTRY"
 
     _link_grid_run "$root" "${BATS_TEST_TMPDIR}/orch-empty.txt" link
@@ -3802,7 +3802,7 @@ exit 0
 EOF
     chmod +x "$MOCK_BIN/claude"
 
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo.","last_activity":"2026-08-01T10:00:00Z"}}}' \
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo.","last_activity":"2026-08-01T10:00:00Z"}}}' \
         > "$BORG_REGISTRY"
 
     # THE NEGATIVE HALF IS LOAD-BEARING AND CONDITIONAL ON THE MOCK SUCCEEDING. Since the 2026-08-27
@@ -3836,7 +3836,7 @@ EOF
 # The negative assertion is what proves the short circuit fires — the fallback renders the cube.
 @test "contract: link --brief on an empty registry returns early without an LLM call" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{}}' > "$BORG_REGISTRY"
 
     run_zsh_borg link --brief
     [ "$status" -eq 0 ]
@@ -3857,7 +3857,7 @@ EOF
 # gh-trace control in link_sweep.bats are together what pin that it still carries NO semantics.
 @test "contract: link tolerates an unknown flag and still renders the overview at exit 0" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
         > "$BORG_REGISTRY"
 
     run_zsh_borg link --totally-bogus
@@ -3874,7 +3874,7 @@ EOF
 #                                   then sweep and render anyway, still at exit 0.
 @test "contract: link --help and -h print usage instead of the overview (AC1)" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
         > "$BORG_REGISTRY"
 
     local flag
@@ -3970,7 +3970,7 @@ EOF
 }
 
 # The link-side half of the same guard (the hardened spec's B8). `borg link --json` has NEITHER trap
-# the recon case above relies on: borg_core/registry/shell.py:34-36 CREATES {"projects":{}} when the
+# the recon case above relies on: borg_core/registry/shell.py:34-36 CREATES {"repositories":{}} when the
 # file is absent, so a wrongly-resolved registry exits 0 with a structurally valid empty document
 # and zero diagnostics.
 #
@@ -3995,9 +3995,9 @@ EOF
     local alt="${BATS_TEST_TMPDIR}/elsewhere/registry.json"
     mkdir -p "${BATS_TEST_TMPDIR}/elsewhere"
     printf '%s' \
-        '{"projects":{"b8-sentinel-zarquon":{"path":null,"source":"cli","status":"idle","summary":"S."}}}' \
+        '{"repositories":{"b8-sentinel-zarquon":{"path":null,"source":"cli","status":"idle","summary":"S."}}}' \
         > "$alt"
-    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{}}' > "$BORG_REGISTRY"
     printf 'BORG_REGISTRY=%s\n' "$alt" > "$BORG_DIR/config.zsh"
 
     run bash -c "zsh -c \"unset BORG_REGISTRY BORG_DIR; '$BORG' link --json\" | jq -r '.order[]'"
@@ -4169,7 +4169,7 @@ EOF
 }
 
 @test "contract: link --json --refresh keeps cmd_scan's info lines off stdout" {
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
         > "$BORG_REGISTRY"
 
     zsh "$BORG" link --json --refresh > "${BATS_TEST_TMPDIR}/r.out" 2> "${BATS_TEST_TMPDIR}/r.err"
@@ -4184,7 +4184,7 @@ EOF
 }
 
 @test "contract: link --json dies on an unknown repository with empty stdout" {
-    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{}}' > "$BORG_REGISTRY"
 
     run bash -c "zsh '$BORG' link --json ghost > '${BATS_TEST_TMPDIR}/o' 2> '${BATS_TEST_TMPDIR}/e'"
     [ "$status" -eq 1 ]
@@ -4299,7 +4299,7 @@ EOF
 # real borg_core execution, mirroring the A2 test's shape (bats:2298-2304).
 @test "contract: link --json reaps a stale active repository to idle, and BORG_NO_REAP restores it" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"stale1":{"path":null,"source":"cli","status":"active","last_activity":"2020-01-01T00:00:00Z"}}}' \
+    printf '%s' '{"repositories":{"stale1":{"path":null,"source":"cli","status":"active","last_activity":"2020-01-01T00:00:00Z"}}}' \
         > "$BORG_REGISTRY"
 
     run bash -c "zsh '$BORG' link --json | jq -r '.projects.stale1.status'"
@@ -4358,7 +4358,7 @@ EOF
 # RED; it can only pass after a real flip with no zsh renderer left standing behind the dispatch.
 @test "contract: all three human link modes fail when python3 is unavailable" {
     _link_mock_tmux ""
-    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+    printf '%s' '{"repositories":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
         > "$BORG_REGISTRY"
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
@@ -4443,7 +4443,7 @@ _repo_norm() {
 # `borg chain`; the contract step of the chain -> stack rename moved each one onto `borg stack`.
 
 @test "contract: --recon outside plan dies named, not via argparse exit 2" {
-    echo '{"projects": {}}' > "$BORG_REGISTRY"
+    echo '{"repositories": {}}' > "$BORG_REGISTRY"
     run zsh -c "'$BORG' stack list --recon /tmp/x.json"
     [ "$status" -ne 0 ]
     [[ "$output" == *"--recon is only valid with 'plan'"* ]] || false
@@ -4463,7 +4463,7 @@ _repo_norm() {
 # docs/plans/assimilated/2026-10-13-chain-to-stack-rename.md, sections (a) and (c).
 
 @test "contract: argless 'borg stack' reaches the list default instead of a shift crash" {
-    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"repositories": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
     mkdir -p "$BATS_TEST_TMPDIR/proj"
     run zsh -c "'$BORG' stack"
     [ "$status" -eq 0 ]
@@ -4472,7 +4472,7 @@ _repo_norm() {
 
 @test "contract: 'borg stack list' sweeps a registry manifest end to end" {
     mkdir -p "$BATS_TEST_TMPDIR/proj/.stacks"
-    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"repositories": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
     echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
         > "$BATS_TEST_TMPDIR/proj/.stacks/auth.json"
     run zsh -c "'$BORG' stack list"
@@ -4489,7 +4489,7 @@ _repo_norm() {
 
 @test "contract: a manifest only under .borg/chains renders nowhere and borg stack names the repository and borg stack migrate" {
     mkdir -p "$BATS_TEST_TMPDIR/proj/.borg/chains"
-    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"repositories": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
     echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
         > "$BATS_TEST_TMPDIR/proj/.borg/chains/auth.json"
     run zsh -c "'$BORG' stack list"
@@ -4502,7 +4502,7 @@ _repo_norm() {
 
 @test "contract: borg link names the repository and borg stack migrate for a manifest only under .borg/chains" {
     mkdir -p "$BATS_TEST_TMPDIR/proj/.borg/chains"
-    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"repositories": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
     echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
         > "$BATS_TEST_TMPDIR/proj/.borg/chains/auth.json"
     run zsh -c "'$BORG' link --local --overview --json"
@@ -4553,7 +4553,7 @@ _migrate_repo() {
     git -C "$repo" add -A
     git -C "$repo" commit -q -m init
     echo '{"program": "hidden", "rows": []}' > "$repo/.borg/chains/hidden.json"
-    echo '{"projects": {"'"$1"'": {"path": "'"$repo"'"}}}' > "$BORG_REGISTRY"
+    echo '{"repositories": {"'"$1"'": {"path": "'"$repo"'"}}}' > "$BORG_REGISTRY"
 }
 
 @test "contract: borg stack migrate --dry-run prints the plan and writes nothing" {
@@ -4609,7 +4609,7 @@ _migrate_repo() {
 @test "contract: borg stack migrate takes a registry name and migrates that repository alone" {
     _migrate_repo alpha
     _migrate_repo beta
-    echo '{"projects": {"alpha": {"path": "'"$BATS_TEST_TMPDIR"'/alpha"}, "beta": {"path": "'"$BATS_TEST_TMPDIR"'/beta"}}}' > "$BORG_REGISTRY"
+    echo '{"repositories": {"alpha": {"path": "'"$BATS_TEST_TMPDIR"'/alpha"}, "beta": {"path": "'"$BATS_TEST_TMPDIR"'/beta"}}}' > "$BORG_REGISTRY"
     run zsh -c "'$BORG' stack migrate beta"
     [ "$status" -eq 0 ]
     [ -f "$BATS_TEST_TMPDIR/beta/.stacks/tracked.json" ]
@@ -4670,7 +4670,7 @@ _migrate_repo() {
 
 @test "contract: 'borg chain' does not read a registry manifest it used to sweep" {
     mkdir -p "$BATS_TEST_TMPDIR/proj/.stacks"
-    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"repositories": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
     echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
         > "$BATS_TEST_TMPDIR/proj/.stacks/auth.json"
     run zsh -c "'$BORG' chain list"
@@ -4702,7 +4702,7 @@ _migrate_repo() {
 _scope_two_repos() {
     mkdir -p "${BATS_TEST_TMPDIR}/ws/alpha" "${BATS_TEST_TMPDIR}/ws/beta"
     cat > "$BORG_REGISTRY" <<JSON
-{"projects": {
+{"repositories": {
   "alpha": {"path": "${BATS_TEST_TMPDIR}/ws/alpha", "status": "idle"},
   "beta":  {"path": "${BATS_TEST_TMPDIR}/ws/beta",  "status": "idle"}
 }}
@@ -4840,7 +4840,7 @@ EOF
 _printf_jq_registry() {   # $1: extra entry fields (e.g. a tmux_window), or empty
     cat > "$BORG_REGISTRY" <<EOF
 {
-  "projects": {
+  "repositories": {
     "alpha": {"path": null, "source": "cli", "status": "idle",
               "last_activity": "2026-08-01T10:00:00Z", "summary": "first line\nsecond line"$1}
   }
@@ -4861,7 +4861,7 @@ EOF
     _printf_jq_registry ""
     mkdir -p "${BATS_TEST_TMPDIR}/alpha-ws/.borg/checkpoints"
     printf '**tl;dr** -- checkpoint line one\n' > "${BATS_TEST_TMPDIR}/alpha-ws/.borg/checkpoints/2026-10-01-0900.md"
-    jq --arg p "${BATS_TEST_TMPDIR}/alpha-ws" '.projects.alpha.path = $p' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
+    jq --arg p "${BATS_TEST_TMPDIR}/alpha-ws" '.repositories.alpha.path = $p' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
     mv "${BORG_REGISTRY}.new" "$BORG_REGISTRY"
 
     run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_status alpha\" 2>&1"
@@ -4948,7 +4948,7 @@ EOF
 # ── borg window ──────────────────────────────────────────────────────────────
 
 @test "contract: window prints the effective name, sets a short one, and rejects with the reason" {
-    printf '%s' '{"projects":{"widget-factory":{"path":"/tmp/w"},"other":{"path":"/tmp/o","tmux_window":"wf"}}}' \
+    printf '%s' '{"repositories":{"widget-factory":{"path":"/tmp/w"},"other":{"path":"/tmp/o","tmux_window":"wf"}}}' \
         > "$BORG_REGISTRY"
 
     run_zsh_borg window widget-factory
@@ -4958,7 +4958,7 @@ EOF
     run_zsh_borg window widget-factory widget
     [ "$status" -eq 0 ]
     [[ "$output" == *"widget"* ]] || false
-    run jq -r '.projects["widget-factory"].tmux_window' "$BORG_REGISTRY"
+    run jq -r '.repositories["widget-factory"].tmux_window' "$BORG_REGISTRY"
     [ "$output" = "widget" ]
 
     run_zsh_borg window widget-factory
@@ -4967,7 +4967,7 @@ EOF
     run_zsh_borg window widget-factory wf
     [ "$status" -ne 0 ]
     [[ "$output" == *"already tmux window"* || "$output" == *"already the tmux window"* ]] || false
-    run jq -r '.projects["widget-factory"].tmux_window' "$BORG_REGISTRY"
+    run jq -r '.repositories["widget-factory"].tmux_window' "$BORG_REGISTRY"
     [ "$output" = "widget" ]
 
     run_zsh_borg window widget-factory "a.b"
@@ -4982,7 +4982,7 @@ EOF
 # only there, so reaching the Python child proves _borg_py applies it -- an exported var would pass
 # whether or not the wrapper forwarded anything.
 @test "contract: window reaches the python child with the session name from config.zsh, unexported" {
-    printf '%s' '{"projects":{"widget":{"path":"/tmp/w"}}}' > "$BORG_REGISTRY"
+    printf '%s' '{"repositories":{"widget":{"path":"/tmp/w"}}}' > "$BORG_REGISTRY"
     mkdir -p "$BORG_DIR"
     printf 'BORG_TMUX_SESSION=work\n' > "$BORG_DIR/config.zsh"
     unset BORG_TMUX_SESSION

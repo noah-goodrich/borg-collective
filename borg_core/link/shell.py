@@ -256,7 +256,7 @@ def read_state(repository_path: str | None, repo: object = paths.FORK_GIT) -> di
 def collect_states(registry: dict) -> dict[str, dict]:
     """Every repository's state.json, keyed by repository name; repositories without one are absent."""
     states: dict[str, dict] = {}
-    repositories = registry.get("projects") or {}
+    repositories = registry.get("repositories") or {}
     for name, repository_path in core.repository_paths(registry):
         if not name:
             continue

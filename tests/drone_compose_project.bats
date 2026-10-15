@@ -82,7 +82,7 @@ MOCK
 
 _register() {  # name dir [tmux_window]
     jq -n --arg n "$1" --arg d "$2" --arg w "${3:-}" \
-        '{projects: {($n): {path: $d, tmux_window: (if $w == "" then null else $w end)}}}' > "$BORG_REGISTRY"
+        '{repositories: {($n): {path: $d, tmux_window: (if $w == "" then null else $w end)}}}' > "$BORG_REGISTRY"
 }
 
 @test "up finds the container when the registry name differs from the folder" {

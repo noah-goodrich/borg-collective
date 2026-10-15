@@ -172,7 +172,7 @@ _squash_two() {
 
 @test "CLI dry run: real names, exact count, nothing removed" {
     _squash_two
-    printf '{"projects":{"repo":{"path":"%s","source":"cli","status":"idle"}}}' "$REPO" > "$BORG_REGISTRY"
+    printf '{"repositories":{"repo":{"path":"%s","source":"cli","status":"idle"}}}' "$REPO" > "$BORG_REGISTRY"
     run env BORG_REAP_DRY_RUN= zsh "${BATS_TEST_DIRNAME}/../borg.zsh" reap-worktrees --dry-run
     [ "$status" -eq 0 ]
     printf '%s' "$output" | grep -q "Would reap .*feat-z1.* in repo"
