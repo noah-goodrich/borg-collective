@@ -26,16 +26,23 @@
 
 ## Acceptance criteria
 
-- [ ] nanoprobe can reach a preferred tool, and only that.
+*2026-10-15: two boxes stay open and are owed on the owner's work machine (the preference is live on this machine, and a real nanoprobe run opens its PR through the preferred skill), so this directive stays here until they are ticked.*
+
+- [x] nanoprobe can reach a preferred tool, and only that.
   - Verify: the new bats tests pass for Skill in `tools:`, step 3's prefer-tool path and fallback, and the scope-gate sentence.
-- [ ] borg names no team plugin.
+  - Evidence 2026-10-15: `bats -f '^nanoprobe: ' tests/prose_contracts.bats` passes 7 of 7 on main at 6927b4df, covering Skill in `tools:`, step 3's prefer-tool path and fallback, the hook as gate, the return-contract slot and the scope-gate fence.
+- [x] borg names no team plugin.
   - Verify: the bats case "nanoprobe: the agent names no plugin skill but borg's own" passes, and its paired case proves the check fires on a made-up `acme-tools:open-pr`. The check matches any `plugin:skill` pair, so it needs no team's name in this public repository.
+  - Evidence 2026-10-15: "nanoprobe: the agent names no plugin skill but borg's own" and its paired "nanoprobe: the plugin-skill check catches a made-up pair, not a placeholder or borg's own" both pass (cases 6 and 7 of the run above).
 - [ ] The preference is live on Noah's machine.
   - Verify: `python3 -m borg_core.extensions.cli survey` lists the nanoprobe brief's preference as live, not unprobed or dead.
+  - Owed on the work machine, 2026-10-15: the preference is a machine-layer extension that exists only there. On this machine `python3 -m borg_core.extensions.cli survey` prints "no prefer-tool extensions on this machine or in this repository". Not ticked.
 - [ ] A real nanoprobe run opens its PR through the preferred skill.
   - Verify: the first nanoprobe PR after release is the check. Its transcript shows the Skill call to the preferred tool, and the PR body follows that repo's template. The bypass log can't confirm this, because the preferred skill runs `gh pr create` itself. If the call fails, the fallback opens the PR with `gh pr create`, which is today's behavior, so the check needs no throwaway repo or PR.
-- [ ] Nothing else regresses, and the copy matches the source.
+  - Owed on the work machine, 2026-10-15: this machine has no preference to exercise, so the check cannot run here. Not ticked.
+- [x] Nothing else regresses, and the copy matches the source.
   - Verify: `make test` passes in CI, and `diff -r agents/ ~/dev/claude-plugins/borg-collective/agents/` is clean after the sync.
+  - Evidence 2026-10-15: `diff -r agents/ claude-plugins/borg-collective/agents/` is clean against the mirror rebuilt today from 6927b4df; `make test` passes (2289 pytest cases) and `bats tests/cli_contract.bats` passes 209 of 209 from a worktree of main.
 
 ## Non-Goals
 
