@@ -78,6 +78,7 @@ agents/ (6, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
     borg-verifier.md        Read-only pre-merge evaluator (PASS/FAIL)
 install.sh                  Installer: deps, symlinks, hooks, skills, launchd agents, tmux keybinding
 lib/launchd-label.zsh       THE launchd label resolver (see "launchd labels" under Key Patterns)
+lib/launchd-agents.zsh      borg setup warning for shipped launchd agents that are not loaded
 launchd/                    Templates; Label is `{{LABEL}}`, installed as <label>.plist
     borg.notifyd.plist      LaunchAgent: borg-notifyd (fswatch daemon)
     borg.cortex-wake.plist  LaunchAgent: borg-cortex-watch (30s interval)

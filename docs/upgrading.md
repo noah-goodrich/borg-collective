@@ -95,7 +95,7 @@ claude plugin update borg-collective@<MARKETPLACE>
 claude plugin list
 ```
 
-e. Restart every open Claude Code session. A running session keeps the hooks and skills it loaded at start, so it can report the new version while still running old code.
+e. Restart every open Claude Code session. A running session keeps the hooks and skills it loaded at start, so it can report the new version while still running old code. A resumed conversation (`claude --resume` or `claude --continue`) loads the new instruction and skill files but keeps the old context. For a fresh conversation, start `claude` without a resume flag, or open a managed window with `borg init` or `drone up`.
 
 Then do section 5 and section 6.
 
@@ -106,11 +106,24 @@ Find the row for the version you started from. If you skipped several releases, 
 | Upgrading from | Required steps |
 |----------------|----------------|
 | 0.9.5 or earlier | Stack manifests, below |
+| Before 0.9.4, or never ran install.sh | Launchd agents, below |
 | 0.9.6 | None |
 | 0.9.7 | Registry key, below |
 | 0.9.8 | None |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
+
+### Launchd agents (install.sh)
+
+`install.sh` is the only installer of borg's launchd agents: the resume watcher, the notification daemon, the usage watch, the reaper, the PR watch and the memory gate. `borg setup` installs none of them, and section 4 never runs `install.sh`, so a machine whose previous install predates 0.9.4 (when the resume watcher shipped), or that was upgraded by this page without ever running `install.sh`, has no resume watcher. `borg doctor` shows this as FAIL rows for `resume-watch` and `resume-probe`. `borg setup` also prints a warning naming any shipped agent that is not loaded, that warning is the other way to find it.
+
+1. Ask the person, then run the installer from the borg-collective checkout once. Answer `N` to the plugin prompt, because the plugin is handled in section 4:
+
+```
+run-in <BORG> ./install.sh
+```
+
+2. Run `borg doctor`. Every RESUME row should now be OK except `resume-guardian`, which stays a known warning (section 6). This clears both the `resume-watch` and the `resume-probe` FAIL rows: the probe reads the path of the Claude binary from the watcher's plist, so it cannot pass without it.
 
 ### From 0.9.7 to 0.9.8: registry key
 
@@ -149,7 +162,7 @@ Since 0.9.6, borg reads stack manifests only from `<repository>/.stacks/`. A rep
 borg link --overview
 ```
 
-   Each affected repository is named in a warning that mentions `borg stack migrate`. If none is named, this migration is done.
+   Each affected repository is named in a warning that mentions `borg stack migrate`. If none is named, this migration is done. A registered path that is a subdirectory of a repository, not its top level, is skipped by name ("not a git repository (or not the top level of one)"). Re-register it at the repository root (or run migrate from the root), then migrate and commit there.
 
 2. For each named repository: if there is uncommitted work under its old `.borg/chains/` or `.borg/programs/` folder, commit or clean it first, because migrate skips a repository with uncommitted changes there. Ask the person if unsure.
 

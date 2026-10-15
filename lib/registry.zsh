@@ -341,9 +341,25 @@ borg_reap_persist() {
     return 0
 }
 
+# Temp roots a scan never registers a repository under, one per line: /tmp, /private/tmp, /var/folders and
+# $TMPDIR when set. BORG_SCAN_TEMP_ROOTS (colon-separated) REPLACES the list; the bats sandbox sets it, because
+# the sandbox itself lives under a temp root.
+borg_scan_temp_roots() {
+    if [[ -n "${BORG_SCAN_TEMP_ROOTS+x}" ]]; then
+        print -r -- "$BORG_SCAN_TEMP_ROOTS" | tr ':' '\n' | awk 'NF'
+        return 0
+    fi
+    print -r -- /tmp
+    print -r -- /private/tmp
+    print -r -- /var/folders
+    [[ -n "${TMPDIR:-}" ]] && print -r -- "${TMPDIR%/}"
+    return 0
+}
+
 # Should this scanned path be skipped instead of registered as a new repository?
 # Skip when:
 #   - empty path
+#   - path is under a temp root (borg_scan_temp_roots): a Cortex or Claude session started in /tmp is not a repository
 #   - path is the workspace root itself (e.g. ~/dev)
 #   - path no longer exists on disk (renamed / deleted folders)
 #   - path is a subpath of an already-registered repository (e.g. nested template dirs
@@ -352,6 +368,14 @@ borg_reap_persist() {
 borg_scan_path_should_skip() {
     local ppath="$1"
     [[ -n "$ppath" ]] || return 0
+    local troot
+    while IFS= read -r troot; do
+        [[ -z "$troot" ]] && continue
+        if [[ "$ppath" == "$troot" || "$ppath" == "$troot"/* ]]; then
+            (( $+functions[dbg] )) && dbg "scan: skipping temp path $ppath"
+            return 0
+        fi
+    done < <(borg_scan_temp_roots)
     [[ "$ppath" == "${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}" ]] && return 0
     [[ -d "$ppath" ]] || return 0
     local rp
