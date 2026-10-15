@@ -232,7 +232,7 @@ node (`swept` / `declared` / `unknown`) and does not need `summary` to be trustw
 
 ### 5b — `/borg-recon` is the SECOND un-folded human digest (filed 2026-08-26, NOT FIXED)
 
-**MOVED 2026-10-12.** Noah decided not to build this now; it is filed on its own as `docs/plans/directives/2026-10-12-borg-recon-reads-the-link-document.md`, carrying this problem and its criterion. The text below is left as filed.
+**MOVED 2026-10-12.** Noah decided not to build this now; it is filed on its own as `docs/plans/severed/2026-10-12-borg-recon-reads-the-link-document.md`, carrying this problem and its criterion. The text below is left as filed.
 
 `--brief` is not the only human surface that answers "what changed?" from outside `borg link`'s document.
 AC1 retired the `recon` VERB but deliberately kept the ENGINE, because `borg recon --json` has real machine
@@ -271,7 +271,7 @@ parallel sweep with its own mark. Do that after Phase 5, not before — they sha
       than read`: one `pullRequests(first:` plus one `issueOrPullRequest(number:` on each arm, side by side on one
       fixture. Four further cases force each `fallback_reason` branch and assert the document renders under each.
 - [~] `/borg-recon` synthesizes `borg link`'s document — **MOVED 2026-10-12** to
-      `docs/plans/directives/2026-10-12-borg-recon-reads-the-link-document.md` (Noah deferred Phase 5b, not built now)
+      `docs/plans/severed/2026-10-12-borg-recon-reads-the-link-document.md` (Noah deferred Phase 5b, not built now)
 - [x] `borg doctor` reports headless `claude -p` reachability
 - [x] A project with a null `summary` and a set `waiting_reason` never displays the `waiting_reason` as its
       summary — covered by a `tests/briefing.bats` case that exercises `link --brief` (re-pointed at the document

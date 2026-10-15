@@ -82,7 +82,7 @@ Any of these ships green. They are the reason this is a directive.
 
 1. **Port the writer first, additively.** `write_manifest` into `borg_core/manifest/shell.py` (not `core.py` —
    core is documented as unconditionally free of raw I/O). Decide two behaviours **on the record**: which validator
-   it calls, and whether it still backfills `program`. Strip every `_`-prefixed key, not just `_path`. Move the
+   it calls, and whether it still backfills `program`. Strip only the loader stamps (`_id` and `_path`); authored `_`-prefixed keys are preserved on rewrite (PR #341 fix round 1). Move the
    `basename` discipline into the writer rather than leaving it in the caller. Consider `mkstemp` over a fixed
    `.tmp` name, which currently races and can orphan a temp file inside a git-tracked directory.
 2. **Port `edges_from`**, which is simply missing.

@@ -1,0 +1,55 @@
+{
+  "desc": "Front-door W1 follow-ups: the renames landed, the registry key migrates, the follow-up list closes",
+  "program": "2026-10-15-front-door-w1",
+  "rows": [
+    {
+      "lane": "rename",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#375",
+      "status": "merged",
+      "why": "chain-to-stack step (b1), borg stack migrate"
+    },
+    {
+      "lane": "rename",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#376",
+      "status": "merged",
+      "why": "chain-to-stack step (b1.1), harden migrate"
+    },
+    {
+      "lane": "rename",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#381",
+      "status": "merged",
+      "why": "chain-to-stack step (b2), internals and page section"
+    },
+    {
+      "lane": "rename",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#396",
+      "status": "merged",
+      "why": "chain-to-stack step (c), the contract"
+    },
+    {
+      "lane": "rename",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#386",
+      "status": "merged",
+      "why": "R6, skills and docs take the final vocabulary"
+    },
+    {
+      "lane": "registry",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#390",
+      "status": "merged",
+      "why": "registry key expand: accept repositories, migrate-key verb"
+    },
+    {
+      "lane": "release",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#403",
+      "status": "merged",
+      "why": "VERSION 0.9.6, release notes"
+    }
+  ]
+}

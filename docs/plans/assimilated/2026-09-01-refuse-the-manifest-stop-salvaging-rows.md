@@ -97,7 +97,7 @@ it**, so the reversal cannot ship a state where files are refused and the page s
   manifest, never a traceback that costs the whole page.
 - This is the D3 answer the merge-tree retirement was blocked on, and **this file is the resolver** — the decision is
   made, recorded here, and needs no further input. Step 3 of
-  `docs/plans/directives/2026-08-31-retire-merge-tree-programs-into-borg-core.md`
+  `docs/plans/assimilated/2026-08-31-retire-merge-tree-programs-into-borg-core.md`
   ("decide `sync_borg`'s row semantics deliberately") is answered by the "The change" section above. That
   retirement's next step is therefore its own step 4, the fixture migration, then the repoint — nothing is waiting on
   a person.

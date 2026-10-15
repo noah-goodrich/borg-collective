@@ -2,7 +2,7 @@
 
 Nothing here hands the planner a fact: every repository is built with `git init`, `git add` and `git commit`,
 and `migrate_shell.gather` derives what the planner decides on. The cases are numbered after the safety
-criterion of `docs/plans/directives/2026-10-13-chain-to-stack-rename.md`, section (b), items (1) to (9).
+criterion of `docs/plans/assimilated/2026-10-13-chain-to-stack-rename.md`, section (b), items (1) to (9).
 The registry is a throwaway file reached through `BORG_REGISTRY`, never the real one.
 """
 
