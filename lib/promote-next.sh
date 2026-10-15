@@ -149,7 +149,7 @@ _borg_child_directives() {
     #
     # (1) zsh NOMATCH. A `for f in "$dir"/*.md` loop dies with `no matches found` on a directory
     # that EXISTS but holds no `.md` -- the `-d` guard above only covers a MISSING directory, so the
-    # empty-but-present case is fatal under `set -e`. CLAUDE.md names this idiom: quoted `find`,
+    # empty-but-present case is fatal under `set -e`. borg_core/recon/CLAUDE.md names this idiom: quoted `find`,
     # never bare globs.
     #
     # (2) One grep, not one per file. A per-file loop forks a grep per directive -- 33 processes on

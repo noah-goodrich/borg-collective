@@ -911,7 +911,7 @@ def test_the_provenance_mark_survives_ansi_stripping():
 
     MUTATION: implement the precondition as option (iii) -- dim the glyph and add no character. That
     renders identically under `plain()`, so every golden stays byte-for-byte green while the page
-    quietly stops distinguishing verified from hand-typed. CLAUDE.md's "Learned" section catalogues
+    quietly stops distinguishing verified from hand-typed. docs/agents/learned.md catalogues
     that failure shape three times; this is the case that refuses it here.
     """
     declared = _sourced("merged", link_grid.STATE_SOURCE_DECLARED)

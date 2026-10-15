@@ -32,7 +32,11 @@ CODE_GLOBS = ("*.zsh",)
 # the same change, and invisible to the census. A gate that reads one rules file while agents and
 # skills carry their own is a gate that retires a promise in one place and leaves it in two others.
 DOCS = ("CLAUDE.md",)
-DOC_DIRS = ("skills", "agents")
+DOC_DIRS = ("skills", "agents", "docs/agents")
+# Rules moved out of the top-level CLAUDE.md live in nested CLAUDE.md files, so a promise there is as live as one in
+# the root file. Every CLAUDE.md under the root counts, except the census's own test inputs and tool directories.
+NESTED_DOC_NAME = "CLAUDE.md"
+NESTED_DOC_EXCLUDED = ("tests/fixtures", ".git/", ".venv/", "node_modules/", ".borg/")
 
 ROW = re.compile(
     r"^\|\s*`(?P<token>\.borg/[a-z][a-z-]*)`\s*\|\s*(?P<kind>\w+)\s*\|\s*(?P<reader>[^|]+?)\s*\|"
@@ -60,11 +64,21 @@ def _code_files(root: Path) -> list[Path]:
                 for p in base.rglob("*")
                 if p.is_file()
                 and p.suffix != ".pyc"
+                and p.name != NESTED_DOC_NAME
                 and not any(part in p.as_posix() for part in EXCLUDED)
             )
     for pattern in CODE_GLOBS:
         files.extend(root.glob(pattern))
     return files
+
+
+def _nested_docs(root: Path) -> list[Path]:
+    """Every CLAUDE.md below the root, minus the census's fixtures and tool directories."""
+    return [
+        p
+        for p in root.rglob(NESTED_DOC_NAME)
+        if p.is_file() and not any(part in f"{p.relative_to(root).as_posix()}" for part in NESTED_DOC_EXCLUDED)
+    ]
 
 
 def discover(root: Path) -> dict[str, set[str]]:
@@ -77,6 +91,7 @@ def discover(root: Path) -> dict[str, set[str]]:
         base = root / directory
         if base.is_dir():
             doc_files.extend(base.rglob("*.md"))
+    doc_files.extend(_nested_docs(root))
     for token in _scan(doc_files):
         found.setdefault(token, set()).add("docs")
     return found

@@ -55,7 +55,7 @@ def suite_timeout() -> float:
     THE SAME THREE-WAY GUARD `link/shell.py::fetch_timeout` uses -- unset OR EMPTY OR non-numeric
     takes the default -- because `_borg_py` passes its whole config surface through by name and an
     unset variable arrives as the EMPTY STRING. `float("")` raising out of a module whose header
-    promises nothing is fatal is the exact `int("")` bug CLAUDE.md's "Learned" records.
+    promises nothing is fatal is the exact `int("")` bug docs/agents/learned.md records.
     """
     raw = os.environ.get("BORG_PLANSTATE_SUITE_TIMEOUT")
     if not raw:

@@ -60,7 +60,7 @@ _write_pref() {   # <requires-value>
 }
 
 @test "prefer-tool: a missing BORG_DIR does not leak a redirect error into stderr" {
-    # The `cmd >> file 2>/dev/null` hazard from CLAUDE.md: bash opens redirect targets before the
+    # The `cmd >> file 2>/dev/null` hazard from hooks/CLAUDE.md: bash opens redirect targets before the
     # command runs, so a missing directory prints to the REAL stderr no matter where 2>/dev/null
     # sits. A consumer merging stderr into stdout splices that line ahead of the JSON.
     export BORG_DIR="${BATS_TEST_TMPDIR}/absent-tree/borg"

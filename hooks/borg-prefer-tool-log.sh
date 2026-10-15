@@ -2,7 +2,7 @@
 # PostToolUse (Bash) -> record when a LIVE prefer-tool preference was bypassed.
 #
 # WHAT THIS MEASURES, AND WHAT IT CANNOT. A `prefer-tool` extension is prose: it asks the model to
-# delegate to a preferred tool. Prose is ignorable, and per CLAUDE.md's cairn entry this repository
+# delegate to a preferred tool. Prose is ignorable, and per docs/agents/learned.md's cairn entry this repository
 # has already measured what uninstrumented voluntary compliance is worth -- four shipped, tested,
 # exposed surfaces produced ONE real row in five months. So the preference ships with a number
 # attached from day one.
@@ -82,7 +82,7 @@ matched=$(PYTHONSAFEPATH=1 PYTHONPATH="$_core_root${PYTHONPATH:+:$PYTHONPATH}" p
 # Brace-group so the stderr redirect is established BEFORE the append target is opened: bash opens
 # redirections left-to-right, so `>> "$LOG" 2>/dev/null` on one simple command still prints a
 # missing-directory error to the real stderr -- which a consumer merging stderr into stdout splices
-# ahead of any JSON. This bug kept CI red for weeks; see CLAUDE.md.
+# ahead of any JSON. This bug kept CI red for weeks; see hooks/CLAUDE.md.
 {
     mkdir -p "${LOG%/*}" 2>/dev/null
     # Retention: cap at 1 MiB, one previous generation (nothing reads this log back).

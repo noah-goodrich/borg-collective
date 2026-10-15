@@ -3722,7 +3722,7 @@ borg_registry_init
 # because every test that reaches the Python path puts BORG_REGISTRY in the environment itself
 # (tests/test_helper/setup.bash exports it; the pytest suites monkeypatch it), so the inheritance
 # path was never once exercised -- the same shape as the usage-watch and memory-gate blind spots in
-# CLAUDE.md's Learned section.
+# docs/agents/learned.md.
 #
 # Defaults are applied HERE rather than passed through empty: a child reading
 # `os.environ.get("BORG_REAP_STALE_HOURS", "12")` gets "" -- not "12" -- if the variable is exported

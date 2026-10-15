@@ -60,7 +60,7 @@ printf '%s\n' "$OUT"
 { printf '%s\n' "$OUT" > "$DELTA_FILE"; } 2>/dev/null
 
 # Notify only when something moved. `-activate` on click, never on fire: an unsolicited focus change
-# interrupts whatever the developer is doing (recorded in CLAUDE.md under Learned).
+# interrupts whatever the developer is doing (recorded in docs/agents/learned.md).
 if command -v terminal-notifier >/dev/null 2>&1; then
     COUNT=$(printf '%s\n' "$OUT" | grep -c '^#' || true)
     terminal-notifier -title "borg: $COUNT PR event(s)" \

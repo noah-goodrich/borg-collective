@@ -145,7 +145,7 @@ _drone_resolve() {
 # ── Window names (registry-owned) ─────────────────────────────────────────────
 
 # Run the registry CLI with borg's config surface in the child's ENVIRONMENT. drone.zsh assigns
-# SESSION/BORG_DIR without export, and a python3 child sees none of them (CLAUDE.md, "A shell
+# SESSION/BORG_DIR without export, and a python3 child sees none of them (docs/agents/learned.md, "A shell
 # variable is not an environment variable"), so every default is applied here, in the wrapper.
 # borg_core is resolved script-relative via DRONE_SCRIPT_DIR, never via cwd or $BORG_HOME.
 _drone_registry_py() {

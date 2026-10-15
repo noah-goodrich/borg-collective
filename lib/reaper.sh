@@ -52,7 +52,7 @@ _borg_should_reap() {
 # hourly LaunchAgent was a no-op for ~3.5 months while 15 real worktrees accumulated under the
 # correct path. Nothing in borg.zsh, install.sh or any hook sets this variable: the only
 # assignments in the tree are in tests, which is precisely why the suite stayed green. Same class
-# as the BORG_REGISTRY and XDG_CONFIG_HOME entries under Learned in CLAUDE.md -- a test that
+# as the BORG_REGISTRY and XDG_CONFIG_HOME entries in docs/agents/learned.md and hooks/CLAUDE.md -- a test that
 # supplies the value the production path is supposed to derive proves nothing about production.
 #
 # The expression is byte-identical to the one install.sh uses for its usage-watch paths and to

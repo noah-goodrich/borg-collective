@@ -196,7 +196,7 @@ _EVAL_HIDDEN_OFFLINE=(python python3)
 # AN ALLOWLIST, NEVER A SUBTRACTION FROM PATH. `PATH=/usr/bin:/bin` is the tempting version and it
 # is wrong: it assumes `gh` does not live in `/usr/bin`, which is true on macOS (Homebrew puts it in
 # `/opt/homebrew/bin`) and FALSE on ubuntu-latest, which preinstalls `gh` at `/usr/bin/gh` -- and
-# CI's `test` job runs this suite on ubuntu. That is CLAUDE.md's "a test's PREMISE can depend on the
+# CI's `test` job runs this suite on ubuntu. That is tests/CLAUDE.md's "a test's PREMISE can depend on the
 # dev platform" lesson, third instance, recorded there as a bats case that hid `gh` exactly that way
 # and passed on the one platform where its premise held. So the set is named POSITIVELY, and each
 # name is resolved with `command -v` rather than assumed to sit in any particular directory.

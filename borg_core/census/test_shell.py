@@ -96,3 +96,23 @@ def test_reader_exists_is_asked_separately_from_reader_mentions(tmp_path):
     assert exists[".borg/here"] is True and exists[".borg/gone"] is False
     # The file exists but does not mention the store -- which is the whole point of `dynamic`.
     assert mentions[".borg/here"] is False
+
+
+def test_discover_reads_a_nested_claude_md(tmp_path):
+    # Rules moved out of the root CLAUDE.md live in nested ones; a promise there must not leave the census.
+    _tree(tmp_path)
+    (tmp_path / "hooks").mkdir()
+    (tmp_path / "hooks" / "CLAUDE.md").write_text("names .borg/nested\n", encoding="utf-8")
+    (tmp_path / "docs" / "agents").mkdir()
+    (tmp_path / "docs" / "agents" / "learned.md").write_text("names .borg/moved\n", encoding="utf-8")
+    found = shell.discover(tmp_path)
+    assert found[".borg/nested"] == {"docs"}  # docs only: a CLAUDE.md under a code dir is not code
+    assert found[".borg/moved"] == {"docs"}
+
+
+def test_discover_skips_claude_md_under_test_fixtures(tmp_path):
+    _tree(tmp_path)
+    fixture = tmp_path / "tests" / "fixtures" / "census" / "case"
+    fixture.mkdir(parents=True)
+    (fixture / "CLAUDE.md").write_text("names .borg/fixture\n", encoding="utf-8")
+    assert ".borg/fixture" not in shell.discover(tmp_path)

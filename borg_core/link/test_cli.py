@@ -891,7 +891,7 @@ def test_deep_is_accepted_and_ignored(isolated_env, capsys):
     `borg link <repository>` a human types and on every `drone link`.
 
     ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This docstring, cli.py's twin comment
-    and two lines of CLAUDE.md all pinned `borg.zsh:3111`, which matched neither main nor the branch
+    and two lines of borg_core/link/CLAUDE.md all pinned `borg.zsh:3111`, which matched neither main nor the branch
     that last edited them; a pin is invalidated by any insertion above it and nothing fails when it
     goes stale. The same edit dropped "which is the fzf preview's path" -- `cmd_switch`'s `fzf` call
     carries no `--preview` flag, so that justification described a loop that does not exist.

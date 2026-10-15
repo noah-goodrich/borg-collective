@@ -133,7 +133,7 @@ PASS=0; FAIL=0; SKIPPED=0
 NETWORK_RAN=0
 ok()   { echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
-# A case that cannot run is reported as SKIP and does not affect the exit status. CLAUDE.md's
+# A case that cannot run is reported as SKIP and does not affect the exit status. tests/CLAUDE.md's
 # platform-premise lesson in one line: a case that cannot pass here is not a weaker check, it is
 # checking a different fact.
 skip() { echo "  SKIP  $1"; SKIPPED=$((SKIPPED+1)); }
