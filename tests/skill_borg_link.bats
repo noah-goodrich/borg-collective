@@ -15,6 +15,31 @@
 load test_helper/setup
 
 SKILL="${BORG_HOME}/skills/borg-link/SKILL.md"
+QUEEN="${BORG_HOME}/skills/borg-link/references/queen-view.md"
+FALLBACK="${BORG_HOME}/skills/borg-link/references/fallback.md"
+RATIONALE="${BORG_HOME}/skills/borg-link/references/rationale.md"
+
+# SKILL.md is a router plus the repository page (context-diet S4b, #383). The Queen view, the Fallback
+# and the design history moved to references/, so each assertion below reads the file its text lives in.
+
+@test "references: SKILL.md names each references file with its read condition, and rationale.md is never read at runtime" {
+    [ -f "$QUEEN" ] && [ -f "$FALLBACK" ] && [ -f "$RATIONALE" ]
+    run cat "$SKILL"
+    [[ "$output" == *'Read `references/queen-view.md`'*'Read it ONLY in this scope.'* ]] || false
+    [[ "$output" == *'Read `references/fallback.md`'*'Read it only then.'* ]] || false
+    [[ "$output" == *'the **repository page**'*'Read no references file.'* ]] || false
+    [[ "$output" != *'references/rationale.md'* ]] || false
+    run head -3 "$RATIONALE"
+    [[ "$output" == *'editor history only'* ]] || false
+    run cat "$RATIONALE"
+    [[ "$output" == *'This file is never read at runtime.'* ]] || false
+}
+
+@test "references: SKILL.md states the drone-start rule" {
+    run cat "$SKILL"
+    [[ "$output" == *'the SessionStart hook already injected the latest checkpoint'* ]] || false
+    [[ "$output" == *'never as a session-start ritual'* ]] || false
+}
 
 @test "A6 primary path: SKILL.md runs the engine and no longer forbids shelling out" {
     run cat "$SKILL"
@@ -26,7 +51,7 @@ SKILL="${BORG_HOME}/skills/borg-link/SKILL.md"
 }
 
 @test "A6 fallback contract: the section exists, states its trigger, and forbids the staleness downgrade in exact words" {
-    run cat "$SKILL"
+    run cat "$FALLBACK"
     [ "$status" -eq 0 ]
     [[ "$output" == *"## Fallback"* ]] || false
     [[ "$output" == *"not in registry"* ]] || false
@@ -40,7 +65,7 @@ SKILL="${BORG_HOME}/skills/borg-link/SKILL.md"
 }
 
 @test "A6 retired couplings stay retired" {
-    run cat "$SKILL"
+    run cat "$SKILL" "$QUEEN" "$FALLBACK"
     [ "$status" -eq 0 ]
     [[ "$output" != *"lib/reaper.sh"* ]] || false
     [[ "$output" != *"docs/plans/severed"* ]] || false
@@ -90,22 +115,26 @@ _stub_borg() {
     [[ "$output" == *'## Step 1 — Run the engine, then branch on `scope.kind`'* ]] || false
     [[ "$output" == *'`.scope.kind == "orchestrator"` → the **Queen view**'* ]] || false
     [[ "$output" == *'`.scope.kind == "repository"` → the **repository page**'* ]] || false
-    [[ "$output" == *'The `.borg-project` marker is NOT the mode decision.'* ]] || false
+    [[ "$output" == *"never the \`.borg-project\` marker or your guess from the cwd"* ]] || false
     [[ "$output" != *'**Mode selection.**'* ]] || false
     [[ "$output" != *'Marker found + no argument'* ]] || false
+    run cat "$RATIONALE"
+    [[ "$output" == *'The `.borg-project` marker is NOT the mode decision.'* ]] || false
 }
 
 @test "scope: the marker walk survives only inside the Fallback section" {
     local fb_line walk_line
-    fb_line="$(grep -n '^## Fallback' "$SKILL" | head -1 | cut -d: -f1)"
-    walk_line="$(grep -n 'MARKER-WALK-BEGIN' "$SKILL" | head -1 | cut -d: -f1)"
+    fb_line="$(grep -n '^## Fallback' "$FALLBACK" | head -1 | cut -d: -f1)"
+    walk_line="$(grep -n 'MARKER-WALK-BEGIN' "$FALLBACK" | head -1 | cut -d: -f1)"
     [ -n "$fb_line" ] && [ -n "$walk_line" ]
     [ "$walk_line" -gt "$fb_line" ]
-    [ "$(grep -c 'MARKER-WALK-BEGIN' "$SKILL")" -eq 1 ]
+    [ "$(grep -c 'MARKER-WALK-BEGIN' "$FALLBACK")" -eq 1 ]
+    [ "$(grep -c 'MARKER-WALK-BEGIN' "$SKILL")" -eq 0 ]
+    [ "$(grep -c 'MARKER-WALK-BEGIN' "$QUEEN")" -eq 0 ]
 }
 
 @test "scope: user-facing text says Queen, contract names are unchanged" {
-    run cat "$SKILL"
+    run cat "$SKILL" "$QUEEN"
     [ "$status" -eq 0 ]
     [[ "$output" == *'## Queen view'* ]] || false
     [[ "$output" == *'Queen session'* ]] || false
@@ -114,9 +143,9 @@ _stub_borg() {
 }
 
 @test "scope: the repository section never instructs rendering the board or repo-level sections" {
-    run _section '## Repository scope' '## Fallback'
+    run _section '## Repository scope' '## Guardrails'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'Never render, even though `--json` carries it:'* ]] || false
+    [[ "$output" == *'**Never render:**'* ]] || false
     [[ "$output" == *'the registry-wide board'* ]] || false
     [[ "$output" == *'any other worktree or repository'* ]] || false
     [[ "$output" == *'QUEUED/SHIPPED'* ]] || false
@@ -127,7 +156,7 @@ _stub_borg() {
 }
 
 @test "scope: the Queen view does not leak into the repository page and vice versa" {
-    run _section '## Queen view' '## Repository scope'
+    run cat "$QUEEN"
     [ "$status" -eq 0 ]
     [[ "$output" == *'## The collective'* ]] || false
     [[ "$output" == *'never use it to render a repository or a worktree'* ]] || false
@@ -135,15 +164,15 @@ _stub_borg() {
 }
 
 @test "scope: the repository page reads the checkpoint from its own directory, never the union" {
-    run _section '## Repository scope' '## Fallback'
+    run _section '## Repository scope' '## Guardrails'
     [ "$status" -eq 0 ]
     [[ "$output" == *'<entry.path>/.borg/checkpoints'* ]] || false
-    [[ "$output" == *'from nowhere else'* ]] || false
-    [[ "$output" == *'newest first yourself (a NAME sort'* ]] || false
-    [[ "$output" == *'Never fall back to a checkpoint from another directory.'* ]] || false
+    [[ "$output" == *'and nowhere else'* ]] || false
+    [[ "$output" == *'NAME-sort newest first'* ]] || false
+    [[ "$output" == *"Never use another directory's checkpoint."* ]] || false
     [[ "$output" == *'`focus.checkpoint_head`'* ]] || false
     [[ "$output" == *'`entry.summary`'* ]] || false
-    [[ "$output" == *'you must not reconstruct them'* ]] || false
+    [[ "$output" == *'do not reconstruct'* ]] || false
 }
 
 # DECISION 5 (2026-10-13): the skill renders the repository page in the SAME ORDER as the engine -- identity,
@@ -152,8 +181,8 @@ _stub_borg() {
 @test "scope: the repository page puts the Queen pointer before WAITING and ends on the next action" {
     local line='For the overview of every repository, run /borg-link in the Queen session.'
     [ "$(grep -cxF "$line" "$SKILL")" -eq 1 ]
-    run _section '## Repository scope' '## Fallback'
-    [[ "$output" == *'the page ENDS on the `Next:` line'* ]] || false
+    run _section '## Repository scope' '## Guardrails'
+    [[ "$output" == *'the page ENDS on `Next:`'* ]] || false
     [[ "$output" != *'That last line is ALWAYS the final line'* ]] || false
 
     # The skeleton is the fenced block that holds the pointer. Order inside it is the contract.
@@ -175,14 +204,15 @@ _stub_borg() {
 }
 
 @test "scope: Guardrails and Fallback also end the repository page on the next action, not the pointer" {
-    ! grep -n -A1 'ends with the$' "$SKILL" | grep -q 'Queen pointer line'
-    ! grep -q 'the next action, the Queen pointer line' "$SKILL"
-    grep -q 'the Queen pointer line, the next action last' "$SKILL"
-    grep -q 'ends on the$' "$SKILL"
+    ! grep -n -A1 'ends with the$' "$SKILL" "$FALLBACK" | grep -q 'Queen pointer line'
+    ! grep -q 'the next action, the Queen pointer line' "$SKILL" "$FALLBACK"
+    grep -q 'the Queen pointer line, the next action last' "$FALLBACK"
+    grep -q 'the page ENDS on `Next:`' "$SKILL"
+    grep -q 'ends on the$' "$RATIONALE"
 }
 
 @test "scope: a detached HEAD is reported as detached at the short sha, not as a branch called HEAD" {
-    run _section '## Repository scope' '## Fallback'
+    run _section '## Repository scope' '## Guardrails'
     [[ "$output" == *'rev-parse --short HEAD'* ]] || false
     [[ "$output" == *'detached at <short sha>'* ]] || false
 }
@@ -191,7 +221,7 @@ _stub_borg() {
     run cat "$SKILL"
     [[ "$output" == *'`.scope.unregistered == true` → the **hint page**'* ]] || false
     [[ "$output" == *'`borg add`'* ]] || false
-    [[ "$output" == *'do not present the overview in its place'* ]] || false
+    [[ "$output" == *'Render no board or overview'* ]] || false
     cat > "${BATS_TEST_TMPDIR}/unreg.json" <<'JSON'
 {"version": 2, "generated_at": "t", "order": ["secret-a", "secret-b"], "projects": {"secret-a": {}, "secret-b": {}},
  "directives": [{"project": "secret-a", "title": "x"}], "grid": {"warnings": []}, "focus": null,
@@ -241,10 +271,12 @@ JSON
 }
 
 @test "scope: the repository page keeps only the session row, never repository PR rows" {
-    run _section '## Repository scope' '## Fallback'
+    run _section '## Repository scope' '## Guardrails'
     [ "$status" -eq 0 ]
+    [[ "$output" == *'drop every row with a `ref`'* ]] || false
+    run cat "$RATIONALE"
     [[ "$output" == *"including the repository's open-PR rows"* ]] || false
-    [[ "$output" == *'keep only that row and drop every row with a `ref`'* ]] || false
+    run _section '## Repository scope' '## Guardrails'
     [[ "$output" == *'no PR rows'* ]] || false
     [[ "$output" == *"The session row's \`next_step\`"* ]] || false
 }
@@ -322,12 +354,14 @@ JSON
 @test "compass: the skill says how to read it, and the version gate is untouched" {
     run cat "$SKILL"
     [ "$status" -eq 0 ]
-    [[ "$output" == *'**Reading `.compass`**'* ]] || false
+    [[ "$output" == *'**`.compass`**'* ]] || false
     [[ "$output" == *'no map at `<map_dir>`'* ]] || false
     [[ "$output" == *"off route: \`<repository>\` is not on today's leg"* ]] || false
+    [[ "$output" == *'`== 2` → proceed silently.'* ]] || false
+    [[ "$output" != *'parking:'* ]] || false
+    run cat "$QUEEN"
     [[ "$output" == *'`due == true`'* ]] || false
     [[ "$output" == *'parking: `<text>` (look again `<look>`, seen `<seen>`)'* ]] || false
-    [[ "$output" == *'- `== 2` → proceed silently.'* ]] || false
 }
 
 @test "scope: Step 1 pipe is compact and its Queen arm deletes eight unread repository fields, keeping the rest" {

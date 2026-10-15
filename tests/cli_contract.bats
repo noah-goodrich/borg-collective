@@ -3415,7 +3415,7 @@ _link_spine_matches() {
 # B9. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |= (...)'`, and only
 # borg-collective carries a `.borg-project` marker — so that call routes from INSIDE whatever
 # repository the session is in. Scope-gating the aggregates would report zero directives for the whole
-# collective at `.version == 2`, which SKILL.md maps to "CLI path. Never fall back." A WRONG answer,
+# collective at `.version == 2`, which references/fallback.md maps to "CLI path. Never fall back." A WRONG answer,
 # not a missing one, and it is why DOCUMENT_VERSION could stay 2.
 @test "contract: link --json carries every repository's directives from inside a repository" {
     _link_setup_grid

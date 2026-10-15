@@ -278,13 +278,13 @@ _preapprove() {
 # was waved past every remaining check. Anchor on the exact canonical command instead.
 
 # Collapse newlines/tabs/space-runs to single spaces and trim, so the multi-line
-# heredoc shape in skills/borg-link/SKILL.md compares equal to a one-line paste.
+# heredoc shape in skills/borg-link/references/fallback.md compares equal to a one-line paste.
 # Also normalizes an optional `;` before the closing `done`.
 _canon_ws() {
     printf '%s' "$1" | tr '\n\t' '  ' | sed -E 's/  +/ /g; s/^ //; s/ $//; s/; done$/ done/'
 }
 
-# The one command skills/borg-link/SKILL.md tells Claude to run. Keep byte-for-byte
+# The one command skills/borg-link/references/fallback.md tells Claude to run. Keep byte-for-byte
 # in sync with that file (and with tests/bash_guard.bats `_marker_walk`). Single-quoted:
 # every $ here is literal — this is a pattern to compare against, never to evaluate.
 # shellcheck disable=SC2016
