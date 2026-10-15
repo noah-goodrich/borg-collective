@@ -12,9 +12,9 @@ user-invocable: true
 
 # Borg Link — Neural Link to the Collective
 
-You synthesize on top of the `borg link` engine. Explain like the reader is 10: plain language, terse, most-urgent-first. Do not hard-wrap output.
+You synthesize on top of the `borg link` engine. Explain like the reader is 10: plain, terse, most-urgent-first. Do not hard-wrap output.
 
-`scope.kind` is the engine's answer, not yours: `orchestrator` (the Queen session) gets the Queen view; `repository` (a repository, a linked worktree, or an explicit repository name) gets a page about exactly that one directory. Answer; do not re-render. In a drone the SessionStart hook already injected the latest checkpoint, so run this skill only when asked, never as a session-start ritual.
+`scope.kind` is the engine's answer: `orchestrator` (the Queen session) gets the Queen view; `repository` (a repository, a linked worktree, or an explicit repository name) gets a page about exactly that one directory. Answer; do not re-render. In a drone the SessionStart hook already injected the latest checkpoint, so run this skill only when asked, never as a session-start ritual.
 
 ## Step 1 — Run the engine, then branch on `scope.kind`
 
@@ -30,6 +30,9 @@ borg link --json [<repository>] | jq -c 'if .scope.unregistered == true
       .source, .notify_origin, .last_activity)
     | del(.grid.manifests[]? | .path, .levels, (.nodes[]? | .ref, .why, .order, .lane, .gate))
     | del(.compass.today, (.compass.destinations[]? | .domain, .definition, .target, .next_waypoint, .due))
+    | (.grid.manifests[]? | select((.nodes // {}) | length > 0
+      and all(.[]; .state == "merged" or .state == "closed")))
+      |= {id, desc, repos, rows: (.nodes | length), done: true}
     | if .compass.parking then .compass.parking |= map(select(.due)) else . end)
   else (.scope.repository as $r | (.compass // {}) as $c
     | ($c.repositories[$r] // {}) as $m | {version, generated_at, scope,
@@ -44,25 +47,25 @@ borg link --json [<repository>] | jq -c 'if .scope.unregistered == true
 
 Then branch, and only on this:
 
-- `.scope.unregistered == true` → the **hint page**: say in two short lines that this directory is not a registered repository, that `borg add` registers it, and that `borg link --overview` (or `/borg-link` in the Queen session) gives the Queen view. Render no board or overview; read no references file.
+- `.scope.unregistered == true` → the **hint page**: say in two short lines that this directory is not a registered repository, that `borg add` registers it, and that `borg link --overview` gives the Queen view. Render no board or overview; read no references file.
 - `.scope.kind == "orchestrator"` → the **Queen view**: Read `references/queen-view.md` (relative to this skill's base directory) and follow it. Read it ONLY in this scope.
 - `.scope.kind == "repository"` → the **repository page**: follow `## Repository scope` below. Read no references file.
 
 If the Step 1 command fails, Read `references/fallback.md` (relative to this skill's base directory); its trigger is the whole condition. Read it only then.
 
-Scope is the engine's `scope.kind`, never the `.borg-project` marker or your guess from the cwd; write no ad hoc find/ls to detect the repository. If `jq` is missing, drop the pipe, read the raw document, and render only what the scope allows.
+Scope is the engine's `scope.kind`, never the `.borg-project` marker or your guess from the cwd; run no ad hoc find/ls. If `jq` is missing, drop the pipe and render only what the scope allows.
 
-**Version gate — read `.version` first.** `== 2` → proceed silently. `> 2` → proceed, and say in one line this skill was written against v2 and newer fields may go unreported. `< 2` or absent → STOP: tell the user their borg install is older than this skill; do NOT fall back on a version mismatch.
+**Version gate — read `.version` first.** `== 2` → proceed silently. `> 2` → proceed, and say in one line this skill targets v2 and newer fields may go unreported. `< 2` or absent → STOP: tell the user their borg install is older than this skill; do NOT fall back on a version mismatch.
 
 **Host-only flags.** `--refresh` and `--brief` need the host: if asked, tell the user to run `borg link --brief` / `--refresh` there.
 
-**`.compass`** (additive; absent on an older engine: say nothing): `found` false → one line "no map at `<map_dir>`", move on; never invent a leg, destination or date. `leg.text` is today's leg (null: none). A destination's `state` is `on-track`, `at-risk`, `late` or `undated` if active, else its status. **Off route**: with a leg, a repository whose `repositories[<name>]` (`{destination, on_leg}`) is off the leg reads "off route: `<repository>` is not on today's leg"; no destination is unmapped, never off route. A non-empty `warnings` is a skipped map file: say so once.
+**`.compass`** (additive; absent on an older engine: say nothing): `found` false → one line "no map at `<map_dir>`"; never invent a leg, destination or date. `leg.text` is today's leg (null: none). A destination's `state` is `on-track`, `at-risk`, `late` or `undated` if active, else its status. **Off route**: with a leg, a repository whose `repositories[<name>]` (`{destination, on_leg}`) is off the leg reads "off route: `<repository>` is not on today's leg"; no destination is unmapped, never off route. A non-empty `warnings` is a skipped map file: say so once.
 
 ## Repository scope (`scope.kind == "repository"`)
 
 This page is about exactly ONE directory: `.entry.path`, the directory the engine resolved. Say what is true of THIS directory and stop.
 
-**Never render:** the registry-wide board (`order`, `projects`, capacity), any other worktree or repository, and every repo-level section: plan, QUEUED/SHIPPED, stacks and `grid`, repository PRs. The pipe withheld them; without it, ignore them anyway.
+**Never render:** the registry-wide board (`order`, `projects`, capacity), any other worktree or repository, and every repo-level section: plan, QUEUED/SHIPPED, stacks and `grid`, repository PRs. The pipe withheld them; ignore them anyway.
 
 **Read in this order, then write the page.**
 
@@ -74,13 +77,13 @@ git -C "<entry.path>" rev-parse --path-format=absolute --git-dir --git-common-di
 git -C "<entry.path>" rev-parse --short HEAD
 ```
 
-The first line is the branch (`HEAD` = detached: write `detached at <short sha>` from the fourth line). The two paths are equal for a main checkout; if they differ this is a linked worktree, whose worktree-of path is the common dir minus its trailing `/.git`. If git fails, print the path and say identity is unavailable. Do not look the parent up in the registry.
+The first line is the branch (`HEAD` = detached: write `detached at <short sha>` from the fourth line). The two paths are equal for a main checkout; if they differ this is a linked worktree, whose worktree-of path is the common dir minus its trailing `/.git`. If git fails, print the path and say identity is unavailable. Never look the parent up in the registry.
 
 2. **Session and status**, from `.entry`: `status`, `relative_activity`, `waiting_reason` if present, `has_uncommitted_changes`, `has_live_window` if present (null or absent = unknown, not false), `tmux_window`.
 
-3. **This directory's own checkpoints**, read by you from `<entry.path>/.borg/checkpoints` and nowhere else (do not reconstruct `focus.checkpoints`, `focus.checkpoint_head` or `entry.summary`). Glob `*.md` there, NAME-sort newest first, keep 3. Read the newest: its tl;dr, else its first Accomplished bullet, gives the 2-3 things that matter; "Recent" is the up-to-3 names. Empty or missing is normal for a fresh worktree: say "no checkpoint here yet" and suggest `/borg-link-up` in this directory. Never use another directory's checkpoint.
+3. **This directory's own checkpoints**, read by you from `<entry.path>/.borg/checkpoints` and nowhere else (do not reconstruct `focus.checkpoints`, `focus.checkpoint_head` or `entry.summary`). Glob `*.md` there, NAME-sort newest first, keep 3. Read the newest: its tl;dr, else its first Accomplished bullet, gives the 2-3 things that matter; "Recent" is the up-to-3 names. Empty or missing is normal in a fresh worktree: say "no checkpoint here yet" and suggest `/borg-link-up`. Never use another directory's checkpoint.
 
-4. **Waiting row**, from `.waiting.rows`: keep only this directory's session row (`item` `session`, `ref` null; the pipe did this, otherwise drop every row with a `ref`). Print its `next_step`, `item` and `age`. Note `.waiting.degraded` once. Add nothing else (no PR rows, manifest decisions, `hidden_lines`, other repositories' rows). No session row: `nothing waits on you here`.
+4. **Waiting row**, from `.waiting.rows`: keep only this directory's session row (`item` `session`, `ref` null; the pipe did this, otherwise drop every row with a `ref`). Print its `next_step`, `item` and `age`; note `.waiting.degraded` once. Add nothing else (no PR rows, manifest decisions, `hidden_lines`, other repositories' rows). No session row: `nothing waits on you here`.
 
 5. **Next action, one line.** The session row's `next_step`; else the `waiting_reason` when `status` is `waiting`; else the newest checkpoint's next-steps line; else "nothing pending here". If the checkpoint claims in-flight work but `relative_activity` shows the directory idle, name that disagreement in the same line and recommend the fix, as `/borg-recon` does (no fixed threshold).
 
@@ -97,7 +100,7 @@ Waiting: <next_step> — <item> (<age>)                  ← or `nothing waits o
 Next: <one line>
 ```
 
-The ORDER is fixed and the page ENDS on `Next:`. The pointer line is verbatim and appears once; add no second pointer, menu or count of other worktrees.
+The ORDER is fixed and the page ENDS on `Next:`. The pointer line is verbatim, once; add no second pointer, menu or worktree count.
 
 ## Guardrails
 

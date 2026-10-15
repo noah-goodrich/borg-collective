@@ -32,8 +32,10 @@ mean paying for a network round trip and then rendering the same overview as bef
   or a level is too wide — not as a rendering bug. The human page says the same thing in
   `▸ SIGNALS`; this is the machine-readable half, so you never have to measure ANSI output.
 - `.grid.manifests` is an **array** of manifest blocks, each carrying `id` (the manifest's slug),
-  `desc`, `repos`, `nodes`, `gates` and `ready`. The pipe drops each block's `path` and `levels`. AC2 added `desc`, `repos`, and three
-  topology keys per node:
+  `desc`, `repos`, `nodes`, `gates` and `ready`, and the pipe drops each block's `path` and `levels`. A block
+  with `done: true` is finished history (every row merged or closed), collapsed to `id`, `desc`, `repos` and
+  `rows` (its row count): at most one line from `desc` and `rows`, or nothing. Never route it, read readiness
+  from it, or list it under WAITING ON YOU. The other blocks carry:
   - `desc` is the manifest author's own one-line statement of what the whole project is for. Prefer
     it over inventing a summary out of row titles — it is their sentence, not yours.
   - `repos` is the sorted, deduplicated `owner/repo` list the manifest's **rows** name — the work,

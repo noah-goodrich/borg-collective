@@ -425,3 +425,33 @@ JSON
     run jq -c '[.grid.future_grid_key, .compass.destinations[0].state, .compass.destinations[0].status, .compass.repositories.p.on_leg]' <<<"$doc"
     [ "$output" = '[7,"late","active",true]' ]
 }
+
+@test "scope: Step 1 pipe, Queen arm, collapses finished stacks and passes open or empty ones through" {
+    cat > "${BATS_TEST_TMPDIR}/done.json" <<'JSON'
+{"version": 2, "generated_at": "t", "scope": {"kind": "orchestrator"}, "directives": [], "projects": {},
+ "grid": {"manifests": [
+  {"id": "alldone", "desc": "d1", "repos": ["o/a"], "path": "/p", "gates": [{"ref": "o/a#1", "kind": "decision"}],
+   "ready": {"state": "known", "refs": []}, "future": 1,
+   "nodes": {"o/a#1": {"state": "merged", "title": "t"}, "o/a#2": {"state": "merged"}}},
+  {"id": "mixeddone", "desc": "d2", "repos": ["o/b"], "nodes": {"o/b#1": {"state": "merged"}, "o/b#2": {"state": "closed"}}},
+  {"id": "openone", "desc": "d3", "repos": ["o/c"], "future_key": {"x": 1}, "gates": [{"ref": "o/c#2"}],
+   "nodes": {"o/c#1": {"state": "merged"}, "o/c#2": {"state": "open"}}},
+  {"id": "empty", "desc": "d4", "repos": [], "nodes": {}}
+ ]}}
+JSON
+    _stub_borg "${BATS_TEST_TMPDIR}/done.json"
+    local cmd
+    cmd="$(_step1_command)"
+    cmd="${cmd/ \[<repository>\]/}"
+    PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
+    [ "$status" -eq 0 ]
+    local out="$output"
+    run jq -c '.grid.manifests[0]' <<<"$out"
+    [ "$output" = '{"id":"alldone","desc":"d1","repos":["o/a"],"rows":2,"done":true}' ]
+    run jq -c '.grid.manifests[1]' <<<"$out"
+    [ "$output" = '{"id":"mixeddone","desc":"d2","repos":["o/b"],"rows":2,"done":true}' ]
+    run jq -c '.grid.manifests[2] | [.future_key, .gates, (.nodes | keys), has("done")]' <<<"$out"
+    [ "$output" = '[{"x":1},[{"ref":"o/c#2"}],["o/c#1","o/c#2"],false]' ]
+    run jq -c '.grid.manifests[3]' <<<"$out"
+    [ "$output" = '{"id":"empty","desc":"d4","repos":[],"nodes":{}}' ]
+}
