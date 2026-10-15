@@ -935,10 +935,13 @@ cmd_next() {
     # The compass (the owner's map, when there is one) decides FIRST: today's leg, then nearest due date, then
     # undated, then frozen/done/unmapped. borg_core.nextpick.cli --top is the same ranking the chooser uses
     # (core.rank), so the chooser and the --switch/--pick/"Next up" paths cannot disagree. It exits non-zero
-    # when it cannot answer, and only then does the jq pipeline below run: it is the pre-compass ordering
-    # (no map) kept as the fallback, not a second opinion.
+    # (one reason line on stderr, which is dropped here) when it cannot answer, and the jq pipeline below runs
+    # then AND when --top printed nothing: silence from the Python ranking must never be taken for "all clear"
+    # while the registry has rows. The jq pipeline is the pre-compass ordering (no map) kept as the fallback,
+    # not a second opinion; for an empty registry or an out-of-range --pick it answers empty too.
     local top
-    top=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli --top "$(( ${pick:-1} - 1 ))" 2>/dev/null) ||
+    top=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli --top "$(( ${pick:-1} - 1 ))" 2>/dev/null) || top=""
+    [[ -n "$top" ]] ||
     top=$(printf '%s' "$registry" | jq -r --argjson idx "$(( ${pick:-1} - 1 ))" '
         .projects | to_entries |
         map(select(.value.status != "archived")) |

@@ -184,12 +184,18 @@ def _top(index: int) -> int:
 
     The one place the non-interactive `borg next` (`--switch`, `--pick`, the plain "Next up" screen) asks for its
     choice, so those paths order exactly as the chooser does. Unlike the log mode this EXITS NON-ZERO on a failure:
-    the caller falls back to its own pipeline on a crash, and silence would read as "all clear".
+    the caller falls back to its own pipeline on a crash, and silence would read as "all clear". EVERY exception
+    counts, not a short list of expected ones: a registry entry whose `last_activity` is a number next to ISO strings
+    raises a TypeError inside the ranking, and `main`'s blanket handler would have turned that into exit 0 and no
+    output, which `borg next` prints as "All clear". The reason goes to stderr as ONE line.
     """
     try:
         repositories = json.load(sys.stdin).get("projects") or {}
         entry = top_entry(repositories, index, read_compass(repositories))
-    except (ValueError, AttributeError, OSError):
+    # JUSTIFICATION: the exit code is the contract here; any failure must reach the caller as non-zero, never as 0.
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        reason = " ".join(f"{type(exc).__name__}: {exc}".split())
+        print(f"nextpick --top failed: {reason}", file=sys.stderr)
         return 1
     if entry is not None:
         print(json.dumps(entry))

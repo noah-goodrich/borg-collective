@@ -180,6 +180,17 @@ def test_top_fails_loudly_when_it_cannot_read_the_registry(monkeypatch, capsys):
     assert _top(monkeypatch, capsys, "0", stdin="not json") == (1, "")
 
 
+def test_top_fails_loudly_on_any_exception_with_one_stderr_line(monkeypatch, capsys):
+    # A number next to ISO strings is a TypeError in the ranking, which no narrow except list names.
+    repositories = {"a": _entry(activity=1767780000), "b": _entry(), "c": _entry()}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"projects": repositories})))
+    code = cli.main(["--top", "0"])
+    captured = capsys.readouterr()
+    assert (code, captured.out) == (1, "")
+    assert len(captured.err.splitlines()) == 1
+    assert captured.err.startswith("nextpick --top failed: TypeError: ")
+
+
 def test_top_entry_carries_the_fields_cmd_next_reads(monkeypatch, capsys):
     _, out = _top(monkeypatch, capsys, "0")
     assert {"name", "status", "summary", "waiting_reason", "last_activity", "pinned", "path"} <= set(json.loads(out))

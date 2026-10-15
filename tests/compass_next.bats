@@ -153,6 +153,44 @@ _row_projects() {
     [[ "$output" == *"Next up: on-leg"* ]]
 }
 
+# A registry whose last_activity is a NUMBER on one entry and ISO strings on the rest raises a TypeError inside the
+# Python ranking. `--top` used to swallow it (exit 0, no output) and `borg next` printed "All clear" over a registry
+# full of rows; now `--top` fails and the jq ranking answers, so the repositories are still listed.
+_write_registry_with_mixed_activity() {
+    local name
+    for name in on-leg late soon; do
+        mkdir -p "${BATS_TEST_TMPDIR}/p/${name}"
+    done
+    cat > "$BORG_REGISTRY" <<JSON
+{"projects": {
+  "late":   {"path":"${BATS_TEST_TMPDIR}/p/late","status":"waiting","tmux_window":"w-late","last_activity":"2026-01-06T10:00:00Z"},
+  "on-leg": {"path":"${BATS_TEST_TMPDIR}/p/on-leg","status":"waiting","tmux_window":"w-on-leg","last_activity":1767780000},
+  "soon":   {"path":"${BATS_TEST_TMPDIR}/p/soon","status":"waiting","tmux_window":"w-soon","last_activity":"2026-01-05T10:00:00Z"}
+}}
+JSON
+}
+
+@test "next --top: a registry that raises inside the ranking exits non-zero with one reason line on stderr" {
+    _write_registry_with_mixed_activity
+    export BORG_MAP_DIR="${BATS_TEST_TMPDIR}/no-such-map"
+    run bash -c "PYTHONPATH=\"${BATS_TEST_DIRNAME}/..\" python3 -m borg_core.nextpick.cli --top 0 < \"$BORG_REGISTRY\" 2>&1 >/dev/null"
+    [ "$status" -eq 1 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [[ "${lines[0]}" == "nextpick --top failed: "* ]]
+}
+
+@test "next: a registry mixing a numeric last_activity with ISO strings still lists the repositories (jq fallback)" {
+    _write_registry_with_mixed_activity
+    export BORG_MAP_DIR="${BATS_TEST_TMPDIR}/no-such-map"
+    run zsh "$BORG" next --pick 1
+    [ "$status" -eq 0 ]
+    [ "$(_selected)" != "" ]
+    run zsh "$BORG" next
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Next up: "* ]]
+    [[ "$output" != *"All clear"* ]]
+}
+
 @test "next --rows --json: the rows are the same ones link's waiting block carries (both capped), in the compass order" {
     _write_registry
     _write_map
