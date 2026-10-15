@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Context budgets (context-diet directive, AC2). A skill body loads on every invocation, so its size is a
 # cost every run pays. This file holds the caps; each is a byte count (`wc -c`), checked against the file
-# on disk. S4b adds the SKILL.md cap; a later slice adds the CLAUDE.md cases to this same file.
+# on disk. The CLAUDE.md cases below keep the context-diet cut from growing back.
 
 load test_helper/setup
 
@@ -26,4 +26,49 @@ SKILL_CAP=8192
     run cat "${SKILL_DIR}/SKILL.md"
     [[ "$output" == *'references/queen-view.md'* ]] || false
     [[ "$output" == *'references/fallback.md'* ]] || false
+}
+
+# The top-level CLAUDE.md loads into every session in this repository. A nested CLAUDE.md loads only when a file in
+# its directory is read, so it may be longer, but not without bound.
+ROOT_CLAUDE_CAP=8192
+NESTED_CLAUDE_CAP=12288
+
+@test "budget: the top-level CLAUDE.md is at most 8192 bytes" {
+    local size
+    size="$(wc -c < "${BORG_HOME}/CLAUDE.md")"
+    [ "$size" -le "$ROOT_CLAUDE_CAP" ] || {
+        echo "CLAUDE.md is ${size} bytes, over the ${ROOT_CLAUDE_CAP} cap" >&2
+        false
+    }
+}
+
+@test "budget: every other tracked CLAUDE.md is at most 12288 bytes" {
+    local f size over=0
+    while IFS= read -r f; do
+        [ "$f" = "CLAUDE.md" ] && continue
+        size="$(wc -c < "${BORG_HOME}/${f}")"
+        if [ "$size" -gt "$NESTED_CLAUDE_CAP" ]; then
+            echo "${f} is ${size} bytes, over the ${NESTED_CLAUDE_CAP} cap" >&2
+            over=1
+        fi
+    done < <(git -C "$BORG_HOME" ls-files '*CLAUDE.md' | grep -v '^tests/fixtures/')
+    [ "$over" -eq 0 ]
+}
+
+@test "budget: every docs/agents file the CLAUDE.md index names exists" {
+    local f n=0
+    while IFS= read -r f; do
+        n=$((n + 1))
+        [ -s "${BORG_HOME}/${f}" ] || { echo "index names ${f}, which is missing or empty" >&2; false; }
+    done < <(grep -o 'docs/agents/[a-z-]*\.md' "${BORG_HOME}/CLAUDE.md" | sort -u)
+    [ "$n" -ge 1 ]
+}
+
+@test "budget: every nested CLAUDE.md the index names exists" {
+    local f n=0
+    while IFS= read -r f; do
+        n=$((n + 1))
+        [ -s "${BORG_HOME}/${f}" ] || { echo "index names ${f}, which is missing or empty" >&2; false; }
+    done < <(grep -o '[a-z_/]*/CLAUDE\.md' "${BORG_HOME}/CLAUDE.md" | sort -u)
+    [ "$n" -ge 1 ]
 }

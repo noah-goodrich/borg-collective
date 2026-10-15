@@ -1487,7 +1487,7 @@ def _signals_section(doc: dict) -> tuple[str, list[str]]:
 
     WARNINGS ARE NEVER SWALLOWED. build_grid's docstring makes the argument for carrying them; this
     is where they surface. A document with a discovery, selection, sweep or fetch warning that
-    printed nothing would be the exact silent-blindness shape CLAUDE.md's "Learned" catalogues.
+    printed nothing would be the exact silent-blindness shape docs/agents/learned.md catalogues.
     """
     grid_block = doc.get("grid") or {}
     capacity = doc.get("capacity") or {}

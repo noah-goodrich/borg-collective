@@ -70,7 +70,7 @@ def _int_env(name: str, default: int) -> int:
     `BORG_RECON_MAX_TRACKS= borg link sierra` printed `▸ ERROR: invalid literal for int() with base
     10: ''` and rendered no rows at all.
 
-    This is the exact shape CLAUDE.md's "Learned" records for `BORG_REAP_STALE_HOURS`, one layer
+    This is the exact shape docs/agents/learned.md records for `BORG_REAP_STALE_HOURS`, one layer
     over, and it is why the hardened spec forbids adding any `BORG_RECON_*` name to `_borg_py` --
     that wrapper passes unset variables through as the EMPTY STRING. With this guard the prohibition
     is no longer load-bearing for these two names, but it is left standing: a variable that is safe

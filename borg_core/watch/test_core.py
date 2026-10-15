@@ -34,7 +34,7 @@ def test_core_imports_nothing_impure():
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             roots.add(node.module.split(".")[0])
     # `re` is permitted and nothing else is. It does no I/O, and the precedent is explicit:
-    # CLAUDE.md records `link/picture.py` as unconditionally pure while importing `re`. An EXACT
+    # borg_core/link/CLAUDE.md records `link/picture.py` as unconditionally pure while importing `re`. An EXACT
     # set rather than a blacklist, because W9004's allow-list already waves through `pathlib`,
     # `json` and `datetime` — the three things that would end this module's purity.
     assert roots == {"__future__", "re"}, f"core.py grew an impure import: {sorted(roots)}"

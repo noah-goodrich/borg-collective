@@ -20,12 +20,12 @@ setup() {
     [[ "$output" == *"subagent_type=borg-collective:borg-nanoprobe"* ]]
 }
 
-@test "CLAUDE.md nanoprobe passage uses the namespaced name, no background: true" {
-    run grep -n "Nanoprobe orchestrator (drones vs nanoprobes)" "${REPO_ROOT}/CLAUDE.md"
+@test "docs/agents/nanoprobes.md nanoprobe passage uses the namespaced name, no background: true" {
+    run grep -n "Nanoprobe orchestrator (drones vs nanoprobes)" "${REPO_ROOT}/docs/agents/nanoprobes.md"
     [ "$status" -eq 0 ]
-    run grep -c "background: true" "${REPO_ROOT}/CLAUDE.md"
+    run grep -c "background: true" "${REPO_ROOT}/docs/agents/nanoprobes.md"
     [ "$output" -eq 0 ]
-    run grep -c "borg-collective:borg-nanoprobe" "${REPO_ROOT}/CLAUDE.md"
+    run grep -c "borg-collective:borg-nanoprobe" "${REPO_ROOT}/docs/agents/nanoprobes.md"
     [ "$output" -ge 1 ]
 }
 

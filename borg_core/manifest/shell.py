@@ -433,7 +433,7 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
 
     A REGISTRY THAT DECLARES REPOSITORIES AND YIELDS NO PATH WARNS. Zero manifests and zero warnings is
     the silent-blindness shape this repository has been burned by twice (the usage-watch and
-    `borg recon` incidents in CLAUDE.md's "Learned"): if the registry schema moves under this
+    `borg recon` incidents in docs/agents/learned.md): if the registry schema moves under this
     extractor -- a renamed key, a different null sentinel, paths stored elsewhere -- the sweep goes
     quiet and `link` renders a confidently empty grid. One warning is the whole tripwire. It stays
     per-REGISTRY rather than per-entry so a single pathless repository cannot make it noisy.
@@ -478,7 +478,7 @@ def discover_registered(registry: Any) -> tuple[list[dict], list[str]]:
     function a one-line alias for `discover` and move the derivation into the caller -- where a test
     would then supply it, and the registry-reading line production actually runs would be the one
     line no test ever executes. That is exactly how `borg recon` shipped completely non-functional
-    (CLAUDE.md, "Learned"), and the mandatory B6 regression test builds a registry rather than a path
+    (docs/agents/learned.md), and the mandatory B6 regression test builds a registry rather than a path
     list for precisely this reason.
 
     The caller supplies the registry dict rather than this function reading it, so the same registry

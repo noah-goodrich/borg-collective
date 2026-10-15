@@ -556,8 +556,8 @@ def read_git_identity(repository_path: str | None, resolved_paths: list[tuple[st
     """What git says this ONE directory is: `{kind, branch, worktree_of}` (see `worktree.identity`).
 
     READ FROM THE FILES, NOT BY FORKING GIT, and that is a measured contract and not a taste: `--local` on a
-    repository page forks exactly `git remote get-url origin` and `tmux list-windows` (CLAUDE.md, `_grid`'s
-    docstring, test_grid's exact-argv case), and a page that states a branch must not be what breaks that.
+    repository page forks exactly `git remote get-url origin` and `tmux list-windows` (docs/agents/commands.md,
+    `_grid`'s docstring, test_grid's exact-argv case), and a page that states a branch must not be what breaks that.
     The git dir's `commondir` file (present in a linked worktree's git dir, relative to it) names the shared
     common dir -- the value `borg add` stores as the registry's `repo` -- and `HEAD` is `ref: refs/heads/<name>`
     on a branch. Both are plain text git itself writes, and both degrade quietly: an unreadable layout answers
@@ -792,7 +792,7 @@ def _read_fetch_fixture(path: str, requested: int) -> dict:
     which is the truthful reading of a recording that carries none.
 
     A harness that mistypes the path must see WHY. The alternative -- a silent declared-only grid --
-    is the shape every silent-blindness incident in CLAUDE.md's "Learned" has in common.
+    is the shape every silent-blindness incident in docs/agents/learned.md has in common.
 
     `requested` IS THE CALLER'S FETCHABLE-REF COUNT, NEVER `len(items)`. The live path in
     `finish_fetch` reports `requested = len(aliases)` -- the real ask -- so a recording answering

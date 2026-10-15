@@ -607,7 +607,7 @@ EOF
 # tests/link_sweep.bats, but `--all` had NOTHING. Deleting `(( ${1:-0} )) && _brief_py_args+=(--all)`
 # left briefing.bats, link_sweep.bats and cli_contract.bats all green with the flag gone, so
 # `borg link --brief --all` would have silently degraded to `borg link --brief` — the same
-# capability-nothing-asserts shape as `borg recon` shipping dead (CLAUDE.md, "Learned").
+# capability-nothing-asserts shape as `borg recon` shipping dead (docs/agents/learned.md).
 #
 # ASSERTED ON THE PROJECTED PROMPT, WITH ITS OWN CONTROL. The mock captures `claude -p`'s argument
 # verbatim, so the case reads the bytes the document actually produced. An archived repository is the
