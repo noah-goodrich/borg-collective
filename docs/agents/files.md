@@ -11,7 +11,7 @@ lib/
     registry.zsh            Registry CRUD for ~/.config/borg/registry.json
     tmux.zsh                tmux window listing + switching
     claude.zsh              Session discovery from ~/.claude/projects/
-    coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
+    coco.zsh                Session discovery from ~/.snowflake/cortex/conversations/ (one JSON per session with its working directory, plus a history file)
     desktop.zsh             Claude Desktop session reader
     colors.zsh              tmux window color helpers (registry → hash fallback)
     secrets.zsh             `borg store-secret` idempotent secrets.zsh patcher

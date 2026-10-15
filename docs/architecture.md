@@ -71,7 +71,7 @@ writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/a
         registry.zsh            Registry CRUD
         tmux.zsh                tmux window listing + switching
         claude.zsh              Session discovery from ~/.claude/projects/
-        coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
+        coco.zsh                Session discovery from ~/.snowflake/cortex/conversations/ (one JSON per session with its working directory, plus a history file)
         desktop.zsh             Claude Desktop session reader
         recon/adapters/         Recon source adapters (recon-adapter-<source>)
         borg-hooks.sh           Shared bash helpers used by hooks (not sourced by borg.zsh)
