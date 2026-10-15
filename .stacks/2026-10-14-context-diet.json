@@ -36,6 +36,27 @@
       "ref": "noah-goodrich/borg-collective#404",
       "status": "merged",
       "why": "S4b: borg-link SKILL.md becomes an 8 KB router; Queen view, fallback and rationale move to references/"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#409",
+      "status": "merged",
+      "why": "S6: the borg-link Queen pipe drops the grid and compass fields the Queen view never reads"
+    },
+    {
+      "lane": "_default",
+      "order": "7",
+      "ref": "noah-goodrich/borg-collective#411",
+      "status": "open",
+      "why": "S5: CLAUDE.md cut to 8 KB; rules move verbatim to nested CLAUDE.md files and docs/agents"
+    },
+    {
+      "lane": "_default",
+      "order": "8",
+      "ref": "noah-goodrich/borg-collective#412",
+      "status": "merged",
+      "why": "S7: the borg-link Queen pipe collapses finished stacks to a one-line summary"
     }
   ]
 }
