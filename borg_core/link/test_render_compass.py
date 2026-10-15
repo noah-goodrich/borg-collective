@@ -166,27 +166,27 @@ def _board(rendered: str) -> dict[str, str]:
     return rows
 
 
-def test_board_rows_end_with_their_destination_state_and_unmapped_rows_with_nothing():
+def test_board_rows_carry_their_destination_state_before_the_summary_and_unmapped_rows_nothing():
     rows = _board(render.document(_queen(_compass())))
-    assert rows["widgets"].endswith("· late")
-    assert rows["gadgets"].endswith("· off leg")
-    assert rows["gizmos"].endswith("· off leg")
-    assert rows["doodads"].endswith("· frozen")
+    assert rows["widgets"].endswith("· late s")
+    assert rows["gadgets"].endswith("· off leg s")
+    assert rows["gizmos"].endswith("· off leg s")
+    assert rows["doodads"].endswith("· frozen s")
     assert "·" not in rows["orphan"]
 
 
 def test_with_no_leg_a_calm_state_is_named_not_called_off_leg():
     rows = _board(render.document(_queen(_compass(log=None))))
-    assert rows["gadgets"].endswith("· on track")
-    assert rows["gizmos"].endswith("· undated")
+    assert rows["gadgets"].endswith("· on track s")
+    assert rows["gizmos"].endswith("· undated s")
 
 
 def test_a_late_repository_off_the_leg_still_reads_late():
     names = ["widgets", "gadgets"]
     log = "## Today's leg\n\n- Wire up beta reporting\n"
     rows = _board(render.document(_queen(_compass(log=log, names=names), {n: _entry() for n in names})))
-    assert rows["widgets"].endswith("· late")
-    assert rows["gadgets"].endswith("· on track")
+    assert rows["widgets"].endswith("· late s")
+    assert rows["gadgets"].endswith("· on track s")
 
 
 def test_a_worktree_row_beneath_its_repository_carries_that_repositorys_suffix():
@@ -208,22 +208,35 @@ def test_a_worktree_row_beneath_its_repository_carries_that_repositorys_suffix()
         name: next(line for line in plain(render.document(_queen(block, projects))).split("\n") if f" {name} " in line)
         for name in projects
     }
-    assert rows["widgets"].endswith("· late")
-    assert rows["widgets-wt"].endswith("· late")
+    assert rows["widgets"].endswith("· late s")
+    assert rows["widgets-wt"].endswith("· late s")
     assert "·" not in rows["orphan"]
 
 
-def test_the_suffix_is_dropped_for_a_row_that_would_pass_the_boards_width_and_never_wraps():
-    projects = {name: _entry() for name in NAMES}
-    projects["gadgets"] = _entry("x" * 80)
+def test_every_mapped_row_keeps_its_suffix_when_every_summary_is_80_characters():
+    projects = {name: _entry("x" * 80) for name in NAMES}
     with_map = render.document(_queen(_compass(), projects))
     without_map = render.document(_queen(None, projects))
     widest = max(len(row) for row in _board(without_map).values())
     rows = _board(with_map)
-    assert "·" not in rows["gadgets"]
-    assert rows["widgets"].endswith("· late")
+    for name, state in (("widgets", "late"), ("gadgets", "off leg"), ("gizmos", "off leg"), ("doodads", "frozen")):
+        assert f"· {state} x" in rows[name], name
+        assert rows[name].endswith("..."), name
+    assert "·" not in rows["orphan"]
     assert max(len(row) for row in rows.values()) <= max(widest, render._BOARD_RULE)  # pylint: disable=protected-access
     assert len(_section_lines(with_map, "REPOSITORIES")) == len(_section_lines(without_map, "REPOSITORIES"))
+
+
+def test_the_summary_is_dropped_when_under_four_columns_are_left_for_it():
+    row = render._row_tail("h" * 87, "· late", "x" * 50, "", 98)  # pylint: disable=protected-access
+    assert plain(row) == " · late"
+    row = render._row_tail("h" * 86, "· late", "x" * 50, "", 98)  # pylint: disable=protected-access
+    assert plain(row) == " · late x..."
+
+
+def test_a_suffix_that_cannot_fit_even_without_a_summary_is_not_printed():
+    row = render._row_tail("h" * 95, "· late", "x" * 50, "", 98)  # pylint: disable=protected-access
+    assert row == " " + "x" * 50
 
 
 def test_a_board_without_a_map_is_the_board_there_always_was():

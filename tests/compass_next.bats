@@ -234,8 +234,8 @@ JSON
     [ "$status" -eq 0 ]
     local plain
     plain=$(printf '%s\n' "$output" | sed -e $'s/\033\\[[0-9;]*m//g')
-    printf '%s\n' "$plain" | grep -E '(^| )on-leg .*· on track$'
-    printf '%s\n' "$plain" | grep -E ' on-leg-wt .*· on track$'
+    printf '%s\n' "$plain" | grep -E '(^| )on-leg .*· on track( |$)'
+    printf '%s\n' "$plain" | grep -E ' on-leg-wt .*· on track( |$)'
     printf '%s\n' "$plain" | grep -E ' unmapped ' | grep -v '·'
 }
 
@@ -299,17 +299,17 @@ JSON
 
 # -- borg link: the board -------------------------------------------------------------------------------------------
 
-@test "link --overview: each board row ends with its destination's state and an unmapped row with nothing" {
+@test "link --overview: each board row carries its destination's state before its summary and an unmapped row with nothing" {
     _write_registry
     _write_map
     BORG_MAP_DIR="$MAP" run zsh "$BORG" link --local --overview
     [ "$status" -eq 0 ]
     local plain
     plain=$(printf '%s\n' "$output" | sed -e $'s/\033\\[[0-9;]*m//g')
-    printf '%s\n' "$plain" | grep -E '^ ?on-leg .*· on track$'
-    printf '%s\n' "$plain" | grep -E '^ ?late .*· late$'
-    printf '%s\n' "$plain" | grep -E '^ ?soon .*· off leg$'
-    printf '%s\n' "$plain" | grep -E '^ ?frozen .*· frozen$'
+    printf '%s\n' "$plain" | grep -E '^ ?on-leg .*· on track( |$)'
+    printf '%s\n' "$plain" | grep -E '^ ?late .*· late( |$)'
+    printf '%s\n' "$plain" | grep -E '^ ?soon .*· off leg( |$)'
+    printf '%s\n' "$plain" | grep -E '^ ?frozen .*· frozen( |$)'
     printf '%s\n' "$plain" | grep -E '^ ?unmapped ' | grep -v '·'
 }
 

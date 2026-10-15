@@ -347,8 +347,30 @@ def _route_cells(counts: dict[str, int] | None) -> str:
     )
 
 
-# JUSTIFICATION: six inputs, each independent (identity, cortex join, scope mark, measured width, counts).
-# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+def _row_tail(head: str, suffix: str, summary: str, mark: str, budget: int) -> str:
+    """What follows a board row's route cells: ` <suffix> <summary><mark>`, the summary fitted to `budget`.
+
+    No suffix: ` <summary><mark>`, exactly as before. A suffix goes first, in a column that is the same on every
+    row, and the summary gives way: it is cut to what is left of `budget` (ending `...`) or dropped when under
+    four columns remain. A suffix that cannot fit even with no summary is not printed (a row is never widened
+    and never wrapped), which takes a repository name far wider than the board's floor.
+    """
+    plain_tail = f"{' ' + summary if summary else ''}{mark}"
+    if not suffix:
+        return plain_tail
+    fixed = picture.visible_len(head) + 1 + len(suffix) + picture.visible_len(mark)
+    if fixed > budget:
+        return plain_tail
+    room = budget - fixed - 1
+    if len(summary) > room:
+        summary = summary[: room - 3].rstrip() + "..." if room > 3 else ""
+    shade = YELLOW if suffix in ("· late", "· at risk") else DIM
+    return f" {shade}{suffix}{NC}{' ' + summary if summary else ''}{mark}"
+
+
+# JUSTIFICATION: eight inputs, each independent (identity, cortex join, scope mark, width, counts, suffix, budget),
+# and one named local per column the row prints.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
 def _overview_row(
     name: str,
     entry: dict,
@@ -356,8 +378,16 @@ def _overview_row(
     mark: str = "",
     width: int = _COL_REPOSITORY,
     counts: dict[str, int] | None = None,
+    suffix: str = "",
+    budget: int = 0,
 ) -> str:
     """One board row, plus its cortex pause continuation when the repository has a pending wake.
+
+    `suffix` is the destination state (`· late`), printed right after the route cells and BEFORE the summary,
+    and `budget` is the most columns the row's first line may use. The summary is the elastic part: it is cut
+    (with `...`) or dropped so that the suffix fits, because the widest rows are the ones with the fullest
+    summaries and a suffix that only fit on short rows would be missing from exactly the rows that say the most.
+    With no suffix (or one that cannot fit even with no summary) the row is byte-for-byte what it always was.
 
     `mark` IS APPENDED INSIDE THE ROW'S OWN f-STRING and defaults to "", which keeps every byte of
     this function identical for a caller that does not pass one. It exists so the scoped `◀` lands on
@@ -380,12 +410,12 @@ def _overview_row(
     pin_mark = "*" if entry.get("pinned") is True else " "
     status_display = "waiting <<<" if status == "waiting" else status
 
-    line = (
+    head = (
         f"{pin_mark}{display:<{width}} {_src_badge(source):<{_COL_SRC}} "
         f"{_status_color(status)}{status_display:<{_COL_STATUS}}{NC} "
         f"{last_activity:<{_COL_LAST_ACTIVE}} {_route_cells(counts)}"
-        f"{' ' + summary_short if summary_short else ''}{mark}\n"
     )
+    line = head + _row_tail(head, suffix, summary_short, mark, budget) + "\n"
     countdown = cortex_by_repository.get(name)
     if countdown:
         # DERIVED FROM `width`, NOT THE 23 SPACES THIS USED TO HARDCODE -- a literal correct for
@@ -576,7 +606,7 @@ def _compass_lines(doc: dict, names: list[str] | None = None) -> list[str]:
 
 
 def _board_suffix(compass: dict | None, name: str) -> str:
-    """The destination state a board row ends with (`· late`), plain text, or "" for a repository with no destination.
+    """The destination state a board row carries before its summary (`· late`), plain text, or "" for none.
 
     The destination's state word, except that a calm one (on track, undated) reads `· off leg` when a leg was
     chosen and does not name this repository: urgency (late, at risk) and a parked destination (frozen, done)
@@ -592,19 +622,6 @@ def _board_suffix(compass: dict | None, name: str) -> str:
     if state in ("on-track", "undated") and compass.get("leg") and not entry.get("on_leg"):
         return "· off leg"
     return "· " + state.replace("-", " ")
-
-
-def _suffixed(row: str, text: str, budget: int) -> str:
-    """`row` with ` text` on the end of its first line, or `row` untouched when that would pass `budget` columns.
-
-    The countdown continuation (a second line) is left alone. A row is never wrapped: it either gains the suffix
-    in full or none of it.
-    """
-    first, _, rest = row.partition("\n")
-    if not text or picture.visible_len(first) + 1 + len(text) > budget:
-        return row
-    shade = YELLOW if text in ("· late", "· at risk") else DIM
-    return f"{first} {shade}{text}{NC}\n{rest}"
 
 
 def _parking_due(doc: dict) -> tuple[list[dict], int]:
@@ -785,17 +802,20 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     countdowns = _cortex_countdowns(doc)
     routed = _routing_counts(doc)
     scoped = _scoped_name(doc)
-    rows = []
-    for name, entry in entries:
-        mark = f" {CYAN}◀{NC}" if name == scoped else ""
-        rows.append((name, _overview_row(name, entry, countdowns, mark, width, routed.get(name))))
+    marks = {name: f" {CYAN}◀{NC}" if name == scoped else "" for name, _ in entries}
+    bare = [_overview_row(name, entry, countdowns, marks[name], width, routed.get(name)) for name, entry in entries]
     # EACH ROW'S DESTINATION STATE, WITHIN THE WIDTH THE BOARD ALREADY HAS. The budget is the rule under the
     # header or the widest row as drawn without any suffix, whichever is wider, so a suffix can never make the
-    # board wider than it was: a row that would pass the budget is left exactly as it was (never wrapped, never
-    # half a word), and a repository with no destination, or a document with no map, gets nothing.
+    # board wider than it was. It sits BEFORE the summary and the summary yields (`_row_tail`), so the widest
+    # rows, whose summaries are fullest, carry theirs like every other; a row is never wrapped, and a repository
+    # with no destination, or a document with no map, gets nothing and keeps its bare row.
     compass = _compass_found(doc)
-    budget = max(_BOARD_RULE, *(picture.visible_len(row.partition("\n")[0]) for _, row in rows))
-    lines.extend(_suffixed(row, _board_suffix(compass, name), budget) for name, row in rows)
+    budget = max(_BOARD_RULE, *(picture.visible_len(row.partition("\n")[0]) for row in bare))
+    for (name, entry), row in zip(entries, bare):
+        suffix = _board_suffix(compass, name)
+        if suffix:
+            row = _overview_row(name, entry, countdowns, marks[name], width, routed.get(name), suffix, budget)
+        lines.append(row)
     return note, lines
 
 
