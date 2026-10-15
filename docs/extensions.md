@@ -37,6 +37,8 @@ checklist equally:
 | `borg-link-up` | all three | |
 | `borg-review` | `01-context`, `02-output` | **no `03-followup`, on purpose** — see below |
 
+`borg-link-up` does not read its extension files itself: the `borg checkpoint-prepare` verb gathers them (and the collision-proof checkpoint name, with the same code as `borg checkpoint-name`) and the skill reads the printed document. The layers and the precedence rule are unchanged.
+
 `borg-review` has no `03-followup` because its entire contract is to end on exactly ONE action, and
 a hook that runs after the recommendation invites a second. Post-review behaviour belongs in the
 skill the recommendation points at.

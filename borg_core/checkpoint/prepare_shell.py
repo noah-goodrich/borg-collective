@@ -83,7 +83,7 @@ def now() -> datetime:
     return datetime.now()
 
 
-def project_root(cwd: str, budget: Budget) -> str:
+def repository_root(cwd: str, budget: Budget) -> str:
     """The git toplevel of `cwd`, else the directory holding PROJECT_PLAN.md, else `cwd` -- the skill's own rule."""
     if shutil.which("git"):
         answer = _run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], budget, GIT_TIMEOUT_SECONDS)
@@ -99,6 +99,11 @@ def plan_path(root: str) -> str:
         if os.path.isfile(path):
             return path
     return ""
+
+
+def source_dir() -> str:
+    """The directory holding the `borg_core` package this command runs from: what the skill puts on PYTHONPATH."""
+    return os.path.realpath(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 def git_status(root: str, budget: Budget) -> tuple[str | None, str]:
@@ -271,13 +276,14 @@ def gather(cwd: str = "", session: str = "") -> prepare.Facts:
 def _read_all(reader: Reader, here: str, session: str) -> prepare.Facts:
     reader.note(_cwd_problem(here))
     budget = reader.budget
-    root = reader.step("project root", here, lambda: project_root(here, budget))
+    root = reader.step("repository root", here, lambda: repository_root(here, budget))
     path = reader.step(
         "checkpoint path",
         "unknown",
         lambda: prepare.first_free_path(root, name_shell.checkpoint_stem(session, now()), os.path.exists),
     )
     plan = reader.step("plan lookup", "", lambda: plan_path(root))
+    source = reader.step("source dir", "unknown", source_dir)
     git = reader.step("git status", (None, "git status failed"), lambda: git_status(root, budget))
     manifest = reader.step(
         "manifest resolve",
@@ -294,6 +300,7 @@ def _read_all(reader: Reader, here: str, session: str) -> prepare.Facts:
         root=root,
         checkpoint_path=path,
         plan=plan,
+        source_dir=source,
         git_status=git[0],
         git_reason=git[1],
         manifest_stem=manifest[0],

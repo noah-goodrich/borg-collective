@@ -68,18 +68,18 @@ def test_now_honours_a_valid_override_and_ignores_garbage(monkeypatch):
 # ----------------------------------------------------------------------------------- root and plan
 
 
-def test_project_root_is_the_git_toplevel_from_a_subdirectory(tmp_path):
+def test_repository_root_is_the_git_toplevel_from_a_subdirectory(tmp_path):
     repo = _git_repo(tmp_path)
     sub = repo / "a" / "b"
     sub.mkdir(parents=True)
-    root = prepare_shell.project_root(str(sub), prepare_shell.Budget())
+    root = prepare_shell.repository_root(str(sub), prepare_shell.Budget())
     assert Path(root).resolve() == repo.resolve()
 
 
-def test_project_root_falls_back_to_the_cwd_outside_a_repository(tmp_path):
+def test_repository_root_falls_back_to_the_cwd_outside_a_repository(tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()
-    assert prepare_shell.project_root(str(plain), prepare_shell.Budget()) == str(plain)
+    assert prepare_shell.repository_root(str(plain), prepare_shell.Budget()) == str(plain)
 
 
 def test_plan_path_prefers_the_root_file_then_docs_plans(tmp_path):
@@ -279,6 +279,14 @@ def test_gather_on_an_empty_repository_has_no_problems(tmp_path, monkeypatch):
     assert facts.checkpoint_path.endswith("/.borg/checkpoints/2026-10-14-101010-3b0f70.md")
     assert facts.pr_reason == "gh not installed"
     assert facts.git_status is not None
+
+
+def test_source_dir_is_the_directory_holding_borg_core(tmp_path, monkeypatch):
+    monkeypatch.setenv(prepare_shell.NOW_OVERRIDE_ENV, "2026-10-14T10:10:10")
+    found = Path(prepare_shell.source_dir())
+    assert found.is_absolute()
+    assert (found / "borg_core" / "checkpoint" / "prepare_shell.py").is_file()
+    assert prepare_shell.gather(str(_git_repo(tmp_path))).source_dir == str(found)
 
 
 def test_gather_advances_the_checkpoint_name_past_an_existing_file(tmp_path, monkeypatch):
