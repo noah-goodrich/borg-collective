@@ -385,3 +385,43 @@ JSON
     run jq -c '.projects.p | keys' <<<"$output"
     [ "$output" = '["future_field","relative_activity","status","summary","tmux_window","waiting_reason"]' ]
 }
+
+@test "scope: Queen arm drops the unread grid and compass fields, keeps the read ones and passes unknown ones" {
+    cat > "${BATS_TEST_TMPDIR}/queen3.json" <<'JSON'
+{"version": 2, "order": ["p"], "projects": {"p": {}}, "focus": null, "directives": [],
+ "scope": {"kind": "orchestrator", "repository": null, "local": false},
+ "grid": {"warnings": [], "future_grid_key": 7, "manifests": [
+   {"id": "m", "path": "/w/m.json", "desc": "d", "repos": ["o/r"], "levels": [["o/r#1"]],
+    "gates": [{"ref": "o/r#1", "kind": "decision"}], "ready": {"state": "known", "refs": []},
+    "future_manifest_key": 1,
+    "nodes": {"o/r#1": {"ref": "o/r#1", "title": "t", "state": "open", "state_source": "swept",
+      "lane": "_default", "order": "1", "why": "w", "next": false, "gate": null, "level": 0, "seq": 0,
+      "parents": [], "children": [], "draft": false, "ready": false, "future_node_key": 2}}}]},
+ "compass": {"found": true, "map_dir": "/m", "today": "2026-10-15", "leg": {"text": "x"},
+   "destinations": [{"id": "a", "status": "active", "state": "late", "domain": "d", "definition": "x",
+     "target": "t", "next_waypoint": {"name": "n"}, "due": null, "repositories": ["p"]}],
+   "parking": [{"text": "due one", "due": true}, {"text": "not yet", "due": false}],
+   "repositories": {"p": {"destination": "a", "on_leg": true}}}}
+JSON
+    _stub_borg "${BATS_TEST_TMPDIR}/queen3.json"
+    local cmd
+    cmd="$(_step1_command)"
+    cmd="${cmd/ \[<repository>\]/}"
+    PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
+    [ "$status" -eq 0 ]
+    local doc="$output"
+    run jq -c '.grid.manifests[0] | [has("path"), has("levels")]' <<<"$doc"
+    [ "$output" = '[false,false]' ]
+    run jq -c '.grid.manifests[0].nodes[] | [has("ref"), has("why"), has("order"), has("lane"), has("gate")]' <<<"$doc"
+    [ "$output" = '[false,false,false,false,false]' ]
+    run jq -c '.compass | [has("today"), (.destinations[0] | [has("domain"), has("definition"), has("target"), has("next_waypoint"), has("due")])]' <<<"$doc"
+    [ "$output" = '[false,[false,false,false,false,false]]' ]
+    run jq -c '.compass.parking | map(.text)' <<<"$doc"
+    [ "$output" = '["due one"]' ]
+    run jq -c '.grid.manifests[0] | [.id, .desc, .repos, .gates[0].kind, .ready.state, .future_manifest_key]' <<<"$doc"
+    [ "$output" = '["m","d",["o/r"],"decision","known",1]' ]
+    run jq -c '.grid.manifests[0].nodes["o/r#1"] | [.title, .state, .state_source, .next, .level, .seq, .parents, .children, .draft, .ready, .future_node_key]' <<<"$doc"
+    [ "$output" = '["t","open","swept",false,0,0,[],[],false,false,2]' ]
+    run jq -c '[.grid.future_grid_key, .compass.destinations[0].state, .compass.destinations[0].status, .compass.repositories.p.on_leg]' <<<"$doc"
+    [ "$output" = '[7,"late","active",true]' ]
+}

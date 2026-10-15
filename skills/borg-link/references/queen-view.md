@@ -32,7 +32,7 @@ mean paying for a network round trip and then rendering the same overview as bef
   or a level is too wide — not as a rendering bug. The human page says the same thing in
   `▸ SIGNALS`; this is the machine-readable half, so you never have to measure ANSI output.
 - `.grid.manifests` is an **array** of manifest blocks, each carrying `id` (the manifest's slug),
-  `path`, `desc`, `repos`, `levels`, `nodes` and `gates`. AC2 added `desc`, `repos`, and three
+  `desc`, `repos`, `nodes`, `gates` and `ready`. The pipe drops each block's `path` and `levels`. AC2 added `desc`, `repos`, and three
   topology keys per node:
   - `desc` is the manifest author's own one-line statement of what the whole project is for. Prefer
     it over inventing a summary out of row titles — it is their sentence, not yours.
@@ -40,8 +40,7 @@ mean paying for a network round trip and then rendering the same overview as bef
     not everything it merely references (an apex or an `after:` pointer contributes nothing). Two or
     more entries means the project spans repositories, which is usually the single most useful fact
     about it and belongs in the one-line summary.
-  - `.nodes` is an **object keyed by ref**, not an array. Alongside `state`/`state_source`/`lane`/
-    `next`/`gate` each node now carries `level` (topological rank), `seq` (declaration order — the
+  - `.nodes` is an **object keyed by ref**, not an array. Each node carries `title`, `state`/`state_source`, `next`, `level` (topological rank), `seq` (declaration order — the
     row's index as the author wrote it; a declared ref that is not a row sorts past every real one),
     and `parents`/`children` (ordering edges only, both endpoints inside the declared set, sorted by
     `(seq, ref)`).
