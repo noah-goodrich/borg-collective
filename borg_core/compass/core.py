@@ -10,11 +10,18 @@ NEVER RAISES ON CONTENT. A missing file is simply absent from the arguments, a m
 with a `warnings` entry naming the file, and a line that does not parse is ignored. The reader reports what it
 found; it does not judge the map. The one exception is `today`, which is the caller's and must be an ISO date.
 
+TWO DATES, TWO HOMES. A destination carries two dates and both count. `due` is the NEXT WAYPOINT's date: the date
+column of the README.md destinations table, joined in by `build_compass`. `target` is the end date of the WHOLE
+destination: the `target:` line of the destination file's frontmatter (an ISO date, or TBD, or absent; TBD and absent
+are None). `nearest_due` is the earlier of the two as an ISO string, or None when neither is a date, and it is the
+date every rule below reads.
+
 STATE RULE (`destination_state`): status done, killed, frozen or proposed give that word; an active destination
-with no due date is "undated"; due before today is "late"; due within 7 days (inclusive) with the next waypoint
-not COMPLETE is "at-risk"; anything else is "on-track". "Complete" means at least one criterion and all of them
-checked, so a destination with no next waypoint at all is not complete and a due date inside the window is
-at-risk: the reader has no evidence of progress and says so rather than reporting calm.
+with no `nearest_due` is "undated"; `nearest_due` before today is "late" (so a past `target` is late even while the
+waypoint date is still ahead); `nearest_due` within 7 days (inclusive) with the next waypoint not COMPLETE is
+"at-risk"; anything else is "on-track". "Complete" means at least one criterion and all of them checked, so a
+destination with no next waypoint at all is not complete and a date inside the window is at-risk: the reader has no
+evidence of progress and says so rather than reporting calm.
 """
 
 # The Demeter check reads `match.group(...)` and `date.fromisoformat(...)` as strangers' chains; a delegate per
@@ -159,8 +166,10 @@ def next_waypoint(waypoints: list[dict]) -> dict | None:
 def parse_destination(filename: str, text: str) -> tuple[dict | None, list[str]]:
     """One destination file as `(destination, warnings)`. A malformed file is `(None, [reason])`, never a raise.
 
-    Malformed means: no frontmatter, no `id`, or a `status` outside the five known words. `due` is left None
-    here, because it comes from the README and `build_compass` joins it.
+    Malformed means: no frontmatter, no `id`, or a `status` outside the five known words. `due` and `nearest_due` are
+    left None here, because `due` comes from the README and `build_compass` joins it and derives the other. `target`
+    is read as a date (`_parse_target`): a destination whose target is not a date is KEPT, with the target None and one
+    warning, because a bad date is not a reason to lose the destination.
     """
     fields = parse_frontmatter(text)
     if fields is None:
@@ -174,21 +183,50 @@ def parse_destination(filename: str, text: str) -> tuple[dict | None, list[str]]
     repositories = fields.get("repositories") or []
     if isinstance(repositories, str):
         repositories = [repositories]
+    target, problems = _parse_target(filename, fields.get("target"))
     return {
         "id": ident,
         "domain": _text_or_none(fields.get("domain")),
         "status": status,
         "definition": _text_or_none(fields.get("definition")),
-        "target": _text_or_none(fields.get("target")),
+        "target": target,
         "repositories": [str(name) for name in repositories],
         "next_waypoint": next_waypoint(parse_waypoints(_body_after_frontmatter(text))),
         "due": None,
+        "nearest_due": None,
         "state": None,
-    }, []
+    }, problems
 
 
 def _text_or_none(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
+
+
+def _parse_target(filename: str, value: object) -> tuple[str | None, list[str]]:
+    """The frontmatter `target:` as `(ISO date string | None, warnings)`. Never raises.
+
+    A YYYY-MM-DD date is kept as that string. An absent or empty field, and TBD in any case with or without trailing
+    text, is None with no warning: both say "no date yet". Anything else is None plus one warning naming the file
+    and the value, so a typo is reported rather than silently read as undated.
+    """
+    if value is None or value == "" or value == []:
+        return None, []
+    if isinstance(value, str):
+        if as_date(value):
+            return value, []
+        if re.match(r"tbd\b", value, re.IGNORECASE):
+            return None, []
+    return None, [f"{filename}: target {value!r} is not a YYYY-MM-DD date or TBD, ignored"]
+
+
+def nearest_due(due: str | None, target: str | None) -> str | None:
+    """The earlier of the waypoint date and the destination target as an ISO string, or None with neither.
+
+    A value that is not a date counts as absent, so a bad one can never win; ISO dates order as strings, but the
+    comparison goes through `as_date` so the choice never rests on that.
+    """
+    dates = [(moment, text) for text in (due, target) if (moment := as_date(text)) is not None]
+    return min(dates)[1] if dates else None
 
 
 def parse_leg(log_text: str | None) -> dict | None:
@@ -301,11 +339,16 @@ def parse_parking(text: str | None, today: datetime.date) -> list[dict]:
 
 
 def destination_state(destination: dict, today: datetime.date) -> str:
-    """The destination's one-word state; see the module docstring for the rule."""
+    """The destination's one-word state; see the module docstring for the rule.
+
+    Reads `nearest_due`, the earlier of the next waypoint's date (`due`) and the destination's `target`, so a target
+    already past makes the destination late even when the waypoint date is still ahead. A destination with neither
+    date is undated.
+    """
     status = str(destination["status"])
     if status != "active":
         return status
-    due = as_date(destination["due"])
+    due = as_date(destination["nearest_due"])
     if due is None:
         return "undated"
     if due < today:
@@ -357,13 +400,14 @@ def map_repositories(
 
 
 def leg_priority(compass: dict | None, name: str) -> tuple[int, str]:
-    """`(bucket, due)`: where a repository sorts among candidates for `borg next`. Lower is earlier.
+    """`(bucket, nearest_due)`: where a repository sorts among candidates for `borg next`. Lower is earlier.
 
-    Bucket 0 is a repository on today's leg; 1 is a repository whose active destination has a due date, ordered by
-    that date (so the nearest, and a late one before any other, comes first); 2 is an active destination with no
-    date; 3 is everything else: a frozen, done, killed or proposed destination, and a repository no destination
-    claims. With no map (None, or `found` false) every repository gets `(0, "")`, a constant, so a stable sort on
-    a key that starts with this is exactly the sort it was before.
+    Bucket 0 is a repository on today's leg; 1 is a repository whose active destination has a date, ordered by the
+    destination's `nearest_due` (the earlier of its next waypoint's date and its `target`, so a destination with only
+    a target ranks here too, and the nearest, and a late one before any other, comes first); 2 is an active
+    destination with neither date; 3 is everything else: a frozen, done, killed or proposed destination, and a
+    repository no destination claims. With no map (None, or `found` false) every repository gets `(0, "")`, a
+    constant, so a stable sort on a key that starts with this is exactly the sort it was before.
     """
     if not compass or not compass.get("found"):
         return 0, ""
@@ -373,7 +417,7 @@ def leg_priority(compass: dict | None, name: str) -> tuple[int, str]:
     owner = next((d for d in compass.get("destinations") or [] if d.get("id") == entry.get("destination")), None)
     if owner is None or owner.get("status") != "active":
         return 3, ""
-    due = owner.get("due")
+    due = owner.get("nearest_due")
     return (1, due) if as_date(due) else (2, "")
 
 
@@ -419,6 +463,7 @@ def build_compass(
     warnings.extend(due_warnings)
     for destination in destinations:
         destination["due"] = dues.get(destination["id"])
+        destination["nearest_due"] = nearest_due(destination["due"], destination["target"])
         destination["state"] = destination_state(destination, moment)
     leg = parse_leg(log_text)
     return {

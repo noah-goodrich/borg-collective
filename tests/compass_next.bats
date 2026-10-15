@@ -120,6 +120,39 @@ _row_repositories() {
     [ "$(printf '%s' "$output" | _row_repositories)" = "unmapped frozen undated far soon late on-leg" ]
 }
 
+# A destination file whose frontmatter also carries `target:` (the end date of the whole destination), written over the
+# one `_write_map` made. A target and a README waypoint date are two dates and the earlier one counts.
+_destination_with_target() {
+    local id="$1" repository="$2" target="$3"
+    printf '%s\n' '---' "id: ${id}" 'status: active' "target: ${target}" 'repositories:' "  - ${repository}" '---' \
+        > "${MAP}/destinations/${id}.md"
+}
+
+@test "next --rows --json: a destination's target date counts beside its waypoint date, the earlier one ranking it" {
+    _write_registry
+    _write_map
+    _destination_with_target eps undated 2000-06-01
+    _destination_with_target delta far 2997-06-01
+    BORG_MAP_DIR="$MAP" run bash -c "zsh \"$BORG\" next --rows --json --local --all 2>/dev/null"
+    [ "$status" -eq 0 ]
+    [ "$(printf '%s' "$output" | _row_repositories)" = "on-leg late undated far soon unmapped frozen" ]
+}
+
+@test "link --json: each destination carries nearest_due, a text target reads null and a malformed one warns" {
+    _write_registry
+    _write_map
+    _destination_with_target eps undated 2000-06-01
+    _destination_with_target delta far 2997-06-01
+    _destination_with_target gamma soon TBD
+    _destination_with_target zeta frozen next-spring
+    BORG_MAP_DIR="$MAP" run bash -c "zsh \"$BORG\" link --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    local json="$output"
+    [ "$(printf '%s' "$json" | jq -c '.compass.destinations | map({(.id): [.target, .due, .nearest_due, .state]}) | add | {eps, delta, gamma, beta}')" \
+        = '{"eps":["2000-06-01",null,"2000-06-01","late"],"delta":["2997-06-01","2999-01-01","2997-06-01","on-track"],"gamma":[null,"2998-01-01","2998-01-01","on-track"],"beta":[null,"2000-01-01","2000-01-01","late"]}' ]
+    [ "$(printf '%s' "$json" | jq -c '.compass.warnings')" = '["destinations/zeta.md: target '"'"'next-spring'"'"' is not a YYYY-MM-DD date or TBD, ignored"]' ]
+}
+
 @test "next --switch: the non-interactive choice is the compass's top, not the score's" {
     _write_registry
     _write_map

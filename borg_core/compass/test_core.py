@@ -14,9 +14,12 @@ TODAY = "2026-03-10"
 TODAY_DATE = datetime.date.fromisoformat(TODAY)
 
 
-def _destination(ident="alpha", status="active", extra="", body="", definition="approved", target="2026-04-01"):
+def _destination(ident="alpha", status="active", extra="", body="", definition="approved", target="TBD"):
+    """A destination file. `target` defaults to TBD (no date) so a test about the README's waypoint date is not also
+    a test about the destination's own date; the tests of that pass a date, or None to leave the line out."""
+    line = "" if target is None else f"target: {target}\n"
     return (
-        f"---\nid: {ident}\ndomain: work\nstatus: {status}\ndefinition: {definition}\ntarget: {target}\n"
+        f"---\nid: {ident}\ndomain: work\nstatus: {status}\ndefinition: {definition}\n{line}"
         f"{extra}---\n\n# {ident}\n\n{body}"
     )
 
@@ -84,7 +87,7 @@ def test_a_curly_apostrophe_heading_is_still_the_leg_heading():
 
 
 def test_a_destination_parses_its_frontmatter_and_picks_the_active_waypoint():
-    compass = _build([_destination(body=_BODY)], _readme(("alpha", "2026-06-01")))
+    compass = _build([_destination(body=_BODY, target="2026-04-01")], _readme(("alpha", "2026-06-01")))
     (destination,) = compass["destinations"]
     assert destination == {
         "id": "alpha",
@@ -95,6 +98,7 @@ def test_a_destination_parses_its_frontmatter_and_picks_the_active_waypoint():
         "repositories": [],
         "next_waypoint": {"name": "Build the thing", "status": "active", "done": 1, "total": 3},
         "due": "2026-06-01",
+        "nearest_due": "2026-04-01",
         "state": "on-track",
     }
 
@@ -205,8 +209,9 @@ def test_an_impossible_date_in_the_readme_is_due_null():
 
 
 def _state(status="active", due=None, done=1, total=3, waypoint=True) -> str:
+    """The state of a destination whose nearest date is `due` (the date rules do not care which of the two it was)."""
     next_waypoint = {"name": "n", "status": "active", "done": done, "total": total} if waypoint else None
-    destination = {"status": status, "due": due, "next_waypoint": next_waypoint}
+    destination = {"status": status, "nearest_due": due, "next_waypoint": next_waypoint}
     return core.destination_state(destination, TODAY_DATE)
 
 
@@ -437,3 +442,218 @@ def test_leg_priority_buckets_and_due_dates():
 @pytest.mark.parametrize("block", [None, {}, {"found": False, "map_dir": "/m"}])
 def test_leg_priority_is_a_constant_without_a_map(block):
     assert core.leg_priority(block, "anything") == (0, "")
+
+
+# -- the destination target date, beside the waypoint date -------------------------------------------------------
+#
+# TODAY is 2026-03-10, so a date on or before 2026-03-17 is inside the at-risk window and one before TODAY is late.
+
+
+def _dated(target, waypoint_date=None, body=_BODY):
+    """The one destination of a map whose file has `target` (None leaves the line out) and whose README row has
+    `waypoint_date` (None leaves the row out)."""
+    readme = _readme(("alpha", waypoint_date)) if waypoint_date else None
+    return _build([_destination(body=body, target=target)], readme)["destinations"][0]
+
+
+def test_a_target_only_destination_keeps_due_null_and_takes_the_target_as_its_nearest_date():
+    destination = _dated("2026-06-01")
+    assert (destination["target"], destination["due"], destination["nearest_due"]) == ("2026-06-01", None, "2026-06-01")
+    assert destination["state"] == "on-track"
+
+
+def test_a_waypoint_date_only_destination_takes_that_date_as_its_nearest_date():
+    destination = _dated("TBD", "2026-06-01")
+    assert (destination["target"], destination["due"], destination["nearest_due"]) == (None, "2026-06-01", "2026-06-01")
+    assert destination["state"] == "on-track"
+
+
+def test_with_both_dates_the_earlier_wins_and_due_is_left_as_the_readme_gave_it():
+    earlier_target = _dated("2026-05-01", "2026-06-01")
+    assert (earlier_target["due"], earlier_target["target"], earlier_target["nearest_due"]) == (
+        "2026-06-01",
+        "2026-05-01",
+        "2026-05-01",
+    )
+    earlier_waypoint = _dated("2026-06-01", "2026-05-01")
+    assert (earlier_waypoint["due"], earlier_waypoint["target"], earlier_waypoint["nearest_due"]) == (
+        "2026-05-01",
+        "2026-06-01",
+        "2026-05-01",
+    )
+
+
+def test_a_destination_with_neither_date_has_a_null_nearest_date_and_is_undated():
+    for destination in (_dated(None), _dated("TBD")):
+        assert destination["nearest_due"] is None
+        assert destination["state"] == "undated"
+
+
+def test_nearest_due_compares_dates_and_ignores_a_value_that_is_not_one():
+    assert core.nearest_due("2026-05-01", "2026-04-30") == "2026-04-30"
+    assert core.nearest_due("2026-04-30", "2026-05-01") == "2026-04-30"
+    assert core.nearest_due("2026-05-01", None) == "2026-05-01"
+    assert core.nearest_due(None, "2026-05-01") == "2026-05-01"
+    assert core.nearest_due("2026-05-01", "2026-13-45") == "2026-05-01"
+    assert core.nearest_due(None, None) is None
+
+
+def test_a_past_target_is_late_even_though_the_waypoint_date_is_in_the_future():
+    destination = _dated("2026-03-01", "2026-09-01")
+    assert (destination["due"], destination["nearest_due"], destination["state"]) == (
+        "2026-09-01",
+        "2026-03-01",
+        "late",
+    )
+
+
+def test_a_past_target_is_late_even_with_no_waypoint_date_at_all():
+    assert _dated("2026-03-09")["state"] == "late"
+
+
+def test_a_target_inside_the_window_is_at_risk_unless_the_next_waypoint_is_complete():
+    assert _dated("2026-03-14", "2026-09-01")["state"] == "at-risk"
+    complete = "### W1 Last\n- status: active\n- [x] one\n- [x] two\n"
+    assert _dated("2026-03-14", "2026-09-01", body=complete)["state"] == "on-track"
+
+
+def test_a_waypoint_date_after_the_target_does_not_make_a_distant_target_late_or_risky():
+    destination = _dated("2026-12-01", "2027-01-01")
+    assert (destination["nearest_due"], destination["state"]) == ("2026-12-01", "on-track")
+
+
+@pytest.mark.parametrize("status", ["done", "killed", "frozen", "proposed"])
+def test_a_non_active_destination_ignores_its_past_target(status):
+    text = _destination(status=status, target="2020-01-01")
+    destination = _build([text], _readme(("alpha", "2026-09-01")))["destinations"][0]
+    assert destination["state"] == status
+    assert destination["nearest_due"] == "2020-01-01"
+
+
+@pytest.mark.parametrize("value", ["TBD", "tbd", "Tbd", "TBD - not agreed", "tbd (after review)", "TBD, maybe Q3"])
+def test_a_tbd_target_is_null_without_a_warning_in_any_case_and_with_any_trailing_text(value):
+    destination, warnings = core.parse_destination("destinations/a.md", _destination(target=value))
+    assert destination["target"] is None
+    assert warnings == []
+
+
+def test_an_absent_or_empty_target_is_null_without_a_warning():
+    for text in (_destination(target=None), _destination(target="")):
+        destination, warnings = core.parse_destination("destinations/a.md", text)
+        assert destination["target"] is None
+        assert warnings == []
+
+
+def test_an_iso_target_is_kept_as_that_string():
+    destination, warnings = core.parse_destination("destinations/a.md", _destination(target="2026-11-30"))
+    assert destination["target"] == "2026-11-30"
+    assert warnings == []
+
+
+@pytest.mark.parametrize(
+    "value", ["next spring", "2026-13-45", "2026-02-30", "11/30/2026", "2026-6-1", "TBDX", "[2026-06-01, 2026-07-01]"]
+)
+def test_a_malformed_target_is_null_with_one_warning_naming_the_file_and_the_value_and_never_raises(value):
+    destination, warnings = core.parse_destination("destinations/alpha.md", _destination(target=value))
+    assert destination is not None
+    assert destination["target"] is None
+    (warning,) = warnings
+    assert warning.startswith("destinations/alpha.md:")
+    assert "target" in warning
+    assert value.split(",")[0].strip("[") in warning
+
+
+def test_a_malformed_target_is_ignored_by_the_rules_and_the_warning_reaches_the_block():
+    compass = _build([_destination("alpha", body=_BODY, target="soonish")], _readme(("alpha", "2026-03-15")))
+    (destination,) = compass["destinations"]
+    assert (destination["target"], destination["nearest_due"], destination["state"]) == (None, "2026-03-15", "at-risk")
+    (warning,) = compass["warnings"]
+    assert "destinations/0.md" in warning
+    assert "soonish" in warning
+
+
+def test_a_target_only_destination_ranks_in_bucket_one_ahead_of_undated_and_by_nearest_date():
+    files = [
+        ("destinations/targeted.md", _destination("targeted", target="2026-08-01", extra="repositories:\n  - t\n")),
+        ("destinations/waypointed.md", _destination("waypointed", extra="repositories:\n  - w\n")),
+        ("destinations/earlier.md", _destination("earlier", target="2026-07-01", extra="repositories:\n  - e\n")),
+        ("destinations/neither.md", _destination("neither", extra="repositories:\n  - n\n")),
+    ]
+    readme = _readme(("waypointed", "2026-07-15"))
+    block = core.build_compass("/m", TODAY, None, files, readme, None, ["t", "w", "e", "n"])
+    got = {name: core.leg_priority(block, name) for name in ["t", "w", "e", "n"]}
+    assert got == {"t": (1, "2026-08-01"), "w": (1, "2026-07-15"), "e": (1, "2026-07-01"), "n": (2, "")}
+    assert sorted(got, key=got.get) == ["e", "w", "t", "n"]
+
+
+def test_leg_priority_orders_by_the_earlier_of_the_two_dates_not_by_the_waypoint_date():
+    files = [
+        ("destinations/a.md", _destination("a", target="2026-04-01", extra="repositories:\n  - ra\n")),
+        ("destinations/b.md", _destination("b", extra="repositories:\n  - rb\n")),
+    ]
+    readme = _readme(("a", "2026-12-01"), ("b", "2026-06-01"))
+    block = core.build_compass("/m", TODAY, None, files, readme, None, ["ra", "rb"])
+    assert core.leg_priority(block, "ra") == (1, "2026-04-01")
+    assert core.leg_priority(block, "rb") == (1, "2026-06-01")
+
+
+# A map with no target date anywhere reads exactly as it did before `target` counted. The expected values below were
+# taken from the tree before this change by running these same inputs through it; the test uses only names that
+# existed then (`build_compass`, `leg_priority`), so it runs unchanged against that tree.
+
+_NO_TARGET_WAYPOINT_DATES = [
+    ("past", "2026-03-01"),
+    ("yesterday", "2026-03-09"),
+    ("today", "2026-03-10"),
+    ("edge", "2026-03-17"),
+    ("after", "2026-03-18"),
+    ("far", "2026-12-01"),
+    ("tbd", "TBD"),
+]
+
+
+@pytest.mark.parametrize("target", [None, "TBD", "tbd - not agreed"])
+def test_a_map_with_no_target_dates_has_the_states_and_ranking_it_had_before_targets_counted(target):
+    files = []
+    for ident, _ in _NO_TARGET_WAYPOINT_DATES:
+        extra = f"repositories:\n  - r-{ident}\n"
+        files.append((f"destinations/{ident}.md", _destination(ident, body=_BODY, target=target, extra=extra)))
+    files.append(
+        (
+            "destinations/undated.md",
+            _destination("undated", body=_BODY, target=target, extra="repositories:\n  - r-undated\n"),
+        )
+    )
+    files.append(
+        (
+            "destinations/cold.md",
+            _destination("cold", status="frozen", target=target, extra="repositories:\n  - r-cold\n"),
+        )
+    )
+    readme = _readme(*_NO_TARGET_WAYPOINT_DATES)
+    names = [f"r-{ident}" for ident, _ in _NO_TARGET_WAYPOINT_DATES] + ["r-undated", "r-cold", "r-stray"]
+    block = core.build_compass("/m", TODAY, None, files, readme, None, names)
+    assert {d["id"]: (d["due"], d["state"]) for d in block["destinations"]} == {
+        "past": ("2026-03-01", "late"),
+        "yesterday": ("2026-03-09", "late"),
+        "today": ("2026-03-10", "at-risk"),
+        "edge": ("2026-03-17", "at-risk"),
+        "after": ("2026-03-18", "on-track"),
+        "far": ("2026-12-01", "on-track"),
+        "tbd": (None, "undated"),
+        "undated": (None, "undated"),
+        "cold": (None, "frozen"),
+    }
+    assert {name: core.leg_priority(block, name) for name in names} == {
+        "r-past": (1, "2026-03-01"),
+        "r-yesterday": (1, "2026-03-09"),
+        "r-today": (1, "2026-03-10"),
+        "r-edge": (1, "2026-03-17"),
+        "r-after": (1, "2026-03-18"),
+        "r-far": (1, "2026-12-01"),
+        "r-tbd": (2, ""),
+        "r-undated": (2, ""),
+        "r-cold": (3, ""),
+        "r-stray": (3, ""),
+    }
+    assert block["warnings"] == []
