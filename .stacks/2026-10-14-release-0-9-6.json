@@ -25,6 +25,12 @@
       "order": "2",
       "ref": "noah-goodrich/borg-collective#397",
       "why": "compass render in borg link and borg next"
+    },
+    {
+      "lane": "rename",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#403",
+      "why": "VERSION 0.9.6, release notes, then tag and plugin mirror"
     }
   ]
 }
