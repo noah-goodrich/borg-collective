@@ -34,7 +34,7 @@
       "lane": "_default",
       "order": "5",
       "ref": "noah-goodrich/borg-collective#404",
-      "status": "open",
+      "status": "merged",
       "why": "S4b: borg-link SKILL.md becomes an 8 KB router; Queen view, fallback and rationale move to references/"
     }
   ]
