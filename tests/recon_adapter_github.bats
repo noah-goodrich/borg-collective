@@ -396,3 +396,127 @@ _open_body() {
     run jq -r ".items | map(.url) | join(\" \")" "${BATS_TEST_TMPDIR}/doc.json"
     [ "$output" = "u" ]
 }
+
+# ── chunked sweep: a large registry must not become one request GitHub times out ──
+
+# A `gh` that answers per query. It finds every `rN: repository(owner: "o", name: "n")` alias in the
+# query it was handed and returns one open PR per alias (number N+1), so any chunking of the registry
+# yields the same item set. It saves each query to its own file under $GH_QUERIES. When the query
+# names a repository listed in $GH_FAIL_ON it writes $GH_FAIL_MSG to stderr and answers nothing,
+# like a request GitHub abandoned.
+_mock_gh_per_query() {
+    cat > "$MOCK_BIN/gh" <<'MOCK'
+#!/usr/bin/env bash
+q="$(mktemp "$GH_QUERIES/q.XXXXXX")"
+printf '%s\n' "$*" > "$q"
+if [ -n "${GH_FAIL_ON:-}" ] && grep -q "name: \"$GH_FAIL_ON\"" "$q"; then
+    printf '%s\n' "${GH_FAIL_MSG:-boom}" >&2
+    exit 1
+fi
+printf '{"data":{"viewer":{"login":"me"}'
+for a in $(grep -o 'r[0-9]*: repository' "$q" | sed 's/: repository//'); do
+    n="${a#r}"
+    printf ',"%s":{"pullRequests":{"nodes":[{"number":%s,"title":"t","state":"OPEN","isDraft":false,"updatedAt":"2026-08-20T10:00:00Z","url":"u","headRefName":"h","baseRefName":"main","author":{"login":"me"}}]}}' "$a" "$((n + 1))"
+done
+printf '}}\n'
+MOCK
+    chmod +x "$MOCK_BIN/gh"
+    export GH_QUERIES="${BATS_TEST_TMPDIR}/queries"
+    mkdir -p "$GH_QUERIES"
+}
+
+_many_repositories() {
+    local n="$1" i names=()
+    for ((i = 0; i < n; i++)); do
+        _repo_with_remote "repo$i" "git@github.com:owner/repo$i.git"
+        names+=("repo$i")
+    done
+    _repositories_json "${names[@]}" > /dev/null
+}
+
+_doc_of() {
+    printf '%s' "$output" > "${BATS_TEST_TMPDIR}/doc.json"
+}
+
+@test "adapter: a registry larger than the chunk size is split across several requests" {
+    _many_repositories 5
+    _mock_gh_per_query
+    BORG_RECON_GITHUB_CHUNK=2 run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$WORK/projects.json"
+    [ "$status" -eq 0 ]
+    _doc_of
+
+    run bash -c "ls '$GH_QUERIES' | wc -l | tr -d ' '"
+    [ "$output" = "3" ]
+    run bash -c "cat '$GH_QUERIES'/* | grep -o ': repository(' | wc -l | tr -d ' '"
+    [ "$output" = "5" ]
+    run jq -r '.items | length' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "5" ]
+    run jq -r '.items | map(.ref) | sort | join(",")' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "owner/repo0#1,owner/repo1#2,owner/repo2#3,owner/repo3#4,owner/repo4#5" ]
+}
+
+@test "adapter: by default no single request carries more than the default chunk of repositories" {
+    _many_repositories 30
+    _mock_gh_per_query
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$WORK/projects.json"
+    [ "$status" -eq 0 ]
+    _doc_of
+    run jq -r '.items | length' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "30" ]
+    local f biggest=0 n calls=0
+    for f in "$GH_QUERIES"/*; do
+        n="$(grep -o ': repository(' "$f" | wc -l | tr -d ' ')"
+        [ "$n" -gt "$biggest" ] && biggest="$n"
+        calls=$((calls + 1))
+    done
+    [ "$calls" -gt 1 ]
+    [ "$biggest" -le 10 ]
+}
+
+@test "adapter: a failed request surfaces gh's own error text, not a fixed guess" {
+    _repo_with_remote alpha "git@github.com:owner/alpha.git"
+    _mock_gh_per_query
+    GH_FAIL_ON=alpha GH_FAIL_MSG='GraphQL: Resource limited: query timed out' \
+        run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
+    [ "$status" -eq 0 ]
+    _doc_of
+    run jq -r '[.skipped, .summary] | @tsv' "${BATS_TEST_TMPDIR}/doc.json"
+    [[ "$output" == true* ]] || false
+    [[ "$output" == *"Resource limited: query timed out"* ]] || false
+    [[ "$output" != *"unauthenticated, offline, or rate-limited"* ]] || false
+}
+
+@test "adapter: gh's error text is trimmed to one bounded line" {
+    _repo_with_remote alpha "git@github.com:owner/alpha.git"
+    _mock_gh_per_query
+    local long
+    long="$(printf 'x%.0s' {1..600})"
+    GH_FAIL_ON=alpha GH_FAIL_MSG="$(printf 'line one\n\n   line two %s  ' "$long")" \
+        run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
+    _doc_of
+    run jq -r '.summary | length' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" -lt 400 ]
+    run jq -r '.summary | contains("\n")' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "false" ]
+    run jq -r '.summary | contains("line one")' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "true" ]
+}
+
+@test "adapter: one failed chunk keeps the other chunks' items and names what it covered" {
+    _many_repositories 5
+    _mock_gh_per_query
+    BORG_RECON_GITHUB_CHUNK=2 GH_FAIL_ON=repo2 GH_FAIL_MSG='GraphQL: timeout' \
+        run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$WORK/projects.json"
+    [ "$status" -eq 0 ]
+    _doc_of
+    # repo2 shares its chunk with repo3, so both go missing; repo0, repo1 and repo4 survive.
+    run jq -r '.items | map(.ref) | sort | join(",")' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "owner/repo0#1,owner/repo1#2,owner/repo4#5" ]
+    run jq -r '.skipped // false | tostring' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "false" ]
+    run jq -r '.summary' "${BATS_TEST_TMPDIR}/doc.json"
+    [[ "$output" == *"owner/repo2"* ]] || false
+    [[ "$output" == *"owner/repo3"* ]] || false
+    [[ "$output" == *"GraphQL: timeout"* ]] || false
+    [[ "$output" != *"owner/repo0"* ]] || false
+}
