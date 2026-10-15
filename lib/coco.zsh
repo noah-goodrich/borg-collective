@@ -1,63 +1,64 @@
 #!/usr/bin/env zsh
-# lib/coco.zsh — session discovery from ~/.snowflake/cortex/projects/
+# lib/coco.zsh — session discovery from ~/.snowflake/cortex/conversations/
 #
-# Mirrors lib/claude.zsh for Cortex Code CLI (CoCo). All functions follow
-# the identical pattern with borg_coco_* prefix and CoCo-specific paths.
+# Mirrors lib/claude.zsh for Cortex Code CLI (CoCo). Cortex 1.2.14 writes one `<uuid>.json` (metadata, one line,
+# carrying `working_directory`, `session_type`, `last_updated`) and one `<uuid>.history.jsonl` (the transcript)
+# per session into conversations/. It writes no `projects/` directory and no `session-log.md`; the readers of
+# those two were the only consumers of them, so they went with them. Subagent sessions (`session_type`
+# "subagent") are children of a main session and are skipped, so only a session a person started counts.
+# A file that does not parse, or has no working_directory, is skipped silently.
 
 # PATH is set by borg.zsh before sourcing this file
 
-COCO_PROJECTS_DIR="$HOME/.snowflake/cortex/projects"
-COCO_SESSION_LOG="$HOME/.snowflake/cortex/session-log.md"
+COCO_CONVERSATIONS_DIR="$HOME/.snowflake/cortex/conversations"
 
-# Convert /Users/noah/dev/troth → -Users-noah-dev-troth
-borg_coco_encode_path() {
-    local path="${1%/}"  # strip trailing slash
-    echo "${path//\//-}"
+# The jq filter: a main session's working directory, else nothing.
+_BORG_COCO_CWD_JQ='select(type == "object" and .session_type != "subagent" and (.working_directory | type) == "string")
+    | .working_directory'
+
+# Print the working directory of one conversation metadata file ("" when unusable).
+_borg_coco_file_cwd() {
+    jq -r "$_BORG_COCO_CWD_JQ" "$1" 2>/dev/null | head -n 1
 }
 
-# Return the ~/.snowflake/cortex/projects directory for a given repository path
-borg_coco_project_dir() {
-    local path="$1"
-    local encoded
-    encoded=$(borg_coco_encode_path "$path")
-    echo "$COCO_PROJECTS_DIR/$encoded"
-}
-
-# Find the most recently modified JSONL file for a repository path
+# Find the most recently modified main session whose working directory is the repository path.
 # Returns just the session UUID (no extension)
 borg_coco_latest_session_id() {
-    local path="$1"
-    local dir
-    dir=$(borg_coco_project_dir "$path")
-    [[ -d "$dir" ]] || return 0
-    # Use zsh glob qualifiers: (N) nullglob, (Om) sort by mod time desc, ([1]) first only
-    local files=("$dir"/*.jsonl(NOm[1]))
-    [[ ${#files[@]} -eq 0 ]] && return 0
-    local fname="${files[1]:t}"   # :t = tail (basename)
-    echo "${fname%.jsonl}"        # strip extension
+    local repo="${1%/}" f cwd
+    [[ -d "$COCO_CONVERSATIONS_DIR" ]] || return 0
+    # (N) nullglob, (.) plain files, (om) newest first
+    for f in "$COCO_CONVERSATIONS_DIR"/*.json(N.om); do
+        cwd=$(_borg_coco_file_cwd "$f")
+        if [[ -n "$cwd" && "${cwd%/}" == "$repo" ]]; then
+            echo "${${f:t}%.json}"
+            return 0
+        fi
+    done
+    return 0
 }
 
-# Return full path to the JSONL transcript for a session
+# Return full path to the history transcript for a session
 borg_coco_session_jsonl() {
-    local path="$1" session_id="$2"
-    local dir
-    dir=$(borg_coco_project_dir "$path")
-    echo "$dir/${session_id}.jsonl"
+    local session_id="$2"
+    echo "$COCO_CONVERSATIONS_DIR/${session_id}.history.jsonl"
 }
 
-# Return the latest JSONL transcript path for a repository
+# Return the latest history transcript path for a repository
 borg_coco_latest_jsonl() {
-    local path="$1"
+    local repo="$1"
     local session_id
-    session_id=$(borg_coco_latest_session_id "$path")
+    session_id=$(borg_coco_latest_session_id "$repo")
     [[ -n "$session_id" ]] || return 0
-    borg_coco_session_jsonl "$path" "$session_id"
+    borg_coco_session_jsonl "$repo" "$session_id"
 }
 
-# Parse ~/.snowflake/cortex/session-log.md and return unique repository paths
-# Format: "- 2026-03-17 08:25 | /path/to/repository | session:uuid"
+# Every distinct working directory a main session was started in, one absolute path per line.
 borg_coco_scan_session_log() {
-    [[ -f "$COCO_SESSION_LOG" ]] || return 0
-    /usr/bin/awk -F'|' '/^\-/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 ~ /^\//) print $2 }' \
-        "$COCO_SESSION_LOG" | /usr/bin/sort -u
+    [[ -d "$COCO_CONVERSATIONS_DIR" ]] || return 0
+    local f cwd
+    for f in "$COCO_CONVERSATIONS_DIR"/*.json(N.); do
+        cwd=$(_borg_coco_file_cwd "$f")
+        [[ "$cwd" == /* ]] && echo "${cwd%/}"
+    done | sort -u
+    return 0
 }
