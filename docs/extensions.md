@@ -126,7 +126,7 @@ python3 -m borg_core.extensions.cli survey     # or --json
 
 ### The oracle, and what it does not measure
 
-Prose is ignorable. Per CLAUDE.md's cairn entry this repository has already measured what
+Prose is ignorable. Per docs/agents/learned.md's cairn entry this repository has already measured what
 uninstrumented voluntary compliance is worth — four shipped, tested, exposed surfaces produced
 **one** real row in five months, and the rule drawn from it was *never build capture that asks the
 agent to volunteer*. So the type ships with a number attached.

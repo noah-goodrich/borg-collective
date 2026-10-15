@@ -777,7 +777,7 @@ def test_json_carries_the_aggregates_in_every_scope(isolated_env, monkeypatch):
     DOCUMENT_VERSION. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |=
     (...)'` from inside whatever repository the session happens to be in; scope-gating the
     aggregates would report "Queued: 0 directives" for the whole collective at `.version == 2`,
-    which SKILL.md maps to "CLI path. Never fall back." A wrong answer, not a missing one.
+    which references/fallback.md maps to "CLI path. Never fall back." A wrong answer, not a missing one.
 
     Mutation: `need_aggregate = mode != "porcelain" and scope["kind"] == "orchestrator"`.
     """
@@ -891,7 +891,7 @@ def test_deep_is_accepted_and_ignored(isolated_env, capsys):
     `borg link <repository>` a human types and on every `drone link`.
 
     ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This docstring, cli.py's twin comment
-    and two lines of CLAUDE.md all pinned `borg.zsh:3111`, which matched neither main nor the branch
+    and two lines of borg_core/link/CLAUDE.md all pinned `borg.zsh:3111`, which matched neither main nor the branch
     that last edited them; a pin is invalidated by any insertion above it and nothing fails when it
     goes stale. The same edit dropped "which is the fzf preview's path" -- `cmd_switch`'s `fzf` call
     carries no `--preview` flag, so that justification described a loop that does not exist.

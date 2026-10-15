@@ -6,7 +6,7 @@ path. Never a mocked fan-out.
 
 THE ONE RULE THIS FILE EXISTS TO OBEY, inherited verbatim from borg_core/manifest/test_shell.py: a
 test that supplies the value production is supposed to DERIVE proves nothing. This repository has
-shipped that bug three times (CLAUDE.md's "Learned": `borg recon` shipped completely dead, the
+shipped that bug three times (docs/agents/learned.md: `borg recon` shipped completely dead, the
 usage-watch sweep, the memory gate), and each time the suite was green. So:
 
   * the B6 regression BUILDS A REGISTRY and lets `discover_registered` derive the paths from it --
@@ -386,7 +386,7 @@ def test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_reposito
     whatsoever, which is what pins that nothing else crept into it.
 
     THE REPOSITORY LEG IS ASSERTED AND NOT MERELY NARRATED, which is a correction. Its sentence sat
-    in this docstring with no assertion under it while CLAUDE.md cited the sentence as a gate --
+    in this docstring with no assertion under it while docs/agents/commands.md cited the sentence as a gate --
     deleting `manifest.shell.repository_slug`'s fork left the case green, because `record_forks == []`
     only ever ran in orchestrator scope. The exact-argv assertion is the gate: it names the one
     subprocess the opted-down repository path is allowed, so deleting the fork goes red (the slug
@@ -653,7 +653,7 @@ def test_the_sweep_fixture_replaces_the_fanout_and_merges_into_nodes(isolated, m
 
 def test_an_unreadable_sweep_fixture_warns_instead_of_raising(isolated, monkeypatch):
     """A mistyped fixture path must say so. An empty grid a harness mistakes for a correct one is the
-    silent-blindness shape CLAUDE.md records three incidents of."""
+    silent-blindness shape docs/agents/learned.md records three incidents of."""
     dirs = _four_repository_registry(isolated)
     monkeypatch.setenv("BORG_LINK_SWEEP_FIXTURE", str(isolated / "does-not-exist.json"))
     monkeypatch.chdir(dirs["delta"])
@@ -1500,7 +1500,7 @@ def test_an_empty_borg_recon_max_tracks_does_not_take_the_front_door_down(isolat
 
     cli.main's broad boundary then printed one stderr line and exited 1 with ZERO BYTES on stdout --
     and every consumer of `borg link` swallows failure, so the user got a blank frame with no
-    diagnosis. Same shape CLAUDE.md's "Learned" records for BORG_REAP_STALE_HOURS, one layer over,
+    diagnosis. Same shape docs/agents/learned.md records for BORG_REAP_STALE_HOURS, one layer over,
     and newly reachable because S3 put `borg link` on recon's config readers for the first time.
     """
     dirs = _four_repository_registry(isolated)
@@ -1738,7 +1738,7 @@ def test_a_hanging_gh_does_not_hold_the_process_open_past_the_fetch_deadline(iso
     grid = json.loads(done.stdout)["grid"]
     # DEGRADED DOWN THE LADDER, NOT BLANK: the declared rung still answers and the miss is NAMED. A
     # build that swallowed the deadline would produce an all-unknown grid with zero warnings, which
-    # is the silent-blindness shape CLAUDE.md records three incidents of.
+    # is the silent-blindness shape docs/agents/learned.md records three incidents of.
     assert grid["manifests"][0]["nodes"]["testorg/alpha#11"]["state_source"] == "declared"
     assert grid["fetch"]["status"] == "failed"
     assert any("did not answer within 1s" in w for w in grid["warnings"]), grid["warnings"]

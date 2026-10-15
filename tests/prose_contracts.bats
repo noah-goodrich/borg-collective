@@ -173,17 +173,17 @@ setup() {
 # the original -- someone reads "hooks stay shell", does not find the qualification, and re-states the narrow
 # version as the whole truth.
 
-@test "hooks: CLAUDE.md states the subprocess-count rule for hook language" {
-    grep -q 'SUBPROCESS COUNT' "${REPO_ROOT}/CLAUDE.md"
-    grep -q 'At most one helper process' "${REPO_ROOT}/CLAUDE.md"
-    grep -q 'Never node or ruby in a hook body' "${REPO_ROOT}/CLAUDE.md"
+@test "hooks: hooks/CLAUDE.md states the subprocess-count rule for hook language" {
+    grep -q 'SUBPROCESS COUNT' "${REPO_ROOT}/hooks/CLAUDE.md"
+    grep -q 'At most one helper process' "${REPO_ROOT}/hooks/CLAUDE.md"
+    grep -q 'Never node or ruby in a hook body' "${REPO_ROOT}/hooks/CLAUDE.md"
 }
 
 @test "hooks: the rule names what it qualifies and pins the direction, not a figure" {
-    grep -q 'QUALIFIES a ratified' "${REPO_ROOT}/CLAUDE.md"
-    grep -q "costs MORE than Python's" "${REPO_ROOT}/CLAUDE.md"
-    grep -q "entire interpreter startup" "${REPO_ROOT}/CLAUDE.md"
-    grep -q 'Hooks stay shell' "${REPO_ROOT}/CLAUDE.md"
+    grep -q 'QUALIFIES a ratified' "${REPO_ROOT}/hooks/CLAUDE.md"
+    grep -q "costs MORE than Python's" "${REPO_ROOT}/hooks/CLAUDE.md"
+    grep -q "entire interpreter startup" "${REPO_ROOT}/hooks/CLAUDE.md"
+    grep -q 'Hooks stay shell' "${REPO_ROOT}/hooks/CLAUDE.md"
 }
 
 # ── Directives name their parent in the form the gate reads ──────────────────────────────────────
@@ -313,7 +313,7 @@ _shim_section() {
     # From the section's own heading to the start of the next top-level bullet. Anchored on the
     # heading text rather than a line number, because line numbers in CLAUDE.md drift constantly.
     sed -n '/^- \*\*THE SHIM LAYER: two tiers, one direction\.\*\*/,/^- \*\*`prefer-tool` extensions/p' \
-        "${REPO_ROOT}/CLAUDE.md"
+        "${REPO_ROOT}/borg_core/extensions/CLAUDE.md"
 }
 
 @test "shim: the section this suite greps actually exists, and is bounded at BOTH ends" {
@@ -482,7 +482,7 @@ _names_foreign_skill() {
         || { echo "Two hard limits does not record the exception"; false; }
     [ -f "${BATS_TEST_DIRNAME}/../hooks/borg-nanoprobe-guard.sh" ]
     grep -q 'sanctioned exception' "${BATS_TEST_DIRNAME}/../docs/extensions.md"
-    grep -q 'sanctioned exception' "${BATS_TEST_DIRNAME}/../CLAUDE.md"
+    grep -q 'sanctioned exception' "${BATS_TEST_DIRNAME}/../borg_core/extensions/CLAUDE.md"
     grep -q 'ignores it: its Skill gate reads the machine layer alone' "${BATS_TEST_DIRNAME}/../docs/extensions.md"
 }
 

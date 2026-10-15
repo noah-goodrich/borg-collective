@@ -1,7 +1,7 @@
 """The I/O layer's degradation branches, which the end-to-end cases above never reach.
 
 Each one is a rung on the "nothing here is ever fatal" ladder `shell.py`'s header promises, and each
-is the shape CLAUDE.md's "Learned" records as shipping SILENT: an empty environment variable that
+is the shape docs/agents/learned.md records as shipping SILENT: an empty environment variable that
 becomes `float("")`, a kind with no runner, a write that cannot complete.
 """
 

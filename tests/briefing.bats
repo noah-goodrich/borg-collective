@@ -607,7 +607,7 @@ EOF
 # tests/link_sweep.bats, but `--all` had NOTHING. Deleting `(( ${1:-0} )) && _brief_py_args+=(--all)`
 # left briefing.bats, link_sweep.bats and cli_contract.bats all green with the flag gone, so
 # `borg link --brief --all` would have silently degraded to `borg link --brief` — the same
-# capability-nothing-asserts shape as `borg recon` shipping dead (CLAUDE.md, "Learned").
+# capability-nothing-asserts shape as `borg recon` shipping dead (docs/agents/learned.md).
 #
 # ASSERTED ON THE PROJECTED PROMPT, WITH ITS OWN CONTROL. The mock captures `claude -p`'s argument
 # verbatim, so the case reads the bytes the document actually produced. An archived repository is the
@@ -680,7 +680,7 @@ EOF
 # all three suites green. The two cases below redirect the streams to separate files and assert on
 # each — the reason IS on stderr, and is NOT on stdout, which is the half that has teeth. Files
 # rather than `run --separate-stderr` so the pin does not depend on the bats version CI installs.
-# Same family as CLAUDE.md's "`cmd >> file 2>/dev/null` does NOT silence a redirect-open error" and
+# Same family as hooks/CLAUDE.md's "`cmd >> file 2>/dev/null` does NOT silence a redirect-open error" and
 # the zsh-EPIPE-under-`run` note: this repo keeps getting bitten by which stream a byte landed on.
 #
 # THE MOCKS ARE PASS-THROUGHS ON python3, each failing exactly ONE argument. Hiding python3 outright

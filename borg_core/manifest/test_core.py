@@ -320,7 +320,7 @@ def test_a_link_row_does_not_block_the_row_after_it():
     The first version of this test asserted only `is_tracked`'s return value, which made it a test of
     a boolean that nothing consumed -- `is_tracked` had zero production callers and a link row DID
     block. Measured then: this exact manifest returned `[]`. A test named for an invariant its body
-    never exercises is the family CLAUDE.md files under "when a test supplies the value the production
+    never exercises is the family docs/agents/learned.md files under "when a test supplies the value the production
     path is supposed to derive, it proves nothing about production".
 
     MUTATION: drop the `is_tracked` guard from ready_set's parent loop and this goes red.

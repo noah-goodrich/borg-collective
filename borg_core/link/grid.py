@@ -169,7 +169,7 @@ def track_status(track: dict) -> str:
     `track.get("ok", True)` and NOT `track.get("ok")`: recon.core stamps `ok` on every track it
     builds, so an ABSENT key only ever means a hand-recorded fixture, and defaulting that to failure
     would make every fixture emit spurious warnings. A key present and False is a real failure. (This
-    is the Python-side shape of the jq `//` trap CLAUDE.md records: `false` is not the same as
+    is the Python-side shape of the jq `//` trap borg_core/recon/CLAUDE.md records: `false` is not the same as
     absent, and one operator conflating them is how a failed track becomes invisible.)
     """
     if not track.get("ok", True):
@@ -874,8 +874,8 @@ def ready_refs(manifest: dict, nodes: dict[str, dict]) -> dict:
 
     WHICH IS WHY THE RESULT CARRIES A `state`. An empty list and "nobody looked" are different facts,
     and a renderer that prints both as "nothing is ready" tells a `--local` reader that their board is
-    clear when the truth is that no state on the page was resolved. Same trap `skills/borg-link
-    /SKILL.md` records for `order: []` vs `total_projects`, and `render._resolution_line` already
+    clear when the truth is that no state on the page was resolved. Same trap `skills/borg-link/references
+    /queen-view.md` records for `order: []` vs `total_projects`, and `render._resolution_line` already
     prints the honest sentence one section further down -- this makes NEXT agree with SIGNALS rather
     than contradict it.
 
@@ -993,7 +993,7 @@ def build_grid(scope: dict, slug: str, sweep: dict, fetch: dict, manifests: list
     whitelist and hands the result to an LLM, whose reading of `grid` is per-key and not guaranteed to
     consult the `scope` the whitelist also carries.) A block that cannot explain itself becomes a
     blank frame with no diagnosis, which is the exact shape of every silent-blindness incident in
-    CLAUDE.md's "Learned".
+    docs/agents/learned.md.
 
     WARNINGS ARE NEVER SWALLOWED and never merged into prose. Manifest-discovery warnings, selection
     warnings and sweep warnings all land in one named list, because zero manifests plus zero warnings

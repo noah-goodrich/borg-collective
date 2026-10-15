@@ -41,7 +41,7 @@ setup_temp_dirs() {
     # (/opt/homebrew/etc/gitconfig, /etc/gitconfig) is read regardless of HOME/XDG_CONFIG_HOME.
     # `.invalid` is RFC 2606 reserved, so the address can never resolve to anything real.
     #
-    # SAME FAMILY as two CLAUDE.md Learned entries: the XDG_CONFIG_HOME leak in borg-link-down.sh,
+    # SAME FAMILY as two entries in hooks/CLAUDE.md and docs/agents/learned.md: the XDG_CONFIG_HOME leak in borg-link-down.sh,
     # and "a shell variable is not an environment variable" for BORG_REGISTRY -- the sandbox being
     # incomplete in a way the dev machine silently papers over, which is exactly why it stayed
     # invisible where it was being tested.
@@ -58,7 +58,7 @@ setup_temp_dirs() {
     #
     # THE EMPTY STRING DOES NOT WORK. adapter_search_path() branches on `if override:`, so an
     # exported-empty value is FALSY and falls straight back to the real adapter directories -- the
-    # neutralization would silently do nothing, which is the same trap CLAUDE.md records for
+    # neutralization would silently do nothing, which is the same trap docs/agents/learned.md records for
     # BORG_REAP_STALE_HOURS. Only a real, existing, empty directory discovers zero adapters.
     #
     # THE ADAPTER-DISCOVERY REGRESSION GATE KEEPS ITS TEETH: cli_contract.bats's two #113 cases and
@@ -75,7 +75,7 @@ setup_temp_dirs() {
     # A REAL FILE, NEVER "". borg_core/link/shell.py's start_fetch branches on `if fixture:` exactly
     # as sweep does, so an exported-empty value is FALSY and falls straight through to the live
     # fetch -- neutralization that silently does nothing, the same trap the paragraph above documents
-    # for BORG_RECON_ADAPTER_PATH and CLAUDE.md records for BORG_REAP_STALE_HOURS.
+    # for BORG_RECON_ADAPTER_PATH and docs/agents/learned.md records for BORG_REAP_STALE_HOURS.
     #
     # THE CASES THAT MEAN TO EXERCISE THE FETCH UNSET IT THEMSELVES: link_sweep.bats' _sweepable_repo
     # and _ac3_two_repository_manifest, and the opt-in latency gate, which escapes the sandbox

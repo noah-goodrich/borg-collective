@@ -383,7 +383,7 @@ def _document(  # pylint: disable=too-many-locals
     # DOCUMENT_VERSION. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |=
     # (...)'`, and only borg-collective carries a `.borg-project` marker, so that call routes from
     # INSIDE whatever repository the session is in. Scope-gating the aggregates would report
-    # "Queued: 0 directives" for the whole collective at `.version == 2` -- which SKILL.md maps to
+    # "Queued: 0 directives" for the whole collective at `.version == 2` -- which references/fallback.md maps to
     # "CLI path. Never fall back." A wrong answer, not a missing one. Neither hot loop is `--json`.
     #
     # THE HINT PAGE READS NOTHING (2026-10-13). A cwd that is neither the Queen root nor inside a registered
@@ -540,13 +540,13 @@ def _build_parser() -> argparse.ArgumentParser:
     # `grep -n -- '_link_py_args=(--deep)' borg.zsh`, which returns exactly one line, the assignment
     # itself. SCOPE THE GREP TO THAT FILE. Run tree-wide the same pattern returns seven hits, because
     # the anchor conversion described below put the literal into six PROSE sites (this comment, its
-    # twin in test_cli.py, two lines of CLAUDE.md, and two directives under docs/plans/directives/);
+    # twin in test_cli.py, two lines of borg_core/link/CLAUDE.md, and two directives under docs/plans/directives/);
     # a reader who greps the tree and counts is reading commentary, not callers. That arm serves
     # every `borg link <repository>` a human types and every `drone link`, so deleting the argument
     # makes argparse exit 2 on the most-typed invocation of the command.
     #
     # ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This comment, its twin in
-    # test_cli.py's `test_deep_is_accepted_and_ignored`, and two lines of CLAUDE.md all read
+    # test_cli.py's `test_deep_is_accepted_and_ignored`, and two lines of borg_core/link/CLAUDE.md all read
     # `borg.zsh:3111`, a number that matched NEITHER main NOR the branch that last edited them -- and
     # any insertion above the arm invalidates it again with nothing failing. `grep` for the assignment
     # instead. The same edit dropped this comment's "which IS the fzf preview's path, re-executed on

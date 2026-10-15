@@ -1981,7 +1981,7 @@ _link_iso_ago() {
 # Mock tmux so each repository named in $1 (one per LINE) reads as a live window, exempting it from the
 # reap overlay. TRACE must be exported before _mock_tmux's script runs: its `>> "$TRACE"` would
 # otherwise fail to open and leak a shell error onto stderr, which the golden diff would catch as a
-# spurious mismatch (same redirect-open-order trap documented in CLAUDE.md).
+# spurious mismatch (same redirect-open-order trap documented in hooks/CLAUDE.md).
 _link_mock_tmux() {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
@@ -3415,7 +3415,7 @@ _link_spine_matches() {
 # B9. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |= (...)'`, and only
 # borg-collective carries a `.borg-project` marker — so that call routes from INSIDE whatever
 # repository the session is in. Scope-gating the aggregates would report zero directives for the whole
-# collective at `.version == 2`, which SKILL.md maps to "CLI path. Never fall back." A WRONG answer,
+# collective at `.version == 2`, which references/fallback.md maps to "CLI path. Never fall back." A WRONG answer,
 # not a missing one, and it is why DOCUMENT_VERSION could stay 2.
 @test "contract: link --json carries every repository's directives from inside a repository" {
     _link_setup_grid

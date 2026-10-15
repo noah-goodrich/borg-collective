@@ -1,8 +1,9 @@
 # The reader census
 
 Every `.borg/<name>` store referred to by executable code (`borg_core/`, `lib/`, `hooks/`, `bin/`,
-`merge-tree/`, root `*.zsh`) or by a surface that makes promises to an agent (`CLAUDE.md`, and every
-markdown file under `skills/` and `agents/`) must appear here and must name a reader.
+`merge-tree/`, root `*.zsh`) or by a surface that makes promises to an agent (every tracked `CLAUDE.md`,
+excluding `tests/fixtures/`, every `docs/agents/*.md`, and every markdown file under `skills/` and
+`agents/`) must appear here and must name a reader.
 
 **The agent-facing surfaces are in scope because of a real miss.** The first version of this gate
 read `CLAUDE.md` alone, and `agents/borg-nanoprobe.md` was at that moment telling every nanoprobe to

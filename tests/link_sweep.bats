@@ -402,7 +402,7 @@ MOCK
     # THE TRIPWIRE FOR THE TRIPWIRE. If setup_temp_dirs' neutralization ever regresses to `=""`,
     # every link test in the suite silently starts shelling out to `gh` and the goldens start
     # byte-capturing live GitHub state — while staying green, because an empty value LOOKS
-    # neutralized. Same trap CLAUDE.md records for BORG_REAP_STALE_HOURS.
+    # neutralized. Same trap docs/agents/learned.md records for BORG_REAP_STALE_HOURS.
     [ -n "${BORG_RECON_ADAPTER_PATH:-}" ]
     [ -d "$BORG_RECON_ADAPTER_PATH" ]
     run bash -c 'ls -A "$BORG_RECON_ADAPTER_PATH"'

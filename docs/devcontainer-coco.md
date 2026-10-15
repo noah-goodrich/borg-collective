@@ -206,8 +206,10 @@ Claude Code first.
    `~/.snowflake/cortex/conversations/` instead of `~/.claude/projects/`
 
 2. **Extend hook installation to CoCo** — `borg setup` already registers `borg-link-down.sh` / `borg-link-up.sh`
-   / `borg-notify.sh` in `~/.snowflake/cortex/settings.json` alongside `~/.claude/settings.json`. No CoCo-specific
-   fork is needed — the same hook scripts read CoCo's stdin via `lib/borg-hooks.sh`.
+   / `borg-notify.sh` (and the other Cortex hooks) in `~/.snowflake/cortex/hooks.json`, the file CoCo reads for
+   hooks (its `settings.json` is read for permissions only). No CoCo-specific fork is needed — the same hook
+   scripts read CoCo's stdin via `lib/borg-hooks.sh`; tool names differ (lowercase `edit`, `write`, `bash`), see
+   `docs/plans/directives/2026-10-15-borg-in-cortex.md`.
 
 3. **Registry `source` field** — Already a free-form string. Adding `"coco"` as a value requires no schema
    change. Repositories would appear in `borg link` with a new badge (e.g., `[S]` for Snowflake).

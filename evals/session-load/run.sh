@@ -28,7 +28,7 @@
 #   BORG_EVAL_REPO         the checkout (the oracle redirects the evidence tree through it)
 #
 # ISOLATION. The session runs with XDG_CONFIG_HOME and XDG_STATE_HOME redirected into $OUT, because the
-# borg hooks derive BORG_DIR and the state root from those (CLAUDE.md "Learned": hooks recompute their
+# borg hooks derive BORG_DIR and the state root from those (hooks/CLAUDE.md: hooks recompute their
 # own config paths; HOME alone leaks). So the registry, state.json and logs the real hooks write land in
 # the sandbox. HOME is deliberately NOT redirected: the claim under test is what the INSTALLED plugin
 # set does, and OAuth credentials resolve through HOME. `--no-session-persistence` keeps the transcript

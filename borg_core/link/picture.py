@@ -287,7 +287,7 @@ def state_glyph(node: dict) -> str:
     an all-unresolved grid on every invocation, and one KeyError there is the whole document.)
 
     `is True` RATHER THAN TRUTHINESS on both optional fields, which is the Python-side shape of the
-    jq `//` trap CLAUDE.md records: a missing key and a JSON `false` must read identically, and the
+    jq `//` trap borg_core/recon/CLAUDE.md records: a missing key and a JSON `false` must read identically, and the
     string `"true"` -- what a hand-edited manifest produces -- must NOT light up a glyph that claims
     live evidence.
     """
@@ -333,7 +333,7 @@ def glyph_color(node: dict) -> str:
 
     THE COLOUR IS THE REINFORCEMENT, NOT THE SIGNAL. Option (iii) of the precondition — dim the glyph
     and change nothing else — was rejected because a colour change is invisible in a plain-text
-    golden diff, which CLAUDE.md's "Learned" section catalogues three times. `cell_mark` below prints
+    golden diff, which docs/agents/learned.md catalogues three times. `cell_mark` below prints
     a literal `?`, so the plain-text diff moves; this makes the screen agree with it.
     """
     if not resolved_provenance(node):
