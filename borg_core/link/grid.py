@@ -597,7 +597,7 @@ def scoped_repositories(registry: dict, scope: dict) -> dict:
     yields `{}` rather than falling back to everything: silently widening a narrowed sweep is how a
     reflexive command becomes a 2.3s one with nothing on screen to say why.
     """
-    repositories = registry.get("projects") or {}
+    repositories = registry.get("repositories") or {}
     if scope.get("kind") != "repository":
         return dict(repositories)
     entry = repositories.get(scope.get("repository") or "")
@@ -613,7 +613,7 @@ def repository_dir(registry: dict, scope: dict) -> str:
     """
     if scope.get("kind") != "repository":
         return ""
-    entry = (registry.get("projects") or {}).get(scope.get("repository") or "")
+    entry = (registry.get("repositories") or {}).get(scope.get("repository") or "")
     if not isinstance(entry, dict):
         return ""
     path = str(jq_default(entry.get("path"), ""))

@@ -109,7 +109,7 @@ Find the row for the version you started from. If you skipped several releases, 
 | Before 0.9.4, or never ran install.sh | Launchd agents, below |
 | 0.9.6 | None |
 | 0.9.7 | Registry key, below |
-| 0.9.8 | None |
+| 0.9.8 | Registry key, below (`borg setup` does it) |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
 
@@ -125,9 +125,19 @@ run-in <BORG> ./install.sh
 
 2. Run `borg doctor`. Every RESUME row should now be OK except `resume-guardian`, which stays a known warning (section 6). This clears both the `resume-watch` and the `resume-probe` FAIL rows: the probe reads the path of the Claude binary from the watcher's plist, so it cannot pass without it.
 
-### From 0.9.7 to 0.9.8: registry key
+### Registry key (`projects` to `repositories`)
 
-The registry file (`~/.config/borg/registry.json`, or under `XDG_CONFIG_HOME`) keeps its repositories under a top-level key. The key is moving from `projects` to `repositories` in three steps. Step one, in 0.9.6, made every reader accept both. Step two, in 0.9.8 as noah-goodrich/borg-collective#420, made every writer keep whichever key the file already has, so a renamed file stays renamed. Step three, in a later release, will drop the old key; that release's row will say so. Do this step once per machine, after the normal upgrade to 0.9.8.
+The registry file (`~/.config/borg/registry.json`, or under `XDG_CONFIG_HOME`) keeps its repositories under a top-level key. The key moved from `projects` to `repositories` in three steps. Step one, in 0.9.6, made every reader accept both. Step two, in 0.9.8 as noah-goodrich/borg-collective#420, made every writer keep whichever key the file already has. Step three, the first release after 0.9.8, drops the old key: from that release on, the old `projects` key is no longer read, and a new registry file is created with `repositories`.
+
+The normal upgrade handles it. Section 4 runs `borg setup`, and `borg setup` renames the key for you. It is safe to repeat: when the file already has `repositories` it does nothing, and when it renames it writes a timestamped backup next to the file first (`registry.json.bak.<UTC stamp>`).
+
+A registry file that still has only `projects` is never read as an empty registry and never overwritten. Every borg command that reads the registry stops with this message and changes nothing:
+
+```
+borg: registry file (<path>) still uses the retired 'projects' key, which is no longer read; run `borg setup` or `python3 -m borg_core.registry.cli migrate-key` to rename it to 'repositories'
+```
+
+`borg doctor` shows the same condition as a FAIL row named `registry-key`. The python tools print the same sentence as an error. If you see it, rename the key by hand with the steps below. If you ran `borg setup` as part of the upgrade you will not see it.
 
 1. Preview the change. It prints one line and writes nothing:
 
@@ -135,7 +145,7 @@ The registry file (`~/.config/borg/registry.json`, or under `XDG_CONFIG_HOME`) k
 python3 -m borg_core.registry.cli migrate-key --dry-run
 ```
 
-   Run it from the borg-collective checkout (`run-in <BORG> ...` or `cd` there first). "nothing to do" means the file already has `repositories`; skip to step 3.
+   Run it from the borg-collective checkout (`run-in <BORG> ...` or `cd` there first). "nothing to do" or "already uses 'repositories'" means the file is already migrated; skip to step 3.
 
 2. Run it for real. It writes a timestamped backup next to the file first:
 

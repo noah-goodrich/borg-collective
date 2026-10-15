@@ -23,9 +23,9 @@ _run_check() {
 }
 
 @test "notifyd: empty tmux_window + container origin + transition to waiting fires exactly once" {
-    printf '{"projects":{"nowin":{"status":"idle","notify_origin":"container"}}}\n' > "$BORG_REGISTRY"
+    printf '{"repositories":{"nowin":{"status":"idle","notify_origin":"container"}}}\n' > "$BORG_REGISTRY"
     _run_check 'check silent
-        printf "{\"projects\":{\"nowin\":{\"status\":\"waiting\",\"notify_origin\":\"container\"}}}\n" > "$BORG_REGISTRY"
+        printf "{\"repositories\":{\"nowin\":{\"status\":\"waiting\",\"notify_origin\":\"container\"}}}\n" > "$BORG_REGISTRY"
         check
         check'
     [ "$status" -eq 0 ]
@@ -34,9 +34,9 @@ _run_check() {
 }
 
 @test "notifyd: a populated tmux_window still fires with the window in the subtitle" {
-    printf '{"projects":{"p":{"status":"idle","tmux_window":"w","notify_origin":"container"}}}\n' > "$BORG_REGISTRY"
+    printf '{"repositories":{"p":{"status":"idle","tmux_window":"w","notify_origin":"container"}}}\n' > "$BORG_REGISTRY"
     _run_check 'check silent
-        printf "{\"projects\":{\"p\":{\"status\":\"waiting\",\"tmux_window\":\"w\",\"notify_origin\":\"container\"}}}\n" > "$BORG_REGISTRY"
+        printf "{\"repositories\":{\"p\":{\"status\":\"waiting\",\"tmux_window\":\"w\",\"notify_origin\":\"container\"}}}\n" > "$BORG_REGISTRY"
         check'
     [ "$status" -eq 0 ]
     [ "$(wc -l < "$NOTIFY_LOG" | tr -d ' ')" = "1" ]
@@ -44,9 +44,9 @@ _run_check() {
 }
 
 @test "notifyd: host-origin waiting never fires" {
-    printf '{"projects":{"h":{"status":"idle","notify_origin":"host"}}}\n' > "$BORG_REGISTRY"
+    printf '{"repositories":{"h":{"status":"idle","notify_origin":"host"}}}\n' > "$BORG_REGISTRY"
     _run_check 'check silent
-        printf "{\"projects\":{\"h\":{\"status\":\"waiting\",\"notify_origin\":\"host\"}}}\n" > "$BORG_REGISTRY"
+        printf "{\"repositories\":{\"h\":{\"status\":\"waiting\",\"notify_origin\":\"host\"}}}\n" > "$BORG_REGISTRY"
         check'
     [ "$status" -eq 0 ]
     [ ! -s "$NOTIFY_LOG" ]

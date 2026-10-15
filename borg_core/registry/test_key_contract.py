@@ -1,11 +1,13 @@
-"""The registry's `projects` -> `repositories` key rename, EXPAND and MIGRATE phases: readers accept either
-key, writers keep the key the file has (a new file starts with `projects`), and `migrate-key` flips a file idempotently. Temp files only."""
+"""The registry's `projects` -> `repositories` key rename, CONTRACT phase: the file uses only `repositories`,
+the old key is no longer read (a `projects`-only file fails loudly, never reads as empty), a new file is born
+with `repositories`, and `migrate-key` flips an old file idempotently. Temp files only."""
 
 import json
 
 import pytest
 
 from borg_core import paths
+from borg_core.manifest import shell as manifest_shell
 from borg_core.recon import shell as recon_shell
 from borg_core.registry import cli, core, shell
 
@@ -28,54 +30,65 @@ def _backups(path):
     return sorted(path.parent.glob(f"{path.name}.bak.*"))
 
 
-# ── the reader ───────────────────────────────────────────────────────────────
+# ── the reader refuses the retired key ───────────────────────────────────────
 
 
-def test_normalize_maps_repositories_onto_projects():
-    assert paths.normalize_registry({"repositories": ENTRIES, "extra": 1}) == {"extra": 1, "projects": ENTRIES}
+def test_require_registry_key_passes_the_new_shape_and_non_objects_through():
+    doc = {"repositories": ENTRIES, "extra": 1}
+    assert paths.require_registry_key(doc) is doc
+    assert paths.require_registry_key(["x"]) == ["x"]
+    assert paths.require_registry_key(None) is None
+    assert paths.require_registry_key({}) == {}
 
 
-def test_normalize_leaves_the_old_shape_alone():
-    doc = {"projects": ENTRIES}
-    assert paths.normalize_registry(doc) == doc
+def test_require_registry_key_raises_on_a_projects_only_document():
+    with pytest.raises(paths.LegacyRegistryKey, match="migrate-key"):
+        paths.require_registry_key({"projects": ENTRIES}, "/x/registry.json")
 
 
-def test_normalize_prefers_repositories_when_both_present():
-    out = paths.normalize_registry({"projects": {"old": {}}, "repositories": ENTRIES})
-    assert out == {"projects": ENTRIES}
+def test_require_registry_key_reads_repositories_when_both_are_present():
+    doc = {"projects": {"old": {}}, "repositories": ENTRIES}
+    assert paths.require_registry_key(doc) is doc
 
 
-def test_normalize_passes_non_objects_through():
-    assert paths.normalize_registry(["x"]) == ["x"]
-    assert paths.normalize_registry(None) is None
-
-
-def test_normalize_does_not_mutate_its_input():
-    doc = {"repositories": ENTRIES}
-    paths.normalize_registry(doc)
-    assert doc == {"repositories": ENTRIES}
-
-
-def test_read_registry_returns_the_same_entries_for_both_shapes(registry_file):
+def test_read_registry_of_a_projects_only_file_errors_and_is_not_empty(registry_file):
     _write(registry_file, {"projects": ENTRIES})
-    old = shell.read_registry()
-    _write(registry_file, {"repositories": ENTRIES})
-    new = shell.read_registry()
-    assert old == new == {"projects": ENTRIES}
+    with pytest.raises(ValueError, match="retired 'projects' key") as exc:
+        shell.read_registry()
+    assert "borg setup" in str(exc.value)
+    assert json.loads(registry_file.read_text(encoding="utf-8")) == {"projects": ENTRIES}
 
 
-def test_recon_loader_accepts_both_shapes(registry_file):
+def test_a_write_path_never_replaces_a_projects_only_file(registry_file):
     _write(registry_file, {"projects": ENTRIES})
-    old = recon_shell.load_registry_repositories(str(registry_file), None)
+    with pytest.raises(ValueError, match="retired 'projects' key"):
+        shell.registry_merge("gamma", {"path": "/g"})
+    assert json.loads(registry_file.read_text(encoding="utf-8")) == {"projects": ENTRIES}
+
+
+def test_read_registry_reads_a_new_shape_file(registry_file):
     _write(registry_file, {"repositories": ENTRIES})
-    new = recon_shell.load_registry_repositories(str(registry_file), None)
-    assert old == new == ENTRIES
+    assert shell.read_registry() == {"repositories": ENTRIES}
 
 
-# ── the writer keeps the key the file has ──────────────────────────────────────────
+def test_recon_loader_refuses_a_projects_only_file_and_reads_the_new_one(registry_file):
+    _write(registry_file, {"projects": ENTRIES})
+    with pytest.raises(ValueError, match="retired 'projects' key"):
+        recon_shell.load_registry_repositories(str(registry_file), None)
+    _write(registry_file, {"repositories": ENTRIES})
+    assert recon_shell.load_registry_repositories(str(registry_file), None) == ENTRIES
 
 
-def test_writer_keeps_repositories_from_a_new_shape_file(registry_file):
+def test_manifest_sweep_warns_on_a_projects_only_registry():
+    manifests, warnings = manifest_shell.discover_registered({"projects": ENTRIES})
+    assert manifests == []
+    assert len(warnings) == 1 and "retired 'projects' key" in warnings[0]
+
+
+# ── the writer ───────────────────────────────────────────────────────────────
+
+
+def test_writer_round_trips_repositories(registry_file):
     _write(registry_file, {"repositories": ENTRIES, "extra": 1})
     shell.registry_merge("gamma", {"path": "/g"})
     on_disk = json.loads(registry_file.read_text(encoding="utf-8"))
@@ -86,18 +99,16 @@ def test_writer_keeps_repositories_from_a_new_shape_file(registry_file):
     assert set(json.loads(registry_file.read_text(encoding="utf-8"))["repositories"]) == {"alpha", "beta"}
 
 
-def test_writer_keeps_projects_from_an_old_shape_file(registry_file):
-    _write(registry_file, {"projects": ENTRIES})
+def test_a_new_registry_is_born_with_repositories(registry_file):
     shell.registry_merge("gamma", {"path": "/g"})
     on_disk = json.loads(registry_file.read_text(encoding="utf-8"))
-    assert "repositories" not in on_disk
-    assert set(on_disk["projects"]) == {"alpha", "beta", "gamma"}
+    assert set(on_disk) == {"repositories"}
+    assert set(on_disk["repositories"]) == {"gamma"}
 
 
-def test_a_new_registry_is_created_with_projects(registry_file):
-    shell.registry_merge("gamma", {"path": "/g"})
-    on_disk = json.loads(registry_file.read_text(encoding="utf-8"))
-    assert set(on_disk) == {"projects"}
+def test_initializing_read_creates_repositories(registry_file):
+    assert shell.read_registry() == {"repositories": {}}
+    assert json.loads(registry_file.read_text(encoding="utf-8")) == {"repositories": {}}
 
 
 # ── migrate-key ──────────────────────────────────────────────────────────────

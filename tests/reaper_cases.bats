@@ -121,15 +121,15 @@ EOF
         chmod +x "$MOCK_BIN/tmux"
 
         if [ "$window" = "null" ]; then
-            printf '{"projects":{"proj":{"path":null,"status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":null}}}' \
+            printf '{"repositories":{"proj":{"path":null,"status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":null}}}' \
                 > "$BORG_REGISTRY"
         else
-            printf '{"projects":{"proj":{"path":null,"status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":"%s"}}}' \
+            printf '{"repositories":{"proj":{"path":null,"status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":"%s"}}}' \
                 "$window" > "$BORG_REGISTRY"
         fi
 
         actual=$(zsh -c "set -- help; source '$BORG' >/dev/null 2>&1; borg_registry_with_state" \
-            | jq -r '.projects.proj.status')
+            | jq -r '.repositories.proj.status')
 
         if [ "$actual" != "$expect" ]; then
             echo "window='$window' live='$live_list': expected $expect, got $actual" >&2

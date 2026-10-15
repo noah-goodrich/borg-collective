@@ -122,8 +122,8 @@ if [[ "$MODE" == "orchestrator" ]]; then
     if [[ -f "$BORG_REGISTRY" ]]; then
         # Read registry for identity fields, then overlay state.json for each repository.
         # Build TSV: name, status, last_activity, path — sorted by last_activity desc.
-        _raw_tsv=$(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | "'
-            .projects // {} | to_entries
+        _raw_tsv=$(jq -r '
+            .repositories // {} | to_entries
             | map(select(.value.archived // false | not))
             | .[]
             | [.key, (if (.value.path // "") == "" then "-" else .value.path end), (.value.repo // "")]
@@ -316,7 +316,7 @@ if [[ -f "$BORG_REGISTRY" ]]; then
         fi
         _borg_should_reap "$_s" "$_last" "$_live" && continue
         _active_count=$(( _active_count + 1 ))
-    done < <(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects | to_entries[]
+    done < <(jq -r '.repositories | to_entries[]
         | [.key,
            (if (.value.path // "") == "" then "-" else .value.path end),
            (if (.value.tmux_window // "") == "" then "-" else .value.tmux_window end),

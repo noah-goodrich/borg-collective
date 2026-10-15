@@ -83,7 +83,7 @@ def _registry(tmp_path, monkeypatch):
     monkeypatch.setenv("BORG_REGISTRY", str(path))
 
     def register(**repositories):
-        path.write_text(json.dumps({"projects": {k: {"path": v} for k, v in repositories.items()}}), encoding="utf-8")
+        path.write_text(json.dumps({"repositories": {k: {"path": v} for k, v in repositories.items()}}), encoding="utf-8")
 
     return register
 
@@ -698,7 +698,7 @@ def test_two_registry_entries_for_one_directory_are_migrated_once(tmp_path, regi
 def test_the_registry_warnings_are_passed_on(tmp_path, registry, capsys):
     repo = _repo(tmp_path)
     (tmp_path / "registry.json").write_text(
-        json.dumps({"projects": {"ok": {"path": repo}, "nopath": {}}}), encoding="utf-8"
+        json.dumps({"repositories": {"ok": {"path": repo}, "nopath": {}}}), encoding="utf-8"
     )
     assert _run(capsys)[0] == 0
 

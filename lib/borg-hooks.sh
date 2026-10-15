@@ -243,7 +243,7 @@ _borg_state_read() {
 _borg_resolve_proj_dir() {
     local repository="$1" cwd="$2" rp
     if [[ -f "$BORG_REGISTRY" ]]; then
-        rp=$(jq -r --arg p "$repository" "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p].path // ""' "$BORG_REGISTRY" 2>/dev/null || true)
+        rp=$(jq -r --arg p "$repository" '.repositories[$p].path // ""' "$BORG_REGISTRY" 2>/dev/null || true)
         [[ -n "$rp" && "$rp" != "null" && -d "$rp" ]] && { printf '%s\n' "$rp"; return; }
     fi
     printf '%s\n' "$cwd"
@@ -260,7 +260,7 @@ _borg_proj_repo() {
     unset _REPO
     [[ -f "${BORG_REGISTRY:-}" ]] || return 0
     _r=$(jq -r --arg p "$1" --arg d "$2" \
-        "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p] | select((.path // "") == $d) | "R" + (.repo // "" | if type == "string" then . else "" end)' \
+        '.repositories[$p] | select((.path // "") == $d) | "R" + (.repo // "" | if type == "string" then . else "" end)' \
         "$BORG_REGISTRY" 2>/dev/null) || return 0
     [[ -n "$_r" ]] && _REPO="${_r#R}"
     return 0

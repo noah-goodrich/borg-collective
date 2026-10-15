@@ -73,7 +73,7 @@ _sweepable_repo() {
 EOF
 
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"sierra":{"path":"$dir","status":"idle","last_activity":"2026-08-01T00:00:00Z"}}}
+{"repositories":{"sierra":{"path":"$dir","status":"idle","last_activity":"2026-08-01T00:00:00Z"}}}
 EOF
 
     setup_mock_bin
@@ -236,7 +236,7 @@ _ac3_two_repository_manifest() {
 EOF
 
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{
+{"repositories":{
   "sierra":{"path":"$sierra","status":"idle","last_activity":"2026-08-01T00:00:00Z"},
   "tango":{"path":"$tango","status":"idle","last_activity":"2026-08-01T00:00:00Z"}}}
 EOF

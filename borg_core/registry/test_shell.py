@@ -57,14 +57,14 @@ def test_tmux_session_name_uses_override(isolated_env, monkeypatch):
 
 def test_read_registry_initializes_when_missing(isolated_env):
     registry = shell.read_registry()
-    assert registry == {"projects": {}}
+    assert registry == {"repositories": {}}
     assert shell.registry_path().is_file()
 
 
 def test_read_registry_returns_existing_content(isolated_env):
     shell.registry_path().parent.mkdir(parents=True, exist_ok=True)
-    shell.registry_path().write_text(json.dumps({"projects": {"a": {"path": "/a"}}}))
-    assert shell.read_registry() == {"projects": {"a": {"path": "/a"}}}
+    shell.registry_path().write_text(json.dumps({"repositories": {"a": {"path": "/a"}}}))
+    assert shell.read_registry() == {"repositories": {"a": {"path": "/a"}}}
 
 
 def test_read_registry_raises_clear_error_on_malformed_json(isolated_env):
@@ -75,49 +75,49 @@ def test_read_registry_raises_clear_error_on_malformed_json(isolated_env):
 
 
 def test_write_registry_is_atomic_no_leftover_tmp_file(isolated_env):
-    shell.write_registry({"projects": {"x": {"path": "/x"}}})
+    shell.write_registry({"repositories": {"x": {"path": "/x"}}})
     files = list(shell.registry_path().parent.iterdir())
     assert files == [shell.registry_path()]
 
 
 def test_write_registry_accepts_an_empty_repositories_object(isolated_env):
-    shell.write_registry({"projects": {}})
-    assert shell.read_registry() == {"projects": {}}
+    shell.write_registry({"repositories": {}})
+    assert shell.read_registry() == {"repositories": {}}
 
 
 def test_registry_has_true_for_existing_repository(isolated_env):
-    shell.write_registry({"projects": {"troth": {"path": "/troth"}}})
+    shell.write_registry({"repositories": {"troth": {"path": "/troth"}}})
     assert shell.registry_has("troth") is True
 
 
 def test_registry_has_false_for_missing_repository(isolated_env):
-    shell.write_registry({"projects": {}})
+    shell.write_registry({"repositories": {}})
     assert shell.registry_has("ghost") is False
 
 
 def test_registry_merge_inserts_new_repository(isolated_env):
     shell.registry_merge("new-repository", {"path": "/new"})
-    assert shell.read_registry()["projects"]["new-repository"] == {"path": "/new"}
+    assert shell.read_registry()["repositories"]["new-repository"] == {"path": "/new"}
 
 
 def test_registry_merge_upserts_existing_repository_preserving_other_fields(isolated_env):
-    shell.write_registry({"projects": {"p": {"path": "/old", "pinned": True}}})
+    shell.write_registry({"repositories": {"p": {"path": "/old", "pinned": True}}})
     shell.registry_merge("p", {"path": "/new"})
-    assert shell.read_registry()["projects"]["p"] == {"path": "/new", "pinned": True}
+    assert shell.read_registry()["repositories"]["p"] == {"path": "/new", "pinned": True}
 
 
 def test_registry_remove_deletes_repository(isolated_env):
-    shell.write_registry({"projects": {"keep": {"path": "/k"}, "drop": {"path": "/d"}}})
+    shell.write_registry({"repositories": {"keep": {"path": "/k"}, "drop": {"path": "/d"}}})
     shell.registry_remove("drop")
-    repositories = shell.read_registry()["projects"]
+    repositories = shell.read_registry()["repositories"]
     assert "drop" not in repositories
     assert "keep" in repositories
 
 
 def test_registry_remove_missing_repository_is_a_no_op(isolated_env):
-    shell.write_registry({"projects": {"keep": {"path": "/k"}}})
+    shell.write_registry({"repositories": {"keep": {"path": "/k"}}})
     shell.registry_remove("ghost")
-    assert shell.read_registry() == {"projects": {"keep": {"path": "/k"}}}
+    assert shell.read_registry() == {"repositories": {"keep": {"path": "/k"}}}
 
 
 # ── resolve_path ─────────────────────────────────────────────────────────────

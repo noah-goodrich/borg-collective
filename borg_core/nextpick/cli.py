@@ -190,7 +190,7 @@ def _top(index: int) -> int:
     output, which `borg next` prints as "All clear". The reason goes to stderr as ONE line.
     """
     try:
-        repositories = json.load(sys.stdin).get("projects") or {}
+        repositories = json.load(sys.stdin).get("repositories") or {}
         entry = top_entry(repositories, index, read_compass(repositories))
     # JUSTIFICATION: the exit code is the contract here; any failure must reach the caller as non-zero, never as 0.
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -210,14 +210,14 @@ def main(argv: list[str] | None = None) -> int:
             return _top(args.top)
         if args.rows and args.json:
             try:
-                repositories = json.load(sys.stdin).get("projects") or {}
+                repositories = json.load(sys.stdin).get("repositories") or {}
             except (ValueError, AttributeError):
                 repositories = {}
             compass = read_compass(repositories)
             print(json.dumps(_rows_json_failopen(repositories, bool(args.local), bool(args.all), compass)))
             return 0
         doc = json.load(sys.stdin)
-        repositories = doc.get("projects") or {}
+        repositories = doc.get("repositories") or {}
         compass = read_compass(repositories)
         if args.rows:
             print("\n".join(rows_output(repositories, bool(args.local), bool(args.all), compass)))

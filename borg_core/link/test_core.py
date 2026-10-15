@@ -92,7 +92,7 @@ def test_reap_overlay_window_resolution(window_field, live_windows, expect_reape
     # because the overlay resolves it first. tests/reaper_cases.bats runs these same five rows
     # against the live zsh via borg_registry_with_state.
     registry = {
-        "projects": {
+        "repositories": {
             "proj": {
                 "path": None,
                 "status": "active",
@@ -102,19 +102,19 @@ def test_reap_overlay_window_resolution(window_field, live_windows, expect_reape
         }
     }
     result = core.reap_overlay(registry, live_windows, NOW, 12)
-    assert (result["projects"]["proj"]["status"] == "idle") is expect_reaped
+    assert (result["repositories"]["proj"]["status"] == "idle") is expect_reaped
 
 
 def test_reap_overlay_liveness_is_literal_not_a_regex():
     # zsh matched with `grep -qx` and no -F, so `dotted.name` matched a live `dotted-name`. That was
     # fixed in zsh (lib/registry.zsh) rather than reproduced here; this pins that the two agree.
     registry = {
-        "projects": {
+        "repositories": {
             "dotted.name": {"status": "active", "last_activity": _iso(NOW - 999999)},
         }
     }
     result = core.reap_overlay(registry, ["dotted-name"], NOW, 12)
-    assert result["projects"]["dotted.name"]["status"] == "idle"
+    assert result["repositories"]["dotted.name"]["status"] == "idle"
 
 
 def _stale_active(**extra):
@@ -136,39 +136,39 @@ def test_window_is_live_accepts_either_form(entry, live, expect_live):
 
 
 def test_reap_overlay_does_not_downgrade_a_repository_whose_long_named_window_is_live():
-    registry = {"projects": {"widget-factory": _stale_active(tmux_window="wf")}}
+    registry = {"repositories": {"widget-factory": _stale_active(tmux_window="wf")}}
     result = core.reap_overlay(registry, ["widget-factory"], NOW, 12)
-    assert result["projects"]["widget-factory"]["status"] == "active"
+    assert result["repositories"]["widget-factory"]["status"] == "active"
     result = core.reap_overlay(registry, ["wf"], NOW, 12)
-    assert result["projects"]["widget-factory"]["status"] == "active"
+    assert result["repositories"]["widget-factory"]["status"] == "active"
     result = core.reap_overlay(registry, ["unrelated"], NOW, 12)
-    assert result["projects"]["widget-factory"]["status"] == "idle"
+    assert result["repositories"]["widget-factory"]["status"] == "idle"
 
 
 def test_reap_overlay_records_the_previous_status_and_does_not_mutate():
-    registry = {"projects": {"p": {"status": "waiting", "last_activity": None}}}
+    registry = {"repositories": {"p": {"status": "waiting", "last_activity": None}}}
     result = core.reap_overlay(registry, [], NOW, 12)
-    assert result["projects"]["p"]["_reaped_from"] == "waiting"
-    assert result["projects"]["p"]["status"] == "idle"
-    assert registry["projects"]["p"]["status"] == "waiting"
+    assert result["repositories"]["p"]["_reaped_from"] == "waiting"
+    assert result["repositories"]["p"]["status"] == "idle"
+    assert registry["repositories"]["p"]["status"] == "waiting"
 
 
 def test_reap_overlay_maps_the_tsv_sentinel_in_last_activity():
     # "-" is jq's empty-column sentinel, mapped back to "" by the shell loop; it must mean "no
     # timestamp" (and therefore reap), not "an unparseable timestamp".
-    registry = {"projects": {"p": {"status": "active", "last_activity": "-"}}}
+    registry = {"repositories": {"p": {"status": "active", "last_activity": "-"}}}
     result = core.reap_overlay(registry, [], NOW, 12)
-    assert result["projects"]["p"]["status"] == "idle"
+    assert result["repositories"]["p"]["status"] == "idle"
 
 
 def test_reap_overlay_leaves_unreapable_repositories_alone():
-    registry = {"projects": {"p": {"status": "idle", "last_activity": None}}}
+    registry = {"repositories": {"p": {"status": "idle", "last_activity": None}}}
     result = core.reap_overlay(registry, [], NOW, 12)
-    assert "_reaped_from" not in result["projects"]["p"]
+    assert "_reaped_from" not in result["repositories"]["p"]
 
 
 def test_reap_overlay_handles_a_registry_with_no_projects_key():
-    assert core.reap_overlay({}, [], NOW, 12) == {"projects": {}}
+    assert core.reap_overlay({}, [], NOW, 12) == {"repositories": {}}
 
 
 # ── relative_time ────────────────────────────────────────────────────────────
@@ -279,34 +279,34 @@ def test_overlay_state_does_not_mutate():
 
 
 def test_with_state_applies_overlays_and_defaults_missing_status():
-    registry = {"projects": {"a": {"path": "/a"}, "b": {"path": "/b", "status": "waiting"}}}
+    registry = {"repositories": {"a": {"path": "/a"}, "b": {"path": "/b", "status": "waiting"}}}
     result = core.with_state(registry, {"b": {"status": "active"}})
-    assert result["projects"]["a"]["status"] == "idle"
-    assert result["projects"]["b"]["status"] == "active"
+    assert result["repositories"]["a"]["status"] == "idle"
+    assert result["repositories"]["b"]["status"] == "active"
 
 
 @pytest.mark.parametrize("falsy", [None, False])
 def test_with_state_replaces_every_falsy_status(falsy):
     # jq's `//=` replaces false as well as null; reproduced deliberately.
-    result = core.with_state({"projects": {"a": {"status": falsy}}}, {})
-    assert result["projects"]["a"]["status"] == "idle"
+    result = core.with_state({"repositories": {"a": {"status": falsy}}}, {})
+    assert result["repositories"]["a"]["status"] == "idle"
 
 
 def test_with_state_leaves_empty_string_status_alone():
     # An empty string is jq-truthy, so `//=` does NOT replace it -- confirmed live against jq:
     # `{"a":{"status":""}} | .a.status //= "idle"` yields `""`, unchanged.
-    result = core.with_state({"projects": {"a": {"status": ""}}}, {})
-    assert result["projects"]["a"]["status"] == ""
+    result = core.with_state({"repositories": {"a": {"status": ""}}}, {})
+    assert result["repositories"]["a"]["status"] == ""
 
 
 def test_with_state_does_not_mutate_the_input():
-    registry = {"projects": {"a": {"path": "/a"}}}
+    registry = {"repositories": {"a": {"path": "/a"}}}
     core.with_state(registry, {"a": {"status": "active"}})
-    assert "status" not in registry["projects"]["a"]
+    assert "status" not in registry["repositories"]["a"]
 
 
 def test_with_state_handles_an_empty_registry():
-    assert core.with_state({}, {}) == {"projects": {}}
+    assert core.with_state({}, {}) == {"repositories": {}}
 
 
 # ── small primitives ─────────────────────────────────────────────────────────
@@ -314,7 +314,7 @@ def test_with_state_handles_an_empty_registry():
 
 def test_active_count_counts_waiting_and_active_only():
     registry = {
-        "projects": {
+        "repositories": {
             "a": {"status": "active"},
             "b": {"status": "waiting"},
             "c": {"status": "idle"},
@@ -325,7 +325,7 @@ def test_active_count_counts_waiting_and_active_only():
 
 
 def test_repository_paths_preserves_insertion_order_and_blanks_nulls():
-    registry = {"projects": {"z": {"path": "/z"}, "a": {"path": None}, "m": {}}}
+    registry = {"repositories": {"z": {"path": "/z"}, "a": {"path": None}, "m": {}}}
     assert core.repository_paths(registry) == [("z", "/z"), ("a", ""), ("m", "")]
 
 
@@ -722,7 +722,7 @@ def test_repository_sort_key_activity_sentinel_only_replaces_jq_falsy():
 
 
 def test_visible_repositories_filters_archived_and_show_all_restores_it():
-    registry = {"projects": _porcelain_repositories()}
+    registry = {"repositories": _porcelain_repositories()}
     now = 1_800_000_000
 
     hidden = core.visible_repositories(registry, False, now)
@@ -742,7 +742,7 @@ def test_visible_repositories_strips_internal_keys_and_adds_relative_activity():
         "last_activity": core.format_iso(1_800_000_000),
         "_reaped_from": "active",
     }
-    registry = {"projects": {"proj": entry}}
+    registry = {"repositories": {"proj": entry}}
 
     public = core.visible_repositories(registry, False, now)["proj"]
     assert "_reaped_from" not in public

@@ -33,7 +33,7 @@ check() {
     # Fields are joined with the ASCII unit separator (\u001f), NOT a tab. A tab is IFS whitespace, so
     # `read` collapses adjacent tabs and an empty tmux_window shifts notify_origin into `window`.
     # A non-whitespace IFS character keeps empty fields. Order: repository, status, window, origin.
-    lines=$(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects // {} | to_entries[] | "\(.key)\u001f\(.value.status // "idle")\u001f\(.value.tmux_window // "")\u001f\(.value.notify_origin // "")"' \
+    lines=$(jq -r '.repositories // {} | to_entries[] | "\(.key)\u001f\(.value.status // "idle")\u001f\(.value.tmux_window // "")\u001f\(.value.notify_origin // "")"' \
         "$REGISTRY" 2>/dev/null) || return 0
     local -A seen
     while IFS=$'\x1f' read -r repository repo_status window origin; do

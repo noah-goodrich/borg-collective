@@ -50,7 +50,7 @@ _selected() {
 _write_registry() {
     local extra="$1"
     cat > "$BORG_REGISTRY" <<JSON
-{"projects": {
+{"repositories": {
   "wait-new": {"path":null,"status":"waiting","tmux_window":"w-new","last_activity":"2026-10-04T10:00:00Z"},
   "wait-old": {"path":null,"status":"waiting","tmux_window":"w-old","last_activity":"2026-09-01T10:00:00Z"},
   "act":      {"path":null,"status":"active","tmux_window":"w-act","last_activity":"2026-10-05T10:00:00Z"},
@@ -217,7 +217,7 @@ PYEOF
 }
 
 @test "chooser (forced tty): an empty registry still says All clear" {
-    echo '{"projects": {}}' > "$BORG_REGISTRY"
+    echo '{"repositories": {}}' > "$BORG_REGISTRY"
     _break_rows_call
     run bash -c 'printf "" | BORG_NEXT_FORCE_TTY=1 zsh "$1" next --local' _ "$BORG"
     [ "$status" -eq 0 ]
@@ -388,7 +388,7 @@ GHEOF
             > "${BATS_TEST_TMPDIR}/p/$n/.borg/state.json"
     done
     cat > "$BORG_REGISTRY" <<JSON
-{"projects": {
+{"repositories": {
   "live":  {"path":"${BATS_TEST_TMPDIR}/p/live","status":"idle"},
   "short": {"path":"${BATS_TEST_TMPDIR}/p/short","status":"idle","tmux_window":"s-win"},
   "fresh": {"path":"${BATS_TEST_TMPDIR}/p/fresh","status":"idle","tmux_window":"gone"}

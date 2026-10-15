@@ -84,7 +84,7 @@ def _write_manifest(root, repository, name, doc):
 
 def _registry(*paths):
     """A registry dict shaped like ~/.config/borg/registry.json, keyed by repository name."""
-    return {"projects": {os.path.basename(p) or f"p{i}": {"path": p} for i, p in enumerate(paths)}}
+    return {"repositories": {os.path.basename(p) or f"p{i}": {"path": p} for i, p in enumerate(paths)}}
 
 
 def _git_repository(root, name, remote=None):
@@ -350,18 +350,18 @@ def test_discover_registered_derives_the_paths_from_the_registry(tmp_path):
 
 def test_discover_registered_on_an_empty_registry_finds_nothing_and_warns_nothing():
     assert shell.discover_registered({}) == ([], [])
-    assert shell.discover_registered({"projects": {}}) == ([], [])
-    assert shell.discover_registered({"projects": None}) == ([], [])
-    assert shell.discover_registered({"projects": []}) == ([], [])
+    assert shell.discover_registered({"repositories": {}}) == ([], [])
+    assert shell.discover_registered({"repositories": None}) == ([], [])
+    assert shell.discover_registered({"repositories": []}) == ([], [])
 
 
 @pytest.mark.parametrize(
     "registry",
-    [{"projects": ["/a", "/b"]}, {"projects": "nope"}, {"projects": 3}, None, "nope", []],
+    [{"repositories": ["/a", "/b"]}, {"repositories": "nope"}, {"repositories": 3}, None, "nope", []],
     ids=["list", "string", "number", "none", "bare-string", "bare-list"],
 )
 def test_a_registry_of_the_wrong_shape_warns_instead_of_raising(registry):
-    # `registry.get("projects") or {}` guarded missing/null/empty but not a wrong TYPE: a non-empty
+    # `registry.get("repositories") or {}` guarded missing/null/empty but not a wrong TYPE: a non-empty
     # list reached `.values()` and raised AttributeError straight out of discover_registered, taking
     # down the whole invocation from inside the module whose header says nothing here is ever fatal.
     # registry.shell.read_registry validates JSON syntax and nothing else, so a hand-edited registry
@@ -376,7 +376,7 @@ def test_a_registry_entry_with_no_path_is_skipped_and_never_reads_the_cwd(tmp_pa
     # read whatever directory the process happens to be sitting in.
     _write_manifest(tmp_path, "here", "leak.json", _manifest([_row("1", "o/leak#1")]))
     monkeypatch.chdir(tmp_path / "here")
-    registry = {"projects": {"a": {"path": ""}, "b": {"path": None}, "c": {"path": "null"}, "d": {}, "e": None}}
+    registry = {"repositories": {"a": {"path": ""}, "b": {"path": None}, "c": {"path": "null"}, "d": {}, "e": None}}
     manifests, warnings = shell.discover_registered(registry)
     assert manifests == [], "and above all not the manifest sitting in the cwd"
     # ZERO MANIFESTS AND ZERO WARNINGS is the silent-blindness shape this repository has been burned
@@ -389,13 +389,13 @@ def test_one_pathless_entry_among_good_ones_stays_silent(tmp_path):
     # The negative pair: the tripwire is per-REGISTRY, not per-entry, so a single pathless repository
     # cannot make it noisy.
     good = _write_manifest(tmp_path, "good", "a.json", _manifest([_row("1", "o/a#1")]))
-    manifests, warnings = shell.discover_registered({"projects": {"good": {"path": good}, "bad": {}}})
+    manifests, warnings = shell.discover_registered({"repositories": {"good": {"path": good}, "bad": {}}})
     assert len(manifests) == 1 and warnings == []
 
 
 def test_two_registry_entries_pointing_at_one_directory_load_the_manifest_once(tmp_path):
     p = _write_manifest(tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1")]))
-    registry = {"projects": {"repo": {"path": p}, "repo-feature": {"path": p}}}
+    registry = {"repositories": {"repo": {"path": p}, "repo-feature": {"path": p}}}
     manifests, _ = shell.discover_registered(registry)
     assert len(manifests) == 1
 
@@ -405,7 +405,7 @@ def test_two_registry_paths_differing_only_by_a_trailing_slash_load_the_manifest
     # different strings, but `os.path.join` normalizes the trailing slash away, so both produced a
     # manifest with a BYTE-IDENTICAL `_path` -- two indistinguishable copies of one file in the grid.
     p = _write_manifest(tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1")]))
-    registry = {"projects": {"a": {"path": p}, "b": {"path": p + "/"}}}
+    registry = {"repositories": {"a": {"path": p}, "b": {"path": p + "/"}}}
     manifests, _ = shell.discover_registered(registry)
     assert len(manifests) == 1
 
@@ -414,7 +414,7 @@ def test_a_symlinked_registry_path_loads_the_manifest_once(tmp_path):
     p = _write_manifest(tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1")]))
     link = tmp_path / "linked"
     link.symlink_to(p)
-    manifests, _ = shell.discover_registered({"projects": {"a": {"path": p}, "b": {"path": str(link)}}})
+    manifests, _ = shell.discover_registered({"repositories": {"a": {"path": p}, "b": {"path": str(link)}}})
     assert len(manifests) == 1
 
 
@@ -432,7 +432,7 @@ def test_one_directory_reached_twice_warns_once(tmp_path, second):
     if second == "symlink":
         (tmp_path / "linked").symlink_to(p)
 
-    manifests, warnings = shell.discover_registered({"projects": {"a": {"path": p}, "b": {"path": alias}}})
+    manifests, warnings = shell.discover_registered({"repositories": {"a": {"path": p}, "b": {"path": alias}}})
     assert manifests == []
     assert len(warnings) == 1, warnings
 
@@ -451,7 +451,7 @@ def test_a_worktree_registered_beside_its_parent_loads_each_manifest_once(tmp_pa
     subprocess.run(["git", "commit", "-q", "-m", "manifest"], cwd=repository, check=True, capture_output=True)
     worktree = _git_worktree(repository, str(tmp_path / "repo-pm6"), "pm6")
 
-    registry = {"projects": {"repo": {"path": repository}, "repo-pm6": {"path": worktree}}}
+    registry = {"repositories": {"repo": {"path": repository}, "repo-pm6": {"path": worktree}}}
     manifests, warnings = shell.discover_registered(registry)
     assert warnings == []
     assert os.path.exists(os.path.join(worktree, ".stacks", "a.json")), "the copy is really there"
@@ -481,7 +481,7 @@ def test_discover_registered_propagates_warnings_by_name(tmp_path):
 def test_discover_registered_sweeps_in_registry_order(tmp_path):
     a = _write_manifest(tmp_path, "a", "one.json", _manifest([_row("1", "o/a#1")]))
     b = _write_manifest(tmp_path, "b", "two.json", _manifest([_row("1", "o/b#1")]))
-    registry = {"projects": {"b": {"path": b}, "a": {"path": a}}}
+    registry = {"repositories": {"b": {"path": b}, "a": {"path": a}}}
     manifests, _ = shell.discover_registered(registry)
     assert [m["_id"] for m in manifests] == ["two", "one"]
 
@@ -1901,11 +1901,8 @@ def _repositories_registry(*paths):
 
 
 def test_a_repository_registered_under_the_repositories_key_is_swept_for_its_stacks_manifest(tmp_path):
-    """The registry key is mid-rename (`projects` -> `repositories`); the sweep must list every registered path
-    whichever key the file uses, or a migrated registry renders an empty grid.
-
-    MUTATION: drop the `normalize_registry` call in `_registered_paths` and `manifests` is empty, no warning.
-    """
+    """The registry's entry map lives under `repositories`; the sweep must list every registered path under it,
+    or a migrated registry renders an empty grid."""
     first = tmp_path / "alpha"
     second = tmp_path / "bravo"
     stacks = _stacks_manifest(first, "alpha")

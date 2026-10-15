@@ -159,19 +159,31 @@ def registry_path() -> Path:
     return borg_dir() / "registry.json"
 
 
-def normalize_registry(doc: Any) -> Any:
-    """The registry document with its entry map under `projects`, whichever key the file uses.
+LEGACY_KEY_FIX = "python3 -m borg_core.registry.cli migrate-key"
 
-    THE ONE PLACE the Python side decides which top-level key holds the entries. The registry file is
-    mid-rename from `projects` to `repositories`: readers accept either, and writers keep the key the file has
-    (`registry.shell._keep_disk_key`; lib/registry.zsh's writer).
-    `repositories` wins when both are present; otherwise `projects` is used as is.
-    Every other key is carried over untouched, and a non-dict document is returned unchanged so the
-    callers' own type checks still see what was on disk. Pure; a new dict is returned, `doc` is not
-    mutated. The `borg link --json` wire keys are a different contract and never pass through here.
+
+class LegacyRegistryKey(ValueError):
+    """The registry file still holds its entries under the retired `projects` key."""
+
+
+def legacy_registry_message(where: object = "") -> str:
+    """The one-line error for a registry file that still has only the retired `projects` key."""
+    at = f" ({where})" if where else ""
+    return (
+        f"registry file{at} still uses the retired 'projects' key, which is no longer read; "
+        f"run `borg setup` or `{LEGACY_KEY_FIX}` to rename it to 'repositories'"
+    )
+
+
+def require_registry_key(doc: Any, where: object = "") -> Any:
+    """`doc` unchanged, or raise `LegacyRegistryKey` when it has `projects` and no `repositories`.
+
+    THE ONE PLACE the Python side refuses the retired registry key (contract step of the
+    `projects` -> `repositories` rename; `migrate-key` is the way out). A file with only the old key must
+    never read as an empty registry: a later write would then replace it and lose every entry. A
+    document with both keys reads `repositories`; the leftover `projects` is ignored. Pure. The
+    `borg link --json` wire keys are a different contract and never pass through here.
     """
-    if not isinstance(doc, dict) or "repositories" not in doc:
-        return doc
-    normalized = {key: value for key, value in doc.items() if key != "repositories"}
-    normalized["projects"] = doc["repositories"]
-    return normalized
+    if isinstance(doc, dict) and "projects" in doc and "repositories" not in doc:
+        raise LegacyRegistryKey(legacy_registry_message(where))
+    return doc

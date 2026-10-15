@@ -11,7 +11,7 @@ import pytest
 from borg_core.nextpick import cli, shell
 
 REGISTRY = {
-    "projects": {
+    "repositories": {
         "a": {"status": "waiting", "last_activity": "2026-09-01"},
         "b": {"status": "idle", "last_activity": "2026-10-01"},
     }
@@ -106,7 +106,7 @@ def _plan_registry(tmp_path: Path) -> dict:
     (tmp_path / "b" / "PROJECT_PLAN.md").write_text(PLAN)
     (tmp_path / "c" / ".borg" / "checkpoints" / "2026-10-01-0900.md").write_text("## 5. Next Session\n\n1. write it\n")
     return {
-        "projects": {
+        "repositories": {
             "a": {
                 "status": "waiting",
                 "waiting_reason": "needs a call",
@@ -303,7 +303,7 @@ def test_rows_json_is_valid_json_even_when_everything_fails(state, monkeypatch, 
 
 def test_unmeasured_logs_null_opened_after(state):
     args, _ = cli._parser().parse_known_args(["--chooser", "--opened", "a", "--unmeasured"])
-    row = cli.build_row(args, REGISTRY["projects"], __import__("datetime").datetime(2026, 1, 1))
+    row = cli.build_row(args, REGISTRY["repositories"], __import__("datetime").datetime(2026, 1, 1))
     assert row["opened"] == "a" and row["opened_after_s"] is None and row["scripted"] is False
 
 
@@ -314,7 +314,7 @@ def _checkpointed_registry(tmp_path: Path) -> dict:
     newest = "tl;dr nothing\n\n## 5. Next Session\n\n1. ship the   chooser\n2. two\n"
     (store / "2026-10-02-0900.md").write_text(newest)
     return {
-        "projects": {
+        "repositories": {
             "p": {"status": "idle", "last_activity": "2026-10-01T00:00:00Z", "path": str(tmp_path / "proj")},
             "q": {"status": "idle", "path": str(tmp_path / "nope")},
         }
@@ -323,7 +323,7 @@ def _checkpointed_registry(tmp_path: Path) -> dict:
 
 def test_checkpoint_next_steps_reads_the_latest_checkpoint(tmp_path):
     reg = _checkpointed_registry(tmp_path)
-    assert shell.checkpoint_next_steps(reg["projects"], ["p", "q"]) == {"p": "ship the chooser"}
+    assert shell.checkpoint_next_steps(reg["repositories"], ["p", "q"]) == {"p": "ship the chooser"}
 
 
 def test_checkpoint_next_steps_is_fail_open(monkeypatch):
@@ -347,7 +347,7 @@ def test_rows_json_checkpoint_fallback_keeps_a_row_out_of_quiet(state, monkeypat
 def _crowded(tmp_path: Path, count: int = 8) -> tuple[dict, dict]:
     """Two repositories sharing one repo plus a lone one; `count` YOU PRs on `solo`, one stale draft on `a`."""
     registry = {
-        "projects": {
+        "repositories": {
             "a": {"status": "idle", "last_activity": "2026-09-01", "path": str(tmp_path / "a"), "repo": "/g"},
             "a2": {"status": "idle", "last_activity": "2026-09-02", "path": str(tmp_path / "a2"), "repo": "/g"},
             "solo": {"status": "idle", "last_activity": "2026-09-29", "path": str(tmp_path / "s")},

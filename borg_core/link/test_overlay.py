@@ -17,23 +17,23 @@ def _checkpointed(tmp_path, name, body):
 
 
 def test_main_prints_the_link_overlay_as_json(monkeypatch, capsys):
-    doc = {"projects": {"a": {"status": "waiting", "path": "/x"}}}
+    doc = {"repositories": {"a": {"status": "waiting", "path": "/x"}}}
     monkeypatch.setattr(shell, "registry_with_state", lambda: doc)
     assert overlay.main([]) == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["projects"]["a"] == {"status": "waiting", "path": "/x", "summary": None}
+    assert out["repositories"]["a"] == {"status": "waiting", "path": "/x", "summary": None}
 
 
 def test_overlay_summary_is_the_checkpoint_tldr_not_the_stored_one(monkeypatch, capsys, tmp_path):
     entry = _checkpointed(tmp_path, "a", "# Checkpoint\n\n**tl;dr** -- shipped the front door.\n")
-    monkeypatch.setattr(shell, "registry_with_state", lambda: {"projects": {"a": entry}})
+    monkeypatch.setattr(shell, "registry_with_state", lambda: {"repositories": {"a": entry}})
     assert overlay.main([]) == 0
-    assert json.loads(capsys.readouterr().out)["projects"]["a"]["summary"] == "shipped the front door."
+    assert json.loads(capsys.readouterr().out)["repositories"]["a"]["summary"] == "shipped the front door."
 
 
 def test_summaries_mode_derives_every_repository_from_stdin(monkeypatch, capsys, tmp_path):
     registry = {
-        "projects": {
+        "repositories": {
             "a": _checkpointed(tmp_path, "a", "**tl;dr** -- first.\n"),
             "b": _checkpointed(tmp_path, "b", "## Accomplished\n- the bullet\n"),
             "c": {"path": str(tmp_path / "none"), "summary": "stale"},
@@ -41,12 +41,12 @@ def test_summaries_mode_derives_every_repository_from_stdin(monkeypatch, capsys,
     }
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(registry)))
     assert overlay.main(["--summaries"]) == 0
-    got = json.loads(capsys.readouterr().out)["projects"]
+    got = json.loads(capsys.readouterr().out)["repositories"]
     assert {name: row["summary"] for name, row in got.items()} == {"a": "first.", "b": "the bullet", "c": None}
 
 
 def test_summary_mode_prints_one_repository_and_nothing_for_none(monkeypatch, capsys, tmp_path):
-    registry = {"projects": {"a": _checkpointed(tmp_path, "a", "**tl;dr** -- only this.\n"), "b": {"path": "/x"}}}
+    registry = {"repositories": {"a": _checkpointed(tmp_path, "a", "**tl;dr** -- only this.\n"), "b": {"path": "/x"}}}
     monkeypatch.setattr(shell, "read_registry", lambda: registry)
     assert overlay.main(["--summary", "a"]) == 0
     assert capsys.readouterr().out == "only this.\n"

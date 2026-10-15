@@ -215,13 +215,13 @@ def with_state(registry: dict, states: dict[str, dict]) -> dict:
     survives unchanged. Reproduced via jq_default rather than a bare Python truthiness check; see
     jq_default's docstring. Never mutates the input registry.
     """
-    repositories = registry.get("projects") or {}
+    repositories = registry.get("repositories") or {}
     merged: dict[str, dict] = {}
     for name, entry in repositories.items():
         state = states.get(name)
         merged[name] = overlay_state(entry, state) if state else dict(entry)
         merged[name]["status"] = jq_default(merged[name].get("status"), DEFAULT_STATUS)
-    return {**registry, "projects": merged}
+    return {**registry, "repositories": merged}
 
 
 def resolve_window(name: str, entry: dict) -> str:
@@ -272,7 +272,7 @@ def reap_overlay(
     which pins the outcome (REAP) rather than the branch and stays green either way.
     """
     live = set(live_windows)
-    repositories = registry.get("projects") or {}
+    repositories = registry.get("repositories") or {}
     updated: dict[str, dict] = {}
     for name, entry in repositories.items():
         status = entry.get("status", "")
@@ -282,7 +282,7 @@ def reap_overlay(
             updated[name] = {**entry, "_reaped_from": status, "status": DEFAULT_STATUS}
         else:
             updated[name] = dict(entry)
-    return {**registry, "projects": updated}
+    return {**registry, "repositories": updated}
 
 
 def active_count(registry: dict) -> int:
@@ -290,7 +290,7 @@ def active_count(registry: dict) -> int:
 
     Counts the registry AS PASSED, so the caller decides whether the reap overlay has been applied.
     """
-    repositories = registry.get("projects") or {}
+    repositories = registry.get("repositories") or {}
     return sum(1 for entry in repositories.values() if entry.get("status") in REAPABLE_STATUSES)
 
 
@@ -302,7 +302,7 @@ def repository_paths(registry: dict) -> list[tuple[str, str]]:
     is the registry's JSON insertion order, which json.loads preserves and which the aggregate
     directive/assimilated sections depend on. Callers apply their own skip rules.
     """
-    repositories = registry.get("projects") or {}
+    repositories = registry.get("repositories") or {}
     return [(name, str(jq_default(entry.get("path"), ""))) for name, entry in repositories.items()]
 
 
@@ -796,7 +796,7 @@ def visible_repositories(registry: dict, show_all: bool, now_epoch: int) -> dict
     Ports the archived filter FUSED into the jq pipeline at borg.zsh:302, which runs BEFORE the
     sort. Insertion order is preserved -- it is the tie-break order_repositories's stable sort relies on.
     """
-    repositories = registry.get("projects") or {}
+    repositories = registry.get("repositories") or {}
     return {
         name: public_entry(entry, now_epoch)
         for name, entry in repositories.items()

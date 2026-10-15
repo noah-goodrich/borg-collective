@@ -16,7 +16,7 @@ setup() {
     # setup_temp_dirs unsets NO_COLOR for the suite; each case sets what it needs inline.
     mkdir -p "$BORG_DIR" "${BATS_TEST_TMPDIR}/ws/alpha"
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"alpha":{"path":"${BATS_TEST_TMPDIR}/ws/alpha","status":"idle","last_activity":"2026-08-01T00:00:00Z"}}}
+{"repositories":{"alpha":{"path":"${BATS_TEST_TMPDIR}/ws/alpha","status":"idle","last_activity":"2026-08-01T00:00:00Z"}}}
 EOF
 }
 

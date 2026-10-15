@@ -37,8 +37,8 @@ def test_cmd_add_registers_new_repository_keyed_by_basename(isolated_env, capsys
     out = capsys.readouterr().out
     assert "Registered: sample-repository" in out
     registry = shell.read_registry()
-    assert registry["projects"]["sample-repository"]["path"] == str(proj_dir)
-    assert registry["projects"]["sample-repository"]["source"] == "cli"
+    assert registry["repositories"]["sample-repository"]["path"] == str(proj_dir)
+    assert registry["repositories"]["sample-repository"]["source"] == "cli"
     assert exit_code == 0  # registration succeeded; a missing Claude session is not an error
 
 
@@ -68,32 +68,32 @@ def test_cmd_add_with_discoverable_session_exits_0_and_prints_latest_session(iso
     assert "Latest session: abc-123" in out
     assert exit_code == 0
     registry = shell.read_registry()
-    assert registry["projects"]["has-session"]["claude_session_id"] == "abc-123"
-    assert registry["projects"]["has-session"]["last_activity"] is not None
+    assert registry["repositories"]["has-session"]["claude_session_id"] == "abc-123"
+    assert registry["repositories"]["has-session"]["last_activity"] is not None
 
 
 def test_cmd_add_upserts_preserving_unrelated_existing_fields(isolated_env, capsys):
     proj_dir = isolated_env / "existing-repository"
     proj_dir.mkdir()
-    shell.write_registry({"projects": {"existing-repository": {"path": "/old", "pinned": True}}})
+    shell.write_registry({"repositories": {"existing-repository": {"path": "/old", "pinned": True}}})
 
     cli.cmd_add(str(proj_dir))
     capsys.readouterr()
 
     registry = shell.read_registry()
-    assert registry["projects"]["existing-repository"]["pinned"] is True
-    assert registry["projects"]["existing-repository"]["path"] == str(proj_dir)
+    assert registry["repositories"]["existing-repository"]["pinned"] is True
+    assert registry["repositories"]["existing-repository"]["path"] == str(proj_dir)
 
 
 def test_cmd_add_keeps_an_existing_short_tmux_window(isolated_env, capsys):
     proj_dir = isolated_env / "widget-factory"
     proj_dir.mkdir()
-    shell.write_registry({"projects": {"widget-factory": {"path": "/old", "tmux_window": "wf"}}})
+    shell.write_registry({"repositories": {"widget-factory": {"path": "/old", "tmux_window": "wf"}}})
 
     cli.cmd_add(str(proj_dir))
     capsys.readouterr()
 
-    entry = shell.read_registry()["projects"]["widget-factory"]
+    entry = shell.read_registry()["repositories"]["widget-factory"]
     assert entry["tmux_window"] == "wf"
     assert entry["path"] == str(proj_dir)
 
@@ -101,13 +101,13 @@ def test_cmd_add_keeps_an_existing_short_tmux_window(isolated_env, capsys):
 def test_cmd_add_keeps_the_short_name_even_when_a_long_named_window_is_live(isolated_env, monkeypatch, capsys):
     proj_dir = isolated_env / "widget-factory"
     proj_dir.mkdir()
-    shell.write_registry({"projects": {"widget-factory": {"tmux_window": "wf"}}})
+    shell.write_registry({"repositories": {"widget-factory": {"tmux_window": "wf"}}})
     monkeypatch.setattr(shell, "tmux_window_exists", lambda name: name == "widget-factory")
 
     cli.cmd_add(str(proj_dir))
     capsys.readouterr()
 
-    assert shell.read_registry()["projects"]["widget-factory"]["tmux_window"] == "wf"
+    assert shell.read_registry()["repositories"]["widget-factory"]["tmux_window"] == "wf"
 
 
 def test_cmd_add_fresh_and_null_entries_still_take_the_computed_window(isolated_env, monkeypatch, capsys):
@@ -116,17 +116,17 @@ def test_cmd_add_fresh_and_null_entries_still_take_the_computed_window(isolated_
         proj_dir = isolated_env / name
         proj_dir.mkdir()
         if seed is not None:
-            shell.write_registry({"projects": {name: seed}})
+            shell.write_registry({"repositories": {name: seed}})
         cli.cmd_add(str(proj_dir))
         capsys.readouterr()
-        assert shell.read_registry()["projects"][name]["tmux_window"] == name
+        assert shell.read_registry()["repositories"][name]["tmux_window"] == name
 
 
 # ── cmd_rm ─────────────────────────────────────────────────────────────────────
 
 
 def test_cmd_rm_removes_existing_repository(isolated_env, capsys):
-    shell.write_registry({"projects": {"keep-me": {"path": "/tmp/keep"}, "drop-me": {"path": "/tmp/drop"}}})
+    shell.write_registry({"repositories": {"keep-me": {"path": "/tmp/keep"}, "drop-me": {"path": "/tmp/drop"}}})
 
     exit_code = cli.cmd_rm("drop-me")
 
@@ -134,19 +134,19 @@ def test_cmd_rm_removes_existing_repository(isolated_env, capsys):
     assert "Removed: drop-me" in out
     assert exit_code == 0
     registry = shell.read_registry()
-    assert "drop-me" not in registry["projects"]
-    assert "keep-me" in registry["projects"]
+    assert "drop-me" not in registry["repositories"]
+    assert "keep-me" in registry["repositories"]
 
 
 def test_cmd_rm_with_no_repository_argument_dies_with_usage(isolated_env):
-    shell.write_registry({"projects": {"keep-me": {"path": "/tmp/keep"}}})
+    shell.write_registry({"repositories": {"keep-me": {"path": "/tmp/keep"}}})
 
     with pytest.raises(SystemExit) as exc_info:
         cli.cmd_rm(None)
 
     assert exc_info.value.code == 1
     registry = shell.read_registry()
-    assert "keep-me" in registry["projects"]
+    assert "keep-me" in registry["repositories"]
 
 
 def test_cmd_rm_usage_message_matches_contract(isolated_env, capsys):
@@ -157,7 +157,7 @@ def test_cmd_rm_usage_message_matches_contract(isolated_env, capsys):
 
 
 def test_cmd_rm_of_unregistered_repository_dies_cleanly(isolated_env, capsys):
-    shell.write_registry({"projects": {"keep-me": {"path": "/tmp/keep"}}})
+    shell.write_registry({"repositories": {"keep-me": {"path": "/tmp/keep"}}})
 
     with pytest.raises(SystemExit) as exc_info:
         cli.cmd_rm("ghost-repository")
@@ -166,7 +166,7 @@ def test_cmd_rm_of_unregistered_repository_dies_cleanly(isolated_env, capsys):
     err = capsys.readouterr().err
     assert "not in registry" in err
     registry = shell.read_registry()
-    assert "keep-me" in registry["projects"]
+    assert "keep-me" in registry["repositories"]
 
 
 # ── main() dispatch ──────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ def test_main_dispatches_add(isolated_env, capsys):
 
 
 def test_main_dispatches_rm(isolated_env, capsys):
-    shell.write_registry({"projects": {"gone": {"path": "/tmp/gone"}}})
+    shell.write_registry({"repositories": {"gone": {"path": "/tmp/gone"}}})
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["rm", "gone"])
@@ -222,7 +222,7 @@ def test_main_ignores_extra_positional_arguments_like_zsh_did(isolated_env, caps
     out = capsys.readouterr().out
     assert "Registered: extra-args-ok" in out
     registry = shell.read_registry()
-    assert "extra-args-ok" in registry["projects"]
+    assert "extra-args-ok" in registry["repositories"]
 
 
 def test_main_treats_dash_prefixed_value_as_literal_data_not_a_flag(isolated_env, capsys, monkeypatch):
@@ -316,7 +316,7 @@ def test_backfill_repo_groups_a_worktree_with_its_parent(git_env, capsys):
 
     assert cli.cmd_backfill_repo() == 0
 
-    repositories = shell.read_registry()["projects"]
+    repositories = shell.read_registry()["repositories"]
     assert repositories["sp"]["repo"] == repositories["sp-feat"]["repo"]
     assert repositories["sp"]["repo"] is not None
     assert "filled 2" in capsys.readouterr().out
@@ -328,10 +328,10 @@ def test_backfill_repo_is_idempotent_and_never_overwrites_a_set_value(git_env, c
     _register("pinned", repository, repo="/hand/corrected/.git")
 
     cli.cmd_backfill_repo()
-    first = shell.read_registry()["projects"]
+    first = shell.read_registry()["repositories"]
 
     cli.cmd_backfill_repo()
-    second = shell.read_registry()["projects"]
+    second = shell.read_registry()["repositories"]
 
     assert first == second
     assert second["pinned"]["repo"] == "/hand/corrected/.git"
@@ -349,7 +349,7 @@ def test_backfill_repo_skips_an_entry_outside_any_git_repository(git_env, capsys
     assert "skip   plain" in out
     assert "skipped 1" in out
     # Null is not written over null: a no-op must not read as work.
-    assert "repo" not in shell.read_registry()["projects"]["plain"]
+    assert "repo" not in shell.read_registry()["repositories"]["plain"]
 
 
 def test_backfill_repo_dry_run_reports_without_writing(git_env, capsys):
@@ -360,10 +360,10 @@ def test_backfill_repo_dry_run_reports_without_writing(git_env, capsys):
 
     out = capsys.readouterr().out
     assert "would fill 1" in out
-    assert "repo" not in shell.read_registry()["projects"]["sp"]
+    assert "repo" not in shell.read_registry()["repositories"]["sp"]
 
     cli.cmd_backfill_repo()
-    assert shell.read_registry()["projects"]["sp"]["repo"] is not None
+    assert shell.read_registry()["repositories"]["sp"]["repo"] is not None
 
 
 def test_backfill_repo_rejects_an_unknown_option(git_env):
@@ -377,7 +377,7 @@ def test_main_dispatches_backfill_repo(git_env):
     with pytest.raises(SystemExit) as exc:
         cli.main(["backfill-repo"])
     assert exc.value.code == 0
-    assert shell.read_registry()["projects"]["sp"]["repo"] is not None
+    assert shell.read_registry()["repositories"]["sp"]["repo"] is not None
 
 
 def test_main_rejects_an_unknown_registry_command(git_env, capsys):
@@ -390,14 +390,14 @@ def test_cmd_add_records_the_repo_for_a_real_repository(git_env):
     # cmd_add's own expand-phase contract, exercised with a real `git` on PATH.
     repository = _repository(git_env, "sp")
     cli.cmd_add(repository)
-    assert shell.read_registry()["projects"]["sp"]["repo"] is not None
+    assert shell.read_registry()["repositories"]["sp"]["repo"] is not None
 
 
 def test_cmd_add_records_a_null_repo_outside_a_repository(git_env):
     plain = git_env / "loose"
     plain.mkdir()
     cli.cmd_add(str(plain))
-    entry = shell.read_registry()["projects"]["loose"]
+    entry = shell.read_registry()["repositories"]["loose"]
     assert entry["repo"] is None
     assert "repo" in entry
 
@@ -406,11 +406,11 @@ def test_cmd_add_records_a_null_repo_outside_a_repository(git_env):
 
 
 def _seed(repositories: dict) -> None:
-    shell.write_registry({"projects": repositories})
+    shell.write_registry({"repositories": repositories})
 
 
 def _window(repository: str) -> str | None:
-    window: str | None = shell.read_registry()["projects"][repository].get("tmux_window")
+    window: str | None = shell.read_registry()["repositories"][repository].get("tmux_window")
     return window
 
 
@@ -425,7 +425,7 @@ def test_window_name_set_writes_and_prints(isolated_env, capsys):
     _seed({"widget-factory": {"path": "/p"}})
     assert cli.cmd_window_name(["widget-factory", "--set", "wf"]) == 0
     assert capsys.readouterr().out.strip() == "wf"
-    entry = shell.read_registry()["projects"]["widget-factory"]
+    entry = shell.read_registry()["repositories"]["widget-factory"]
     assert entry["tmux_window"] == "wf" and entry["path"] == "/p"
 
 
@@ -492,7 +492,7 @@ def test_cmd_add_name_overrides_the_basename(isolated_env, capsys):
 
     cli.cmd_add(str(proj_dir), "widgets")
 
-    repositories = shell.read_registry()["projects"]
+    repositories = shell.read_registry()["repositories"]
     assert list(repositories) == ["widgets"]
     assert repositories["widgets"]["path"] == str(proj_dir)
     assert "Registered: widgets" in capsys.readouterr().out
@@ -506,7 +506,7 @@ def test_cmd_add_bare_and_path_forms_still_name_by_basename(isolated_env, monkey
     cli.cmd_add(str(first))
     monkeypatch.chdir(second)
     cli.cmd_add(None)
-    assert sorted(shell.read_registry()["projects"]) == ["alpha", "beta"]
+    assert sorted(shell.read_registry()["repositories"]) == ["alpha", "beta"]
 
 
 def test_cmd_add_without_name_is_a_noop_when_the_path_is_held_under_another_name(isolated_env, capsys):
@@ -544,11 +544,11 @@ def test_cmd_add_with_the_holding_name_keeps_the_update_path(isolated_env, capsy
 
     cli.cmd_add(str(proj_dir), "widgets")
 
-    entry = shell.read_registry()["projects"]["widgets"]
+    entry = shell.read_registry()["repositories"]["widgets"]
     assert entry["tmux_window"] == "wdg"
     assert entry["note"] == "kept"
     assert entry["source"] == "cli"
-    assert list(shell.read_registry()["projects"]) == ["widgets"]
+    assert list(shell.read_registry()["repositories"]) == ["widgets"]
 
 
 def test_cmd_add_with_either_name_of_an_existing_twin_keeps_the_update_path(isolated_env, capsys):
@@ -561,7 +561,7 @@ def test_cmd_add_with_either_name_of_an_existing_twin_keeps_the_update_path(isol
 
     cli.cmd_add(str(proj_dir), "widget-kit")
 
-    repositories = shell.read_registry()["projects"]
+    repositories = shell.read_registry()["repositories"]
     assert sorted(repositories) == ["widget-kit", "widgets"]
     assert repositories["widget-kit"]["note"] == "twin"
     assert repositories["widget-kit"]["source"] == "cli"
@@ -582,7 +582,7 @@ def test_path_check_ignores_a_trailing_slash_in_the_stored_path(isolated_env):
     _seed_entry("widgets", str(proj_dir) + "/")
 
     assert cli.cmd_add(str(proj_dir)) == 0
-    assert list(shell.read_registry()["projects"]) == ["widgets"]
+    assert list(shell.read_registry()["repositories"]) == ["widgets"]
 
 
 def test_path_check_resolves_symlinks_on_the_added_path(isolated_env):
@@ -594,7 +594,7 @@ def test_path_check_resolves_symlinks_on_the_added_path(isolated_env):
 
     with pytest.raises(SystemExit):
         cli.cmd_add(str(link), "gadgets")
-    assert list(shell.read_registry()["projects"]) == ["widgets"]
+    assert list(shell.read_registry()["repositories"]) == ["widgets"]
 
 
 def test_path_check_resolves_symlinks_in_the_stored_path(isolated_env):
@@ -605,7 +605,7 @@ def test_path_check_resolves_symlinks_in_the_stored_path(isolated_env):
     _seed_entry("widgets", link)
 
     assert cli.cmd_add(str(proj_dir)) == 0
-    assert list(shell.read_registry()["projects"]) == ["widgets"]
+    assert list(shell.read_registry()["repositories"]) == ["widgets"]
 
 
 def test_main_parses_name_in_both_spellings_and_rejects_a_bare_flag(isolated_env, capsys):
@@ -617,7 +617,7 @@ def test_main_parses_name_in_both_spellings_and_rejects_a_bare_flag(isolated_env
         cli.main(["add", str(first), "--name", "uno"])
     with pytest.raises(SystemExit):
         cli.main(["add", "--name=dos", str(second)])
-    assert sorted(shell.read_registry()["projects"]) == ["dos", "uno"]
+    assert sorted(shell.read_registry()["repositories"]) == ["dos", "uno"]
 
     with pytest.raises(SystemExit) as raised:
         cli.main(["add", str(first), "--name"])

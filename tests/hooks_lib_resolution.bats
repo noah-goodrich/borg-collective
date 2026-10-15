@@ -19,7 +19,7 @@ setup() {
 
     export TEST_CWD="${BATS_TEST_TMPDIR}/myrepo"
     mkdir -p "$TEST_CWD" "$BORG_DIR"
-    printf '{"projects":{"myrepo":{"path":"%s","status":"idle","source":"cli"}}}\n' "$TEST_CWD" > "$BORG_REGISTRY"
+    printf '{"repositories":{"myrepo":{"path":"%s","status":"idle","source":"cli"}}}\n' "$TEST_CWD" > "$BORG_REGISTRY"
 
     export MOCK_BIN="${BATS_TEST_TMPDIR}/bin"
     mkdir -p "$MOCK_BIN"

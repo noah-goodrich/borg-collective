@@ -6,7 +6,7 @@ _BORG_COLOR_PALETTE=(cyan green yellow magenta blue red white)
 # Return the tmux color for a repository (registry → hash fallback).
 _borg_repository_color() {
     local repository="$1" color
-    color=$(borg_registry_read | jq -r --arg p "$repository" '.projects[$p].color // empty' 2>/dev/null)
+    color=$(borg_registry_read | jq -r --arg p "$repository" '.repositories[$p].color // empty' 2>/dev/null)
     if [[ -z "$color" ]]; then
         local hash=0 c
         for c in ${(s::)repository}; do hash=$(( (hash * 31 + #c) % ${#_BORG_COLOR_PALETTE} )); done

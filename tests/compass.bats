@@ -12,7 +12,7 @@ BORG="${BATS_TEST_DIRNAME}/../borg.zsh"
 setup() {
     setup_temp_dirs
     mkdir -p "$BORG_DIR"
-    printf '%s\n' '{"projects":{"widgets":{"path":"'"${BATS_TEST_TMPDIR}"'/widgets","status":"idle"}}}' > "$BORG_REGISTRY"
+    printf '%s\n' '{"repositories":{"widgets":{"path":"'"${BATS_TEST_TMPDIR}"'/widgets","status":"idle"}}}' > "$BORG_REGISTRY"
     mkdir -p "${BATS_TEST_TMPDIR}/widgets"
     unset BORG_MAP_DIR
 }

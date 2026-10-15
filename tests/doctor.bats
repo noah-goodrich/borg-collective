@@ -726,3 +726,21 @@ EOF
     diff "$BATS_TEST_TMPDIR/before.txt" "$BATS_TEST_TMPDIR/after.txt"
     [ ! -e "$BATS_TEST_TMPDIR/mutations" ]
 }
+
+# ─── registry entry-map key (contract step of the projects -> repositories rename) ─────────────
+
+@test "registry key: doctor FAILs on a projects-only registry and points at borg setup and migrate-key" {
+    printf '%s\n' '{"projects":{"alpha":{"path":"/nowhere"}}}' > "$BORG_REGISTRY"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"registry-key"*"projects"*"FAIL"* ]] || false
+    [[ "$output" == *"borg setup"* ]] || false
+    [[ "$output" == *"migrate-key"* ]] || false
+}
+
+@test "registry key: doctor is OK on a repositories registry" {
+    printf '%s\n' '{"repositories":{"alpha":{"path":"/nowhere"}}}' > "$BORG_REGISTRY"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"registry-key"*"repositories"*"OK"* ]] || false
+}

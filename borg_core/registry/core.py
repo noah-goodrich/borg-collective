@@ -23,8 +23,8 @@ def strip_control_chars(text: str) -> str:
 def merge_entry(existing: dict | None, data: dict) -> dict:
     """Shallow-merge a new entry's fields into an existing one, new fields winning.
 
-    Mirrors borg_registry_merge's jq: `if .projects[$p] then .projects[$p] += $data else
-    .projects[$p] = $data end` -- a top-level shallow merge either way (an absent existing entry
+    Mirrors borg_registry_merge's jq: `if .repositories[$p] then .repositories[$p] += $data else
+    .repositories[$p] = $data end` -- a top-level shallow merge either way (an absent existing entry
     is equivalent to merging onto `{}`).
     """
     return {**(existing or {}), **data}

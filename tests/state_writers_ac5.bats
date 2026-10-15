@@ -24,7 +24,7 @@ setup() {
     git -C "$PROJ" commit -q --allow-empty -m x
     COMMON="$(git -C "$PROJ" rev-parse --path-format=absolute --git-common-dir)"
     mkdir -p "$BORG_DIR"
-    printf '{"projects":{"proj":{"path":"%s","repo":"%s","status":"idle","source":"cli"}}}\n' "$PROJ" "$COMMON" \
+    printf '{"repositories":{"proj":{"path":"%s","repo":"%s","status":"idle","source":"cli"}}}\n' "$PROJ" "$COMMON" \
         > "$BORG_REGISTRY"
     NEWF="$(state_path_of "$PROJ" "$COMMON")"
     LEGACY="$PROJ/.borg/state.json"
@@ -78,7 +78,7 @@ _zsh_read() { zsh -c 'source "$1/lib/registry.zsh" && borg_state_read "$2" "$3"'
 }
 
 @test "a registered repository with NO repo is keyed path-only, the way the readers key it" {
-    printf '{"projects":{"proj":{"path":"%s","status":"idle","source":"cli"}}}\n' "$PROJ" > "$BORG_REGISTRY"
+    printf '{"repositories":{"proj":{"path":"%s","status":"idle","source":"cli"}}}\n' "$PROJ" > "$BORG_REGISTRY"
     run bash "$NOTIFY" <<< "$(_hook_in)"
     [ "$status" -eq 0 ]
     [ -f "$(state_path_of "$PROJ" "")" ]
