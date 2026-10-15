@@ -5,18 +5,16 @@ description: >
   session (the orchestrator, at BORG_ORCHESTRATOR_ROOT) it is the cross-repository overview with
   directives and recent ships. Anywhere else (a repository or a linked worktree, or an explicit
   repository name) it is a page about exactly that one directory: identity, live session and status,
-  its own latest checkpoint, its own waiting row and its next action. Runs the `borg link`
-  engine and synthesizes its output; falls back to reading the bind-mounted borg files directly
-  only when the engine cannot run. Use when the user asks for status, overview, briefing,
+  its own latest checkpoint, its own waiting row and its next action. Use when the user asks for status, overview, briefing,
   "what's going on", or repository details.
 user-invocable: true
 ---
 
 # Borg Link — Neural Link to the Collective
 
-You synthesize on top of the `borg link` engine, which does the read, sort, staleness overlay and rendering. Explain like the reader is 10: plain language, terse, most-urgent-first. Do not hard-wrap output.
+You synthesize on top of the `borg link` engine. Explain like the reader is 10: plain language, terse, most-urgent-first. Do not hard-wrap output.
 
-`scope.kind` is the engine's answer, not yours: `orchestrator` (the Queen session) gets the Queen view; `repository` (a repository, a linked worktree registered on its own, or an explicit repository name) gets a page about exactly that one directory. Answer; do not re-render. In a drone the SessionStart hook already injected the latest checkpoint, so run this skill only when asked, never as a session-start ritual.
+`scope.kind` is the engine's answer, not yours: `orchestrator` (the Queen session) gets the Queen view; `repository` (a repository, a linked worktree, or an explicit repository name) gets a page about exactly that one directory. Answer; do not re-render. In a drone the SessionStart hook already injected the latest checkpoint, so run this skill only when asked, never as a session-start ritual.
 
 ## Step 1 — Run the engine, then branch on `scope.kind`
 
@@ -29,7 +27,10 @@ borg link --json [<repository>] | jq -c 'if .scope.unregistered == true
   then (.directives |= (group_by(.project) | map({project: .[0].project, n: length,
     titles: [limit(5; .[].title)]}))
     | del(.projects[] | .claude_session_id, .path, .repo, .clock_divergence, .tmux_session,
-      .source, .notify_origin, .last_activity))
+      .source, .notify_origin, .last_activity)
+    | del(.grid.manifests[]? | .path, .levels, (.nodes[]? | .ref, .why, .order, .lane, .next, .gate))
+    | del(.compass.today, (.compass.destinations[]? | .domain, .definition, .target, .next_waypoint, .due))
+    | if .compass.parking then .compass.parking |= map(select(.due)) else . end)
   else (.scope.repository as $r | (.compass // {}) as $c
     | ($c.repositories[$r] // {}) as $m | {version, generated_at, scope,
     entry: (.focus.entry | del(.summary)),
@@ -53,7 +54,7 @@ Scope is the engine's `scope.kind`, never the `.borg-project` marker or your gue
 
 **Version gate — read `.version` first.** `== 2` → proceed silently. `> 2` → proceed, and say in one line this skill was written against v2 and newer fields may go unreported. `< 2` or absent → STOP: tell the user their borg install is older than this skill; do NOT fall back on a version mismatch.
 
-**Host-only flags.** `--refresh` and `--brief` need the host: if asked, tell the user to run `borg link --brief` / `--refresh` there. You never need `--brief` to narrate the document you have.
+**Host-only flags.** `--refresh` and `--brief` need the host: if asked, tell the user to run `borg link --brief` / `--refresh` there.
 
 **`.compass`** (additive; absent on an older engine: say nothing): `found` false → one line "no map at `<map_dir>`", move on; never invent a leg, destination or date. `leg.text` is today's leg (null: none). A destination's `state` is `on-track`, `at-risk`, `late` or `undated` if active, else its status. **Off route**: with a leg, a repository whose `repositories[<name>]` (`{destination, on_leg}`) is off the leg reads "off route: `<repository>` is not on today's leg"; no destination is unmapped, never off route. A non-empty `warnings` is a skipped map file: say so once.
 
