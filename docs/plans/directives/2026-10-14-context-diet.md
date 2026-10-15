@@ -3,7 +3,7 @@
 
 - Plan-slug: `2026-10-14-context-diet`
 
-Covers https://github.com/noah-goodrich/borg-collective/issues/382 and https://github.com/noah-goodrich/borg-collective/issues/383. Filed as a directive because `PROJECT_PLAN.md` holds another plan; see Promotion Trigger.
+Covers https://github.com/noah-goodrich/borg-collective/issues/382 and https://github.com/noah-goodrich/borg-collective/issues/383. Filed as a directive because `PROJECT_PLAN.md` holds another plan; see Promotion Trigger. Tracked end to end in https://github.com/noah-goodrich/borg-collective/issues/407 (both issues as sub-issues, every PR in one checklist).
 
 ## Objective
 
