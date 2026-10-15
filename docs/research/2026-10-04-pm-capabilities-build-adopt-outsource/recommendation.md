@@ -6,6 +6,30 @@ Generated: 2026-10-04
 
 AI-scoring: 80/100 (self-scored by the drafting agent, not by an independent rater; article mode on the ELI10, Recommendation and Council prose, with the option blocks and tables treated as design-doc structure; see the last line of this file for the checks run).
 
+## Status as of 2026-10-15
+
+Added on 2026-10-15 against main `387c1c8` and the v0.9.6 release (tag `v0.9.6`, 2026-10-14). The rest of this document is unchanged. **The NOT design-reviewed stamp under Recommendation stands as history:** three blind reviews returned revise, none was overturned, and the repository records no decision that picks one of the six options. This PR merges after noah-goodrich/borg-collective#252, its base.
+
+What happened to each gap (G1 to G9, the per-gap calls under Recommendation):
+
+- **G1 value rule and ranking snapshot: built into borg, in part.** The snapshot exists: noah-goodrich/borg-collective#274 appends the top three of every `borg next` run to a log, and noah-goodrich/borg-collective#275 makes `borg next` a chooser that uses a follow-rate gate on it. noah-goodrich/borg-collective#397 ranks by the plain-file map: current leg first, then nearest due date, then undated active work. Value ranking is still the owner's call, now made in the map.
+- **G2 review-by and stop: covered by the map for its own items; neither for directives.** The reader, `borg directive sever` and `borg directive extend` were not built. The one-off hand triage was done in noah-goodrich/borg-collective#266. The map carries the idea for its own items: a parking lot with look-again dates, and a side-trail rule (park by default, override with a logged reason).
+- **G3 status history: neither.** Nothing appends session state changes.
+- **G4 derived state and delivery numbers: neither.** No reduction code or scheduled job exists.
+- **G5 verify-verdict log: neither.** No parse spike and no log.
+- **G6 debrief and action closure: neither.** `borg-assimilate` has no debrief step.
+- **G7 sustainability signals: covered in part by the map.** The side-trail rule's logged overrides and the daily log give a boundary-override record by hand. The alternating-weeks test of the break prompt has not been run.
+- **G8 spend capture: neither** in this repository.
+- **G9 re-runnable loop: neither**, beyond one gauge line that the map's daily log carries at the end of each day. There is no `borg pulse`, no scorer, no validator and no scheduled agent.
+
+Of the phases, Phase 0 (the enforcing slice) is not built apart from the triage, and Phase 1 has only the ranking snapshot. Nothing from Phases 2 to 6 exists.
+
+Open gaps. The first named gap, the highest-value item at the highest-value time, is half-addressed: the compass orders work by leg and due date, which covers timing, not value. The plan-to-execute hand-off is unchanged by anything built here (the link-up checkpoint now gathers its inputs in one call, noah-goodrich/borg-collective#401 and noah-goodrich/borg-collective#402, but that is a cost change, not a hand-off). Value ranking remains manual.
+
+Track A (external landscape): no external tool was adopted. The conclusion stands that only `gh` and launchd are adopted; the sqlite trigger never fired because no metric code exists. Nothing from Track A is waiting on a build. Track B (self-learning loop): the only piece built is the chooser's run log and its follow-rate gate (noah-goodrich/borg-collective#274, noah-goodrich/borg-collective#275). The measure, compare, propose and ship-and-re-measure steps, the machine-local rubric, the allow-listed aggregates and the scorer kept out of agents' reach are all open, as is the two-machine design in noah-goodrich/borg-collective#252.
+
+Also shipped on adjacent ground: a repository's PR ordering now lives in `.stacks/` manifests read by `borg link` and `borg next` (noah-goodrich/borg-collective#375, noah-goodrich/borg-collective#376, noah-goodrich/borg-collective#381, noah-goodrich/borg-collective#396), `borg pr` gained gate and merge-train verbs (noah-goodrich/borg-collective#366), and the context-diet stack trimmed what every session loads (noah-goodrich/borg-collective#392, noah-goodrich/borg-collective#393, noah-goodrich/borg-collective#394, noah-goodrich/borg-collective#398; noah-goodrich/borg-collective#404 merged after the tag). The map itself lives outside this repository and is described by shape only: plain markdown with destinations, waypoints that carry checkable criteria, a parking lot with look-again dates, a daily log whose first line names the current leg and whose last line carries a drafted gauge, and a side-trail rule. The compass reads it through `BORG_MAP_DIR`; noah-goodrich/borg-collective#385 puts it on the `borg link --json` wire.
+
 ## Glossary
 
 Terms are also defined where they first matter. This block is for skimmers.
