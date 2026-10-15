@@ -50,6 +50,13 @@
       "ref": "noah-goodrich/borg-collective#411",
       "status": "open",
       "why": "S5: CLAUDE.md cut to 8 KB; rules move verbatim to nested CLAUDE.md files and docs/agents"
+    },
+    {
+      "lane": "_default",
+      "order": "8",
+      "ref": "noah-goodrich/borg-collective#412",
+      "status": "open",
+      "why": "S7: the borg-link Queen pipe collapses finished stacks to a one-line summary"
     }
   ]
 }
