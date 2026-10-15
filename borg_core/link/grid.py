@@ -874,8 +874,8 @@ def ready_refs(manifest: dict, nodes: dict[str, dict]) -> dict:
 
     WHICH IS WHY THE RESULT CARRIES A `state`. An empty list and "nobody looked" are different facts,
     and a renderer that prints both as "nothing is ready" tells a `--local` reader that their board is
-    clear when the truth is that no state on the page was resolved. Same trap `skills/borg-link
-    /SKILL.md` records for `order: []` vs `total_projects`, and `render._resolution_line` already
+    clear when the truth is that no state on the page was resolved. Same trap `skills/borg-link/references
+    /queen-view.md` records for `order: []` vs `total_projects`, and `render._resolution_line` already
     prints the honest sentence one section further down -- this makes NEXT agree with SIGNALS rather
     than contradict it.
 

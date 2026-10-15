@@ -681,11 +681,11 @@ _assert_blocked() {
 # classifier and the normal allowlist entirely. Appending `# .borg-project` as a comment to an
 # arbitrary write turned the guard off for that command.
 #
-# Only the canonical borg-link marker walk (skills/borg-link/SKILL.md) may be pre-approved.
+# Only the canonical borg-link marker walk (skills/borg-link/references/fallback.md) may be pre-approved.
 # Anything else must fall through to normal classification. Falling through is safe: an
 # unrecognized walk merely prompts, rather than being waved past every check.
 
-# Extracted from skills/borg-link/SKILL.md itself, between the MARKER-WALK-BEGIN/END anchors,
+# Extracted from skills/borg-link/references/fallback.md itself, between the MARKER-WALK-BEGIN/END anchors,
 # rather than held as a third hardcoded copy. This is the fix for a real defect: before this
 # change, this test fed its own copy to the guard and compared the guard's copy against the
 # test's copy — it never read SKILL.md, so a SKILL.md drift left this test green while the guard
@@ -700,7 +700,7 @@ _marker_walk() {
             if (!started) { sub(/^Bash: /, ""); started=1 }
             print
         }
-    ' "${BORG_HOME}/skills/borg-link/SKILL.md"
+    ' "${BORG_HOME}/skills/borg-link/references/fallback.md"
 }
 
 @test "A1: the canonical borg-link marker walk is still pre-approved" {

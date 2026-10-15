@@ -383,7 +383,7 @@ def _document(  # pylint: disable=too-many-locals
     # DOCUMENT_VERSION. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |=
     # (...)'`, and only borg-collective carries a `.borg-project` marker, so that call routes from
     # INSIDE whatever repository the session is in. Scope-gating the aggregates would report
-    # "Queued: 0 directives" for the whole collective at `.version == 2` -- which SKILL.md maps to
+    # "Queued: 0 directives" for the whole collective at `.version == 2` -- which references/fallback.md maps to
     # "CLI path. Never fall back." A wrong answer, not a missing one. Neither hot loop is `--json`.
     #
     # THE HINT PAGE READS NOTHING (2026-10-13). A cwd that is neither the Queen root nor inside a registered
