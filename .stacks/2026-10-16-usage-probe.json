@@ -5,7 +5,7 @@
     {
       "lane": "_default",
       "order": "1",
-      "ref": "noah-goodrich/borg-collective#PR",
+      "ref": "noah-goodrich/borg-collective#430",
       "why": "Unmetered state in the probe, the poller, the resume gate and doctor; refs #424"
     }
   ]
