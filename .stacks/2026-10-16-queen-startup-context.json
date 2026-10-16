@@ -1,0 +1,13 @@
+{
+  "desc": "A leaner Queen startup: checkpoint excerpts by recency, the roster printed once, long-idle repositories counted, trimmed skill descriptions, one simplify",
+  "program": "2026-10-16-queen-startup-context",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#431",
+      "status": "open",
+      "why": "Queen startup context: recency excerpts, one roster, idle cutoff, skill descriptions, retire simplify"
+    }
+  ]
+}
