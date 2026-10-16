@@ -3,8 +3,8 @@
 # `summary`. The stored value is summarize.py's transcript heuristic, written once at session end, so it goes stale
 # the moment a newer checkpoint lands; `borg link` moved off it first, and these cases pin the other readers:
 # `borg next` (and nextpick, which is fed the same overlay), the switch brief (`next --switch`, `_borg_do_switch`),
-# the switch picker's column (`cmd_ls --porcelain`), and the Queen's prompts (`borg link --brief`, and the
-# orchestrator context `borg init` builds).
+# the switch picker's column (`cmd_ls --porcelain`), and the Queen's prompt (`borg link --brief`). The orchestrator
+# context `borg init` builds no longer prints a roster (tests/queen_startup_context.bats), so it derives no summaries.
 #
 # THE FIXTURES DO NOT SUPPLY THE ANSWER. Each repository's registry row carries a stale sentence and its directory
 # carries real checkpoint files with different tl;dr lines; the code under test has to derive which one wins. The
@@ -239,18 +239,18 @@ EOF
     [[ "$output" != *"$STALE"* ]] || false
 }
 
-@test "orchestrator context (borg init's prompt): checkpoint tl;dr for alpha, no stored summary for either" {
+@test "orchestrator context (borg init's prompt): the excerpt carries alpha's newest checkpoint, no stored summary" {
     _write_registry
     _trace_python
     run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; _borg_orchestrator_context\" 2>/dev/null"
     [ "$status" -eq 0 ]
-    local registry_lines
-    registry_lines=$(printf '%s\n' "$output" | grep -E '^  (alpha|beta) \[')
-    [[ "$registry_lines" == *"alpha [waiting]"*"$FRESH"* ]] || false
-    [[ "$registry_lines" == *"beta [idle]"*"(no summary)"* ]] || false
+    [[ "$output" == *"=== alpha (2026-10-02-0900.md) ==="* ]] || false
+    [[ "$output" == *"$FRESH"* ]] || false
     [[ "$output" != *"$STALE"* ]] || false
     [[ "$output" != *"$OLDER"* ]] || false
-    [ "$(_count_overlay_calls)" = "1" ]
+    # The roster moved to the SessionStart hook; this prompt no longer derives per-repository summaries at all.
+    [[ "$output" != *"Repository registry:"* ]] || false
+    [ "$(_count_overlay_calls)" = "0" ]
 }
 
 @test "a failing overlay call blanks the summaries instead of falling back to the stored ones" {

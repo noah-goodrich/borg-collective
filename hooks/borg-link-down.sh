@@ -75,15 +75,24 @@ Full guide: docs/agent-routing.md in the borg-collective repo."
 # When CWD is the workspace root (default $HOME/dev), render a scannable
 # cross-repository overview AS additionalContext. Write nothing to the registry —
 # the orchestrator session is not a repository session.
-_orch_humanize_age() {
-    local ts="$1"
-    [[ -z "$ts" ]] && { printf 'never'; return; }
-    local epoch_now epoch_ts delta
+# Idle repositories older than this many days are counted, not listed. Override with BORG_QUEEN_IDLE_DAYS.
+BORG_QUEEN_IDLE_DAYS_DEFAULT=30
+
+# Age in whole seconds of an ISO-8601 UTC timestamp; unparseable input reads as age 0 (listed, not hidden).
+_orch_age_secs() {
+    local ts="$1" epoch_now epoch_ts
     epoch_now=$(date -u +%s)
     # macOS BSD date and GNU date both accept ISO-8601 with -j -f / -d respectively.
     epoch_ts=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
         || date -u -d "$ts" +%s 2>/dev/null || echo "$epoch_now")
-    delta=$(( epoch_now - epoch_ts ))
+    printf '%d' $(( epoch_now - epoch_ts ))
+}
+
+_orch_humanize_age() {
+    local ts="$1"
+    [[ -z "$ts" ]] && { printf 'never'; return; }
+    local delta
+    delta=$(_orch_age_secs "$ts")
     (( delta < 60 ))    && { printf '%ds ago' "$delta"; return; }
     (( delta < 3600 ))  && { printf '%dm ago' $(( delta / 60 )); return; }
     (( delta < 86400 )) && { printf '%dh ago' $(( delta / 3600 )); return; }
@@ -155,14 +164,24 @@ if [[ "$MODE" == "orchestrator" ]]; then
 
         _proj_count=$(printf '%s' "$_repositories_tsv" | grep -c . 2>/dev/null || echo 0)
         OVERVIEW+="You are the QUEEN (${_proj_count} repositories)"$'\n\n'
+        _idle_days="${BORG_QUEEN_IDLE_DAYS:-$BORG_QUEEN_IDLE_DAYS_DEFAULT}"
+        [[ "$_idle_days" =~ ^[0-9]+$ ]] || _idle_days="$BORG_QUEEN_IDLE_DAYS_DEFAULT"
+        _hidden=0
         if [[ -n "$_repositories_tsv" ]]; then
             while IFS=$'\t' read -r _name _status _last _path; do
                 [[ -z "$_name" ]] && continue
                 [[ "$_last" == "-" ]] && _last=""
+                # Waiting and active always show; anything else older than the cutoff (or never active) is counted.
+                if [[ "$_status" != "waiting" && "$_status" != "active" ]] \
+                    && { [[ -z "$_last" ]] || (( $(_orch_age_secs "$_last") > _idle_days * 86400 )); }; then
+                    _hidden=$(( _hidden + 1 ))
+                    continue
+                fi
                 _age=$(_orch_humanize_age "$_last")
                 _hint=$(_orch_next_hint "$_path")
                 OVERVIEW+="  • ${_name} [${_status}] — ${_age} — ${_hint}"$'\n'
             done <<< "$_repositories_tsv"
+            (( _hidden > 0 )) && OVERVIEW+="  + ${_hidden} idle ${_idle_days}+ days (borg link for all)"$'\n'
         else
             OVERVIEW+="  (no repositories registered — run 'borg add <path>' or 'borg scan')"$'\n'
         fi

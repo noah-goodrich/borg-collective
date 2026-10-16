@@ -86,6 +86,7 @@ _hook_context() {
     [[ "$output" == *"=== mid "* ]] || false
     [[ "$output" != *"MARK_oldest"* ]] || false
     [[ "$output" != *"MARK_older"* ]] || false
+    [[ "$output" != *"ppath="* && "$output" != *"cp="* ]] || { echo "loop locals leaked into the prompt"; false; }
 }
 
 @test "excerpts: a repository that was never active sorts after every dated one" {
@@ -97,6 +98,7 @@ _hook_context() {
 
 @test "excerpts: status still outranks recency (a waiting repository comes first)" {
     _write_registry stale-waiting:waiting:120 x:idle:1 y:idle:2 z:idle:3
+    export BORG_NO_REAP=1  # the reaper would downgrade a 120-day-old waiting row to idle
     _orchestrator_context
     [[ "$output" == *"MARK_stale-waiting"* ]] || false
     [[ "$output" == *"MARK_x"* ]] || false

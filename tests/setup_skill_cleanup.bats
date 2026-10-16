@@ -74,11 +74,11 @@ setup() {
 }
 
 @test "unmarked skill sharing a borg source name survives — the sweep never adopts" {
-    mkdir -p "$BORG_SRC/skills/simplify"
-    mkdir -p "$SKILLS_DIR/simplify"
-    echo "user fork" > "$SKILLS_DIR/simplify/SKILL.md"
+    mkdir -p "$BORG_SRC/skills/pane"
+    mkdir -p "$SKILLS_DIR/pane"
+    echo "user fork" > "$SKILLS_DIR/pane/SKILL.md"
     _run_migration_sweep "$SKILLS_DIR" "$AGENTS_DIR" "$BORG_SRC"
-    [ -d "$SKILLS_DIR/simplify" ]
+    [ -d "$SKILLS_DIR/pane" ]
 }
 
 @test "mixed directory: marked copies go, unmarked neighbours stay" {

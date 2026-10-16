@@ -1,12 +1,10 @@
 ---
 name: borg-link
 description: >
-  The front door — the neural link to the collective. Scope decides the page. In the Queen
-  session (the orchestrator, at BORG_ORCHESTRATOR_ROOT) it is the cross-repository overview with
-  directives and recent ships. Anywhere else (a repository or a linked worktree, or an explicit
-  repository name) it is a page about exactly that one directory: identity, live session and status,
-  its own latest checkpoint, its own waiting row and its next action. Use when the user asks for status, overview, briefing,
-  "what's going on", or repository details.
+  The front door to the collective. In the Queen session it is the cross-repository overview with
+  directives and recent ships; in a repository or worktree, or for a named repository, it is a page
+  on that one directory. Use when the user asks for status, overview, briefing, "what's going on",
+  or repository details.
 user-invocable: true
 ---
 

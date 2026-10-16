@@ -135,7 +135,7 @@ No more "where was I?" — your last checkpoint tells you.
 
 ## Skills
 
-Borg installs 17 skills to `~/.claude/skills/`. See [Skills Guide](docs/skills-guide.md) for the full
+Borg installs 16 skills to `~/.claude/skills/`. See [Skills Guide](docs/skills-guide.md) for the full
 list, or run `/help` in a Claude Code session — the highlights:
 
 ### Always Active

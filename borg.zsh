@@ -1822,36 +1822,24 @@ EOF
 }
 
 _borg_orchestrator_context() {
-    # Each repository's summary is its newest checkpoint's tl;dr, all of them in one Python call; the stored
-    # registry summary is stale and never reaches the Queen's prompt (see _borg_checkpoint_summaries).
+    # No per-repository summary reaches this prompt any more (the roster moved to the SessionStart hook), so the
+    # checkpoint-summary overlay is not run: only status, last_activity and path are read.
     local registry
-    registry=$(borg_registry_with_state | _borg_checkpoint_summaries)
+    registry=$(borg_registry_with_state)
     local now
     now=$(date '+%Y-%m-%d %H:%M %Z')
 
     echo "Current time: $now"
     echo ""
-    echo "Repository registry:"
-    printf '%s' "$registry" | jq -r '
-        .repositories | to_entries |
-        sort_by(
-            if .value.status == "waiting" then 0
-            elif .value.status == "active" then 1
-            elif .value.status == "idle" then 2
-            else 3 end
-        ) |
-        .[] |
-        "  \(.key) [\(.value.status // "unknown")] \(
-            if .value.last_activity then .value.last_activity else "never" end
-        ) — \(.value.summary // .value.waiting_reason // "(no summary)" | .[0:80])"
-    '
-    echo ""
-
-    # Latest checkpoint for top 3 priority repositories
+    # Latest checkpoint for the top 3 priority repositories: status first, then the most recent activity. The jq
+    # sort is stable, so the date sort runs FIRST (newest first, never-active last) and the status sort second;
+    # without it a registry of all-idle repositories returns its first three keys, however old.
+    # The roster is NOT printed here: hooks/borg-link-down.sh prints it once, with each next action.
     local top3
     top3=$(printf '%s' "$registry" | jq -r '
         .repositories | to_entries |
         map(select(.value.status != "archived")) |
+        sort_by(.value.last_activity // "") | reverse |
         sort_by(
             if .value.status == "waiting" then 0
             elif .value.status == "active" then 1
@@ -1860,10 +1848,11 @@ _borg_orchestrator_context() {
         ) | .[0:3] | .[].key
     ')
 
-    local any_checkpoint=0
+    # `local` stays OUT of the loop: a second `local` of an already-declared name prints it in zsh, which put
+    # `ppath=...` and `cp=...` lines into the prompt on every iteration after the first.
+    local any_checkpoint=0 name ppath cp
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        local ppath cp
         ppath=$(printf '%s' "$registry" | jq -r --arg p "$name" '.repositories[$p].path // ""')
         [[ -n "$ppath" && -d "$ppath/.borg/checkpoints" ]] || continue
         cp=$(find "$ppath/.borg/checkpoints" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r | head -1 || true)
