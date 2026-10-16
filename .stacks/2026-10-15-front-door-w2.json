@@ -6,6 +6,7 @@
       "lane": "_default",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#427",
+      "status": "merged",
       "why": "W2: review-required routing, PR url in waiting rows, aggregate by repository"
     },
     {
