@@ -1,0 +1,4 @@
+# Captured source material is stored byte for byte
+docs/research/snapshots/** -text
+docs/research/2026-10-03-cheat-sheet-design/drafts/raw/** -text
+docs/research/2026-10-03-cheat-sheet-design/drafts/adapter/** -text
