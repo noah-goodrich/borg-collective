@@ -34,10 +34,12 @@ The front door tells the owner what to do next. Three surfaces mislead:
   - Verify: `bats tests/recon_adapter_github.bats tests/context_budget.bats` and the pytest cases for the row. Evidence: merged as c8d3d11 (#427), 2026-10-15.
 - [x] **AC3: `borg link` aggregates by repository, not by registered directory.** Three linked worktrees of one repository show each directive title once. (parking-lot item)
   - Verify: `python3 -m pytest borg_core/link -k counts_a_repository_once` and `borg link --json` on a registry holding worktrees. Evidence: merged as c8d3d11 (#427), 2026-10-15.
-- [ ] **AC4: The GitHub recon sweep works on a registry of about 30 repositories.** The adapter splits the registry into chunks of 5 repositories run 8 at a time, so no single request nears GitHub's server timeout and the sweep fits `DEFAULT_SWEEP_TIMEOUT_SECONDS`. A failed request shows gh's own trimmed error text, and one failed chunk keeps the other chunks' items and names the repositories it covered; a request that hangs is killed by a 6s watchdog and fails alone. (Issue #424)
+- [x] **AC4: The GitHub recon sweep works on a registry of about 30 repositories.** The adapter splits the registry into chunks of 5 repositories run 8 at a time, so no single request nears GitHub's server timeout and the sweep fits `DEFAULT_SWEEP_TIMEOUT_SECONDS`. A failed request shows gh's own trimmed error text, and one failed chunk keeps the other chunks' items and names the repositories it covered; a request that hangs is killed by a 6s watchdog and fails alone. (Issue #424)
   - Verify: `bats tests/recon_adapter_github.bats` (the cases under "chunked sweep" and "per-request watchdog") and the measurements in the PR body.
-- [ ] **AC5: 0.9.9 is cut with these fixes and the registry contract step, and the plugin mirror is rebuilt.** A separate release PR after this one merges.
+  - Evidence 2026-10-16: merged as 96ffd0a (https://github.com/noah-goodrich/borg-collective/pull/428). `bats tests/recon_adapter_github.bats` is green on main at 62df38d, including the chunked-sweep and per-request-watchdog cases.
+- [x] **AC5: 0.9.9 is cut with these fixes and the registry contract step, and the plugin mirror is rebuilt.** A separate release PR after this one merges.
   - Verify: the release and the mirror commit exist.
+  - Evidence 2026-10-16: https://github.com/noah-goodrich/borg-collective/pull/432 merged as 62df38d; v0.9.9 tagged and released (https://github.com/noah-goodrich/borg-collective/releases/tag/v0.9.9); the registry contract step landed as https://github.com/noah-goodrich/borg-collective/pull/426 (cbd437e); plugin mirror claude-plugins #76 merged as a4109d7.
 
 ## Scope Boundaries
 

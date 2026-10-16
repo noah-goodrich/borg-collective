@@ -19,24 +19,24 @@ A Queen session starts at about 42.5k of its 200k-token window, measured with `/
 
 ## Acceptance Criteria
 
-- [ ] **AC1: Excerpts follow recency.** With every repository idle, the three most recently active supply the "Latest checkpoints" excerpts; a never-active repository sorts last; a waiting repository still comes first. (this PR)
+- [x] **AC1: Excerpts follow recency.** With every repository idle, the three most recently active supply the "Latest checkpoints" excerpts; a never-active repository sorts last; a waiting repository still comes first. (this PR)
   - Verify: `bats tests/queen_startup_context.bats`.
-  - Evidence: `bats:tests/queen_startup_context.bats`
-- [ ] **AC2: The roster prints once.** `_borg_orchestrator_context` carries no `Repository registry:` list and runs no summary overlay; the hook names each repository exactly once with its next action. (this PR)
+  - Evidence 2026-10-16: merged as 71be981 (https://github.com/noah-goodrich/borg-collective/pull/431), green on main at 62df38d: `bats:tests/queen_startup_context.bats`.
+- [x] **AC2: The roster prints once.** `_borg_orchestrator_context` carries no `Repository registry:` list and runs no summary overlay; the hook names each repository exactly once with its next action. (this PR)
   - Verify: `bats tests/queen_startup_context.bats tests/checkpoint_summary_readers.bats`.
-  - Evidence: `bats:tests/queen_startup_context.bats`
-- [ ] **AC3: Long-idle repositories are counted.** The hook hides idle repositories older than the cutoff behind one count line, always shows waiting and active ones, and honours `BORG_QUEEN_IDLE_DAYS`. (this PR)
+  - Evidence 2026-10-16: merged as 71be981 (https://github.com/noah-goodrich/borg-collective/pull/431), green on main at 62df38d: `bats:tests/queen_startup_context.bats`.
+- [x] **AC3: Long-idle repositories are counted.** The hook hides idle repositories older than the cutoff behind one count line, always shows waiting and active ones, and honours `BORG_QUEEN_IDLE_DAYS`. (this PR)
   - Verify: `bats tests/queen_startup_context.bats`.
-  - Evidence: `bats:tests/queen_startup_context.bats`
-- [ ] **AC4: Skill descriptions are capped.** Every description is at most 320 characters and the trimmed ones keep their trigger phrases; `skills/borg-link/SKILL.md` stays under its 8,192-byte cap. (this PR)
+  - Evidence 2026-10-16: merged as 71be981 (https://github.com/noah-goodrich/borg-collective/pull/431), green on main at 62df38d: `bats:tests/queen_startup_context.bats`.
+- [x] **AC4: Skill descriptions are capped.** Every description is at most 320 characters and the trimmed ones keep their trigger phrases; `skills/borg-link/SKILL.md` stays under its 8,192-byte cap. (this PR)
   - Verify: `bats tests/skill_frontmatter.bats tests/context_budget.bats`.
-  - Evidence: `bats:tests/skill_frontmatter.bats`
-- [ ] **AC5: One `simplify`.** `skills/simplify` is gone and no skill, hook, doc, test or ledger row refers to it as a borg skill. (this PR)
+  - Evidence 2026-10-16: merged as 71be981 (https://github.com/noah-goodrich/borg-collective/pull/431), green on main at 62df38d: `bats:tests/skill_frontmatter.bats`.
+- [x] **AC5: One `simplify`.** `skills/simplify` is gone and no skill, hook, doc, test or ledger row refers to it as a borg skill. (this PR)
   - Verify: `bats tests/skill_frontmatter.bats tests/eval_ledger.bats`.
-  - Evidence: `bats:tests/skill_frontmatter.bats`
-- [ ] **AC6: The Queen docs warn about `/context`.** `docs/orchestration-architecture.md` says `/context` costs about 15k tokens in the transcript and belongs in a throwaway session. (this PR)
+  - Evidence 2026-10-16: merged as 71be981 (https://github.com/noah-goodrich/borg-collective/pull/431), green on main at 62df38d: `bats:tests/skill_frontmatter.bats`.
+- [x] **AC6: The Queen docs warn about `/context`.** `docs/orchestration-architecture.md` says `/context` costs about 15k tokens in the transcript and belongs in a throwaway session. (this PR)
   - Verify: the line exists under "The Queen".
-  - Evidence: `path:docs/orchestration-architecture.md`
+  - Evidence 2026-10-16: merged as 71be981 (https://github.com/noah-goodrich/borg-collective/pull/431), green on main at 62df38d: `path:docs/orchestration-architecture.md`.
 
 ## Testability
 

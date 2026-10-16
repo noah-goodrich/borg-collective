@@ -37,21 +37,21 @@ Readers of `usage-samples.jsonl` need no change: the dispatch guard and the resu
 
 ## Acceptance criteria
 
-- [ ] **AC1: The probe names the unmetered state.** A cost-style `/usage` yields `unmetered` with exit 0; a subscription `/usage` still yields the session percent; garbage or empty output still fails with "could not parse".
+- [x] **AC1: The probe names the unmetered state.** A cost-style `/usage` yields `unmetered` with exit 0; a subscription `/usage` still yields the session percent; garbage or empty output still fails with "could not parse".
   - Verify: `bats tests/resume_probe.bats`.
-  - Evidence: `bats:tests/resume_probe.bats`
-- [ ] **AC2: The poller logs an unmetered account once, not every pass, and keeps its row per pass.** The row has `status:"unmetered"` and null readings; no WARNING and no failure streak; a return to a metered reading is logged once; garbage output is still `parse_failed`.
+  - Evidence 2026-10-16: merged as 7ef78f6 (https://github.com/noah-goodrich/borg-collective/pull/430), green on main at 62df38d: `bats:tests/resume_probe.bats`.
+- [x] **AC2: The poller logs an unmetered account once, not every pass, and keeps its row per pass.** The row has `status:"unmetered"` and null readings; no WARNING and no failure streak; a return to a metered reading is logged once; garbage output is still `parse_failed`.
   - Verify: `bats tests/usage_watch.bats`.
-  - Evidence: `bats:tests/usage_watch.bats`
-- [ ] **AC3: The resume gate treats unmetered as no limit.** A limit-class record is not injected and does not fail closed with a growing `probe_fails`; a non-limit record resumes as before.
+  - Evidence 2026-10-16: merged as 7ef78f6 (https://github.com/noah-goodrich/borg-collective/pull/430), green on main at 62df38d: `bats:tests/usage_watch.bats`.
+- [x] **AC3: The resume gate treats unmetered as no limit.** A limit-class record is not injected and does not fail closed with a growing `probe_fails`; a non-limit record resumes as before.
   - Verify: `bats tests/resume_gate.bats`.
-  - Evidence: `bats:tests/resume_gate.bats`
-- [ ] **AC4: `borg doctor` shows INFO for an unmetered account and still FAILs a real probe failure.**
+  - Evidence 2026-10-16: merged as 7ef78f6 (https://github.com/noah-goodrich/borg-collective/pull/430), green on main at 62df38d: `bats:tests/resume_gate.bats`.
+- [x] **AC4: `borg doctor` shows INFO for an unmetered account and still FAILs a real probe failure.**
   - Verify: `bats tests/doctor.bats`.
-  - Evidence: `bats:tests/doctor.bats`
-- [ ] **AC5: `docs/upgrading.md` no longer claims install clears both RESUME FAIL rows on every account.**
+  - Evidence 2026-10-16: merged as 7ef78f6 (https://github.com/noah-goodrich/borg-collective/pull/430), green on main at 62df38d: `bats:tests/doctor.bats`.
+- [x] **AC5: `docs/upgrading.md` no longer claims install clears both RESUME FAIL rows on every account.**
   - Verify: `grep -n "usage-billed" docs/upgrading.md`.
-  - Evidence: `path:docs/upgrading.md`
+  - Evidence 2026-10-16: merged as 7ef78f6 (https://github.com/noah-goodrich/borg-collective/pull/430), green on main at 62df38d: `path:docs/upgrading.md`.
 
 ## Ship Definition
 

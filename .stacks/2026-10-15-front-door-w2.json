@@ -13,6 +13,7 @@
       "lane": "_default",
       "order": "2",
       "ref": "noah-goodrich/borg-collective#428",
+      "status": "merged",
       "why": "W2: chunk the GitHub recon sweep and surface gh's own error (issue #424)"
     }
   ]

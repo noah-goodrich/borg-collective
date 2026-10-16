@@ -6,7 +6,7 @@
       "lane": "_default",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#431",
-      "status": "open",
+      "status": "merged",
       "why": "Queen startup context: recency excerpts, one roster, idle cutoff, skill descriptions, retire simplify"
     }
   ]
