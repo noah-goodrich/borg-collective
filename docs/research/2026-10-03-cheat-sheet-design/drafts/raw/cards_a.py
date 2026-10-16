@@ -1,5 +1,5 @@
 import json
-B="/Users/noah/.local/state/borg/worktrees/borg-collective/cheat-research/docs/research/2026-10-03-cheat-sheet-design/"
+B="docs/research/2026-10-03-cheat-sheet-design/"
 W=[.25,.20,.10,.10,.10,.05,.05,.05,.05,.05]  # Auth, Evid, Curr, Intent, Bias, Logic, Corr, Hon, Spec, Rel
 DIMS=["Authority","Evidence Quality","Currency","Intent","Bias & Objectivity","Logic & Coherence","Corroboration","Intellectual Honesty","Specificity","Relevance"]
 # order in template table: Authority, Evidence, Currency, Intent, Bias, Logic, Corroboration, Honesty, Specificity, Relevance
