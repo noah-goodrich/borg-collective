@@ -160,16 +160,34 @@ fi
 #
 # So the registry is split into chunks of BORG_RECON_GITHUB_CHUNK repositories (default $DEFAULT_CHUNK),
 # each its own request, run BORG_RECON_GITHUB_JOBS at a time (default $DEFAULT_JOBS) so the whole
-# sweep stays inside the caller's budget (`DEFAULT_SWEEP_TIMEOUT_SECONDS`, 10s in borg link). Both
-# defaults come from measurement; the numbers are in the pull request that introduced them. A chunk
+# sweep stays inside the caller budget (`DEFAULT_SWEEP_TIMEOUT_SECONDS`, 10s in borg link). Both
+# defaults come from measurement on ONE machine (17 repositories, doubled to 34; numbers in the pull
+# request that introduced them), not from the machine that reported the timeout. One wave holds up to
+# JOBS x CHUNK = 40 repositories; a larger registry takes more waves, each costing about one request
+# time, so the 10s fit is only measured up to that size. A chunk
 # that fails costs only its own repositories: the other chunks' items are still returned and the
 # summary names the repositories the failed chunk covered and gh's own error text.
 DEFAULT_CHUNK=5
 DEFAULT_JOBS=8
-CHUNK="${BORG_RECON_GITHUB_CHUNK:-$DEFAULT_CHUNK}"
-JOBS="${BORG_RECON_GITHUB_JOBS:-$DEFAULT_JOBS}"
-case "$CHUNK" in '' | *[!0-9]* | 0) CHUNK="$DEFAULT_CHUNK" ;; esac
-case "$JOBS" in '' | *[!0-9]* | 0) JOBS="$DEFAULT_JOBS" ;; esac
+DEFAULT_TIMEOUT=6
+# A knob is read as DECIMAL (a zero-padded `08` would otherwise be an invalid octal in bash arithmetic),
+# falls back to its default on anything that is not a positive integer, and is clamped to a ceiling so
+# an absurd value cannot build one enormous query, fork hundreds of requests or disable the watchdog.
+# More than 4 digits is already past every ceiling, which also keeps the arithmetic from overflowing.
+knob() {
+    local value="$1" default="$2" ceiling="$3"
+    case "$value" in '' | *[!0-9]*) printf '%s' "$default"; return ;; esac
+    while [ "${value#0}" != "$value" ]; do value="${value#0}"; done
+    [ -n "$value" ] || { printf "%s" "$default"; return; }
+    if [ "${#value}" -gt 4 ]; then printf '%s' "$ceiling"; return; fi
+    value=$((10#$value))
+    if [ "$value" -eq 0 ]; then printf '%s' "$default"; return; fi
+    if [ "$value" -gt "$ceiling" ]; then value="$ceiling"; fi
+    printf '%s' "$value"
+}
+CHUNK="$(knob "${BORG_RECON_GITHUB_CHUNK:-}" "$DEFAULT_CHUNK" 50)"
+JOBS="$(knob "${BORG_RECON_GITHUB_JOBS:-}" "$DEFAULT_JOBS" 16)"
+REQUEST_TIMEOUT="$(knob "${BORG_RECON_GITHUB_TIMEOUT:-}" "$DEFAULT_TIMEOUT" 60)"
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -f "$REPOS_FILE"; rm -rf "$WORKDIR"' EXIT
@@ -233,8 +251,41 @@ fi
 # repository was renamed or made private, and would render the whole track failed. So: capture
 # stdout unconditionally, and decide on the PAYLOAD. stderr is kept too, per chunk: it is the only
 # place gh says WHY a request failed.
+# PER-REQUEST WATCHDOG. A hung gh call (a stalled connection, a server that never answers) would hold
+# its whole wave at the bare `wait` until the caller's budget killed the adapter, and every chunk's
+# items would be lost with it. So each request runs under a watchdog of REQUEST_TIMEOUT seconds
+# (default $DEFAULT_TIMEOUT: a request is about 1s, so 6s is generous for a slow one yet leaves a
+# single wave room inside the 10s budget). macOS has no coreutils `timeout` and the system bash is
+# 3.2 (no `wait -n`), so the watchdog is a few lines of perl, which both platforms ship: it moves
+# itself into a fresh process group, forks gh into it, and arms alarm(). On expiry it drops a marker
+# file and sends SIGTERM to the whole group, which takes gh and anything gh forked with it, so no gh
+# or sleep outlives the request. perl handles that TERM itself (a handler, not IGNORE, because an
+# ignored signal would survive exec into gh) so it reaps the child and exits normally, which keeps bash
+# from printing a "Killed" notice into the adapter's stderr. The alarm belongs to the perl process, so
+# it fires on its own even if the adapter is killed first: nothing lingers past REQUEST_TIMEOUT.
+# Without perl the request still runs, just unguarded.
+WATCHDOG='my ($mark, $secs) = splice(@ARGV, 0, 2);
+setpgrp(0, 0);
+$SIG{TERM} = sub { };
+my $pid = fork();
+exit 127 unless defined $pid;
+if (!$pid) { exec @ARGV; exit 127; }
+$SIG{ALRM} = sub { if (open(my $f, ">", $mark)) { close $f; } kill "TERM", -$$; };
+alarm $secs;
+waitpid($pid, 0);
+exit($? >> 8);'
+HAVE_PERL=0
+command -v perl >/dev/null 2>&1 && HAVE_PERL=1
+
 run_chunk() {
-    gh api graphql -f query="$(cat "$WORKDIR/query.$1")" > "$WORKDIR/out.$1" 2> "$WORKDIR/err.$1" || true
+    local query
+    query="$(cat "$WORKDIR/query.$1")"
+    if [ "$HAVE_PERL" -eq 1 ]; then
+        perl -e "$WATCHDOG" "$WORKDIR/timeout.$1" "$REQUEST_TIMEOUT" \
+            gh api graphql -f query="$query" > "$WORKDIR/out.$1" 2> "$WORKDIR/err.$1" || true
+    else
+        gh api graphql -f query="$query" > "$WORKDIR/out.$1" 2> "$WORKDIR/err.$1" || true
+    fi
 }
 
 C=0
@@ -254,6 +305,10 @@ wait
 # message in the body, else a plain statement that nothing usable came back.
 failure_text() {
     local text
+    if [ -e "$WORKDIR/timeout.$1" ]; then
+        printf 'timed out after %ss' "$REQUEST_TIMEOUT"
+        return
+    fi
     text="$(tr '\n\r\t' '   ' < "$WORKDIR/err.$1" | tr -s ' ' | sed -E 's/^ +//; s/ +$//' | cut -c1-200)"
     if [ -z "$text" ]; then
         text="$(jq -r '.errors[0].message // empty' "$WORKDIR/out.$1" 2>/dev/null \

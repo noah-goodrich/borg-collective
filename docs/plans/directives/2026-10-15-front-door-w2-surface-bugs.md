@@ -35,7 +35,7 @@ The front door tells the owner what to do next. Three surfaces mislead:
 - [x] **AC3: `borg link` aggregates by repository, not by registered directory.** Three linked worktrees of one repository show each directive title once. (parking-lot item)
   - Verify: `python3 -m pytest borg_core/link -k counts_a_repository_once` and `borg link --json` on a registry holding worktrees. Evidence: merged as c8d3d11 (#427), 2026-10-15.
 - [ ] **AC4: The GitHub recon sweep works on a registry of about 30 repositories.** The adapter splits the registry into chunks of 5 repositories run 8 at a time, so no single request nears GitHub's server timeout and the sweep fits `DEFAULT_SWEEP_TIMEOUT_SECONDS`. A failed request shows gh's own trimmed error text, and one failed chunk keeps the other chunks' items and names the repositories it covered. (Issue #424)
-  - Verify: `bats tests/recon_adapter_github.bats` (the cases under "chunked sweep") and the measurements in the PR body.
+  - Verify: `bats tests/recon_adapter_github.bats` (the cases under "chunked sweep" and "per-request watchdog") and the measurements in the PR body.
 - [ ] **AC5: 0.9.9 is cut with these fixes and the registry contract step, and the plugin mirror is rebuilt.** A separate release PR after this one merges.
   - Verify: the release and the mirror commit exist.
 
