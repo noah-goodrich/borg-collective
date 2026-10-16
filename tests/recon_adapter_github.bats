@@ -520,3 +520,70 @@ _doc_of() {
     [[ "$output" == *"GraphQL: timeout"* ]] || false
     [[ "$output" != *"owner/repo0"* ]] || false
 }
+
+# ── per-request watchdog: a hung gh call fails alone ─────────────────────────
+
+@test "adapter: a hung request times out alone, keeps the other chunks, and leaves no process behind" {
+    _many_repositories 5
+    _mock_gh_per_query
+    # The stub hangs (in a child, like a real network wait) only for the chunk naming repo2.
+    cat > "$MOCK_BIN/gh" <<'MOCK'
+#!/usr/bin/env bash
+q="$(mktemp "$GH_QUERIES/q.XXXXXX")"
+printf '%s\n' "$*" > "$q"
+if grep -q 'name: "repo2"' "$q"; then
+    sleep 31.17
+    exit 0
+fi
+printf '{"data":{"viewer":{"login":"me"}'
+for a in $(grep -o 'r[0-9]*: repository' "$q" | sed 's/: repository//'); do
+    n="${a#r}"
+    printf ',"%s":{"pullRequests":{"nodes":[{"number":%s,"title":"t","state":"OPEN","isDraft":false,"updatedAt":"2026-08-20T10:00:00Z","url":"u","headRefName":"h","baseRefName":"main","author":{"login":"me"}}]}}' "$a" "$((n + 1))"
+done
+printf '}}\n'
+MOCK
+    chmod +x "$MOCK_BIN/gh"
+
+    local started=$SECONDS
+    BORG_RECON_GITHUB_CHUNK=2 BORG_RECON_GITHUB_TIMEOUT=1 \
+        run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$WORK/projects.json"
+    local elapsed=$((SECONDS - started))
+    [ "$status" -eq 0 ]
+    [ "$elapsed" -le 6 ]
+    _doc_of
+
+    run jq -r '.items | map(.ref) | sort | join(",")' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "owner/repo0#1,owner/repo1#2,owner/repo4#5" ]
+    run jq -r '.skipped // false | tostring' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "false" ]
+    run jq -r '.summary' "${BATS_TEST_TMPDIR}/doc.json"
+    [[ "$output" == *"owner/repo2"* ]] || false
+    [[ "$output" == *"owner/repo3"* ]] || false
+    [[ "$output" == *"timed out after 1s"* ]] || false
+
+    run pgrep -f "sleep 31.17"
+    [ "$status" -ne 0 ]
+}
+
+@test "adapter: zero-padded knobs read as decimal and absurd values are clamped" {
+    _many_repositories 60
+    _mock_gh_per_query
+    BORG_RECON_GITHUB_CHUNK=08 BORG_RECON_GITHUB_JOBS=09 BORG_RECON_GITHUB_TIMEOUT=08 \
+        run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$WORK/projects.json"
+    [ "$status" -eq 0 ]
+    run bash -c "ls '$GH_QUERIES' | wc -l | tr -d ' '"
+    [ "$output" = "8" ]
+
+    rm -f "$GH_QUERIES"/q.*
+    BORG_RECON_GITHUB_CHUNK=99999999999999999999999 BORG_RECON_GITHUB_JOBS=99999999999999999999999 \
+        BORG_RECON_GITHUB_TIMEOUT=99999999999999999999999 \
+        run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$WORK/projects.json"
+    [ "$status" -eq 0 ]
+    local f biggest=0 n
+    for f in "$GH_QUERIES"/*; do
+        n="$(grep -o ': repository(' "$f" | wc -l | tr -d ' ')"
+        [ "$n" -gt "$biggest" ] && biggest="$n"
+    done
+    [ "$biggest" -le 50 ]
+    [ "$biggest" -ge 2 ]
+}
