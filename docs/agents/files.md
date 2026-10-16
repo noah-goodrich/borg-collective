@@ -51,7 +51,7 @@ hooks/
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
     tool-count-nudge.sh     PostToolUse → review reminder every 75 tool calls
-skills/ (17)
+skills/ (16)
     adhd-guardrails/        Cognitive load guardrails (always active)
     borg-plan/              Project planning + Collective review
     borg-assimilate/        Shipping checklist + Collective review + execution
@@ -67,7 +67,6 @@ skills/ (17)
     break-glass/            Add a local permission exception to a repository's settings.local.json
     fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
     no-unnecessary-read-perms/  Suppress redundant read-permission prompts (always active)
-    simplify/               Review session-touched code for reuse/quality/efficiency, then fix
     pane/                   Split the current tmux pane in a given direction
 agents/ (6, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
     borg-nanoprobe.md       Default worker: one discrete unit of work, manages its own worktree

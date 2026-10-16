@@ -2,7 +2,7 @@
 
 A runbook for bringing a machine from an older borg to the current release, or for installing borg on a fresh machine. It is written so that a person, or a Claude Code session with no other context, can follow it top to bottom. The GitHub release notes for each version describe what changed; this page holds the per-machine steps, and a future release that needs anything from you adds a row to the migration table in section 5 instead of rewriting the notes.
 
-This page was last checked against release 0.9.8.
+This page was last checked against release 0.9.9.
 
 ## 1. Who this is for and how to use it with Claude Code
 
@@ -109,7 +109,7 @@ Find the row for the version you started from. If you skipped several releases, 
 | Before 0.9.4, or never ran install.sh | Launchd agents, below |
 | 0.9.6 | None |
 | 0.9.7 | Registry key, below |
-| 0.9.8 | Registry key, below (`borg setup` does it) |
+| 0.9.8 | Registry key, then 0.9.9 update order, below |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
 
@@ -124,6 +124,16 @@ run-in <BORG> ./install.sh
 ```
 
 2. Run `borg doctor`. Every RESUME row should now be OK except `resume-guardian`, which stays a known warning (section 6). On a machine signed in with a subscription this clears both the `resume-watch` and the `resume-probe` FAIL rows: the probe reads the path of the Claude binary from the watcher's plist, so it cannot pass without it. On a usage-billed account (an Enterprise seat), `/usage` reports cost and has no session limit, so `resume-probe` shows `INFO`, not `OK`: limit-class resumes and the guardian's limit thresholds do not apply there, and every other resume path is unchanged. A `FAIL` on that row on any account still means the probe cannot read `/usage` at all.
+
+### Updating to 0.9.9: update order
+
+0.9.9 is the contract step of the registry key rename (below): the registry file uses only `repositories`, and the old `projects` key is no longer read. The order of the upgrade matters on a machine whose registry still has the old key.
+
+1. Run `borg setup` right after updating the plugin. It renames the key and writes a timestamped backup first.
+2. Until setup has migrated the file, hooks and the notify daemon read the unmigrated file as empty, and every other borg and drone command refuses it with a pointer to the fix. `borg doctor` shows a FAIL row named `registry-key`.
+3. A machine that already migrated the registry in 0.9.8 has nothing extra to do for this.
+
+Two more things to know. A machine signed in with a usage-billed account (one whose `/usage` reports cost, not session limits) now shows `resume-probe` as INFO in `borg doctor`, not FAIL. And restart every open Claude Code session after the plugin update: the borg `simplify` skill is retired in favour of the built-in `/simplify`, several borg skill descriptions are shorter, and a running session keeps the old ones.
 
 ### Registry key (`projects` to `repositories`)
 
