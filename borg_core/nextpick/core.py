@@ -328,8 +328,41 @@ def _pr_number(item: dict[str, Any]) -> int:
     return int(found[0]) if found else 0
 
 
-def _pr_row(item: dict[str, Any]) -> dict[str, Any]:
-    """The one row an OPEN PR earns; the first matching rule wins. Owner never reads the PR author."""
+def _repo_of(item: dict[str, Any]) -> str:
+    return str(item.get("ref") or "").rsplit("#", 1)[0]
+
+
+def _parent_numbers(prs: list[dict[str, Any]]) -> dict[str, int]:
+    """Map each stacked PR's ref to the number of the OPEN PR it is stacked on.
+
+    A PR is stacked when its `base_ref` is the `head_ref` of another open PR in the same repository. Derived here
+    from the raw items so no caller can supply a parent the adapter never emitted. An item without `base_ref`
+    (older cached data) is never stacked. With several candidate parents the lowest number wins.
+    """
+    parents: dict[str, int] = {}
+    for child in prs:
+        base = str(child.get("base_ref") or "")
+        if not base:
+            continue
+        candidates = [
+            _pr_number(other)
+            for other in prs
+            if other is not child
+            and str(other.get("head_ref") or "") == base
+            and _repo_of(other) == _repo_of(child)
+            and _pr_number(other)
+        ]
+        if candidates:
+            parents[str(child.get("ref") or "")] = min(candidates)
+    return parents
+
+
+def _pr_row(item: dict[str, Any], parent: int | None = None) -> dict[str, Any]:
+    """The one row an OPEN PR earns; the first matching rule wins. Owner never reads the PR author.
+
+    `parent` is the open PR this one is stacked on (see `_parent_numbers`); merging it now would land in a
+    feature branch, so it waits below the rules that are still its own work (draft, conflicts, CI, review changes).
+    """
     number = _pr_number(item)
     if item.get("draft"):
         step, owner, ready = f"finish #{number}", "AGENT", "◌"
@@ -341,6 +374,8 @@ def _pr_row(item: dict[str, Any]) -> dict[str, Any]:
         step, owner, ready = f"#{number} CI", "AGENT", "… run"
     elif item.get("review_decision") == "CHANGES_REQUESTED":
         step, owner, ready = f"address review #{number}", "AGENT", "○"
+    elif parent is not None:
+        step, owner, ready = f"await #{parent}", "—", "… wait"
     elif item.get("review_decision") == "REVIEW_REQUIRED":
         # GitHub blocks the merge until a reviewer approves, so it is not a decision the owner can act on.
         step, owner, ready = f"await review #{number}", "—", "… wait"
@@ -408,8 +443,10 @@ def work_items(
                 }
             )
         prs = [it for it in recon_items_by_project.get(repository) or [] if it.get("state") == "open"]
+        parents = _parent_numbers(prs)
         pr_rows = sorted(
-            (_pr_row(it) for it in prs), key=lambda r: (r["owner"] != "YOU", _pr_number({"ref": r["ref"]}))
+            (_pr_row(it, parents.get(str(it.get("ref") or ""))) for it in prs),
+            key=lambda r: (r["owner"] != "YOU", _pr_number({"ref": r["ref"]})),
         )
         mine.extend(pr_rows)
         if not pr_rows:
