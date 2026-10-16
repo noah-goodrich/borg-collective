@@ -1,0 +1,13 @@
+{
+  "desc": "The cheat-sheet research captures that its source cards cite are committed unchanged",
+  "program": "2026-10-16-preserve-research-captures",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#435",
+      "status": "open",
+      "why": "Commits the 11 cited snapshots plus raw fetches and adapter drafts, byte for byte"
+    }
+  ]
+}

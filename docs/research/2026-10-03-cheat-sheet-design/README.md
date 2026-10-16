@@ -10,7 +10,7 @@ Status: the evidence half passes its citation gate; the design half is stamped N
 - `analysis.md` is v2's evidence half: 13 principles, the six moments, and the source catalogue (98 cards, 93 included).
 - `worked-examples.md` walks one day through all six moments under every option.
 - `verification-report.md` is v2's citation check: 30 of 98 cards sampled, 0 failed, 3 inaccessible.
-- `sources/` holds the 98 source cards. Snapshot pointers inside them name files that are not committed; re-derive each from the card URL.
+- `sources/` holds the 98 source cards. Snapshot pointers inside them name committed files: `docs/research/snapshots/` holds the S1 and S2 snapshots, and `drafts/adapter/snapshots/` holds the adapter ones, with the raw fetches in `drafts/raw/`. No pointer dangles.
 
 ## Archived
 

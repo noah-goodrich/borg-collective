@@ -1,0 +1,2595 @@
+
+<!DOCTYPE html>
+<html lang="en" >
+    <head >
+
+        <meta charset="UTF-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="HandheldFriendly" content="True" />
+        <meta name="MobileOptimized" content="320" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+        
+        
+
+        
+        
+  <link  rel="stylesheet" href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/base_style-BxRs1iOp.css" />
+<script type="module" crossorigin="" src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/base_style-D-jH62-1.js"></script>
+
+  <link  rel="stylesheet" href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/article_style-B67IZFds.css" />
+<link  rel="stylesheet" href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/style-D77LS1kY.css" />
+<script type="module" crossorigin="" src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/article_style-CTAd1LmM.js"></script>
+
+  
+  
+    <style>
+  
+  
+  @media screen and (min-width: 64em) {
+    div.pmc-wm {
+      background: repeat-y;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='350' xmlns:xlink='http://www.w3.org/1999/xlink'%3E%3Cdefs%3E%3Cfilter x='-.02' y='0' width='1.05' height='1' id='c'%3E%3CfeFlood flood-color='%23FFF'/%3E%3CfeComposite in='SourceGraphic'/%3E%3C/filter%3E%3Ctext id='b' font-family='Helvetica' font-size='11pt' style='opacity:1;fill:%23005ea2;stroke:none;text-anchor:middle' x='175' y='14'%3E%3C/text%3E%3Cpath id='a' style='fill:%23005ea2' d='M0 8h350v3H0z'/%3E%3C/defs%3E%3Cuse xlink:href='%23a' transform='rotate(90 10 10)'/%3E%3Cuse xlink:href='%23b' transform='rotate(90 10 10)' filter='url(%23c)'/%3E%3C/svg%3E");
+      padding-left: 3rem;
+    }
+  }
+</style>
+
+  
+
+
+
+        
+            <link rel="apple-touch-icon"
+                  sizes="180x180"
+                  href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/favicons/apple-touch-icon.png" />
+            <link rel="icon"
+                  type="image/png"
+                  sizes="48x48"
+                  href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/favicons/favicon-48x48.png" />
+            <link rel="icon"
+                  type="image/png"
+                  sizes="32x32"
+                  href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/favicons/favicon-32x32.png" />
+            <link rel="icon"
+                  type="image/png"
+                  sizes="16x16"
+                  href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/favicons/favicon-16x16.png" />
+            <link rel="manifest" href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/favicons/site.webmanifest" />
+            <link rel="mask-icon"
+                  href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/favicons/safari-pinned-tab.svg"
+                  color="#0071bc" />
+            <meta name="msapplication-config"
+                  content="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/favicons/browserconfig.xml" />
+            <meta name="theme-color" content="#ffffff" />
+        
+
+        <title>
+            Third-person self-talk facilitates emotion regulation without engaging cognitive control: Converging evidence from ERP and fMRI - PMC
+        </title>
+
+        
+        
+  
+  <!-- Logging params: Pinger defaults -->
+<meta name="ncbi_app" content="cloudpmc-viewer" />
+<meta name="ncbi_db" content="pmc" />
+<meta name="ncbi_phid" content="C1EDFCAFAC1CD2330AFCAF002B4671A0.m_1" />
+<meta name="ncbi_pinger_stat_url" content="https://pmc.ncbi.nlm.nih.gov/stat" />
+<!-- Logging params: Pinger custom -->
+<meta name="ncbi_pdid" content="article" />
+  
+    <link rel="preconnect" href="https://www.google-analytics.com" />
+
+    
+        <link rel="preconnect" href="https://cdn.ncbi.nlm.nih.gov" />
+    
+
+    <!-- Include USWDS Init Script -->
+    <script src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/uswds-init.js"></script>
+
+
+    <meta name="ncbi_domain" content="scirep">
+<meta name="ncbi_type" content="fulltext">
+<meta name="ncbi_pcid" content="journal">
+<meta name="ncbi_feature" content="associated_data">
+<link rel="canonical" href="https://pmc.ncbi.nlm.nih.gov/articles/PMC5495792/">
+<meta name="robots" content="INDEX,NOFOLLOW,NOARCHIVE">
+<meta name="citation_journal_title" content="Scientific Reports">
+<meta name="citation_title" content="Third-person self-talk facilitates emotion regulation without engaging cognitive control: Converging evidence from ERP and fMRI">
+<meta name="citation_author" content="Jason S Moser">
+<meta name="citation_author_institution" content="Department of Psychology, Michigan State University, East Lansing, Michigan USA">
+<meta name="citation_author" content="Adrienne Dougherty">
+<meta name="citation_author_institution" content="Department of Psychology, University of Michigan, Ann Arbor, Michigan USA">
+<meta name="citation_author" content="Whitney I Mattson">
+<meta name="citation_author_institution" content="Department of Psychology, University of Michigan, Ann Arbor, Michigan USA">
+<meta name="citation_author" content="Benjamin Katz">
+<meta name="citation_author_institution" content="Department of Psychology, University of Michigan, Ann Arbor, Michigan USA">
+<meta name="citation_author" content="Tim P Moran">
+<meta name="citation_author_institution" content="Department of Psychology, Michigan State University, East Lansing, Michigan USA">
+<meta name="citation_author_institution" content="School of Medicine, Emory University, Atlanta, Georgia">
+<meta name="citation_author" content="Darwin Guevarra">
+<meta name="citation_author_institution" content="Department of Psychology, University of Michigan, Ann Arbor, Michigan USA">
+<meta name="citation_author" content="Holly Shablack">
+<meta name="citation_author_institution" content="Department of Psychology, University of Michigan, Ann Arbor, Michigan USA">
+<meta name="citation_author" content="Ozlem Ayduk">
+<meta name="citation_author_institution" content="Department of Psychology, University of California, Berkeley, California, USA">
+<meta name="citation_author" content="John Jonides">
+<meta name="citation_author_institution" content="Department of Psychology, University of Michigan, Ann Arbor, Michigan USA">
+<meta name="citation_author" content="Marc G Berman">
+<meta name="citation_author_institution" content="Department of Psychology, University of Chicago, Chicago, Illinois USA">
+<meta name="citation_author" content="Ethan Kross">
+<meta name="citation_author_institution" content="Department of Psychology, University of Michigan, Ann Arbor, Michigan USA">
+<meta name="citation_publication_date" content="2017 Jul 3">
+<meta name="citation_volume" content="7">
+<meta name="citation_firstpage" content="4519">
+<meta name="citation_doi" content="10.1038/s41598-017-04047-3">
+<meta name="citation_pmid" content="28674404">
+<meta name="citation_abstract_html_url" content="https://pmc.ncbi.nlm.nih.gov/articles/PMC5495792/">
+<meta name="citation_fulltext_html_url" content="https://pmc.ncbi.nlm.nih.gov/articles/PMC5495792/">
+<meta name="citation_pdf_url" content="https://pmc.ncbi.nlm.nih.gov/articles/PMC5495792/pdf/41598_2017_Article_4047.pdf">
+<meta name="description" content="Does silently talking to yourself in the third-person constitute a relatively effortless form of self control? We hypothesized that it does under the premise that third-person self-talk leads people to think about the self similar to how they think ...">
+<meta name="og:title" content="Third-person self-talk facilitates emotion regulation without engaging cognitive control: Converging evidence from ERP and fMRI">
+<meta name="og:type" content="article">
+<meta name="og:site_name" content="PubMed Central (PMC)">
+<meta name="og:description" content="Does silently talking to yourself in the third-person constitute a relatively effortless form of self control? We hypothesized that it does under the premise that third-person self-talk leads people to think about the self similar to how they think ...">
+<meta name="og:url" content="https://pmc.ncbi.nlm.nih.gov/articles/PMC5495792/">
+<meta name="og:image" content="https://cdn.ncbi.nlm.nih.gov/pmc/cms/images/pmc-card-share.jpg?_=0">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@ncbi">
+    
+    
+
+    </head>
+    <body >
+        
+    <a class="usa-skipnav " href="#main-content">
+      Skip to main content
+    </a>
+
+
+        
+            
+
+<section class="usa-banner " aria-label="Official website of the United States government" >
+    <div class="usa-accordion">
+        <header class="usa-banner__header">
+            <div class="usa-banner__inner">
+                <div class="grid-col-auto">
+                    <img aria-hidden="true"
+                         class="usa-banner__header-flag"
+                         src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/us_flag.svg"
+                         alt="" />
+                </div>
+
+                <div class="grid-col-fill tablet:grid-col-auto" aria-hidden="true">
+                    <p class="usa-banner__header-text">
+                        An official website of the United States government
+                    </p>
+                    <span class="usa-banner__header-action">Here's how you know</span>
+                </div>
+
+                
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+        <button
+            type="button"
+        
+    
+    class="usa-accordion__button usa-banner__button
+           
+
+           
+               
+               
+               
+               
+            
+
+           
+           
+           
+           "
+    aria-expanded="false"
+    aria-controls="gov-banner-default"
+    
+    data-testid="storybook-django-banner"
+    
+    >
+    
+        
+
+        
+                    <span class="usa-banner__button-text">Here's how you know</span>
+                
+
+        
+    
+        
+            </button>
+        
+
+
+            </div>
+        </header>
+
+        <div class="usa-banner__content usa-accordion__content"
+             id="gov-banner-default"
+             hidden>
+            <div class="grid-row grid-gap-lg">
+                <div class="usa-banner__guidance tablet:grid-col-6">
+                    <img class="usa-banner__icon usa-media-block__img"
+                         src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/icon-dot-gov.svg"
+                         alt=""
+                         aria-hidden="true" />
+                    <div class="usa-media-block__body">
+                        <p>
+                            <strong>Official websites use .gov</strong>
+                            <br />
+                            A
+                            <strong>.gov</strong> website belongs to an official
+                            government organization in the United States.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="usa-banner__guidance tablet:grid-col-6">
+                    <img class="usa-banner__icon usa-media-block__img"
+                         src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/icon-https.svg"
+                         alt=""
+                         aria-hidden="true" />
+
+                    <div class="usa-media-block__body">
+                        <p>
+                            <strong>Secure .gov websites use HTTPS</strong>
+                            <br />
+                            A <strong>lock</strong> (
+                            <span class="icon-lock">
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     width="52"
+                                     height="64"
+                                     viewBox="0 0 52 64"
+                                     class="usa-banner__lock-image"
+                                     role="graphics-symbol"
+                                     aria-labelledby="banner-lock-description"
+                                     focusable="false">
+                                    <title id="banner-lock-title">Lock</title>
+                                    <desc id="banner-lock-description">
+                                    Locked padlock icon
+                                    </desc>
+                                    <path fill="#000000"
+                                          fill-rule="evenodd"
+                                          d="M26 0c10.493 0 19 8.507 19 19v9h3a4 4 0 0 1 4 4v28a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V32a4 4 0 0 1 4-4h3v-9C7 8.507 15.507 0 26 0zm0 8c-5.979 0-10.843 4.77-10.996 10.712L15 19v9h22v-9c0-6.075-4.925-11-11-11z" />
+                                </svg>
+</span>) or <strong>https://</strong> means you've safely
+                                connected to the .gov website. Share sensitive
+                                information only on official, secure websites.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+        
+
+        
+    
+    
+    
+
+<div class="usa-overlay">
+</div>
+
+
+
+<header class="usa-header usa-header--extended usa-header--wide" data-header data-testid="header"    >
+    <div class="ncbi-header">
+        <div class="ncbi-header__container">
+            <a class="ncbi-header__logo-container"
+               href="https://www.ncbi.nlm.nih.gov/">
+                <img alt="NCBI home page"
+                     class="ncbi-header__logo-image"
+                     src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/ncbi-logos/nih-nlm-ncbi--white.svg"
+                     width="410"
+                     height="100" />
+            </a>
+
+            <!-- Mobile menu hamburger button -->
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+        <button
+            type="button"
+        
+    
+    class="usa-menu-btn ncbi-header__hamburger-button
+           
+
+           
+               
+               
+               
+               
+            
+
+           
+           
+           
+           "
+    
+    
+    aria-label="Show menu"
+    data-testid="navMenuButton"
+    
+    >
+    
+        
+
+        
+                <svg aria-hidden="true"
+                     class="ncbi-hamburger-icon"
+                     fill="none"
+                     focusable="false"
+                     height="21"
+                     viewBox="0 0 31 21"
+                     width="31"
+                     xmlns="http://www.w3.org/2000/svg">
+                    <path clip-rule="evenodd"
+                          d="M0.125 20.75H30.875V17.3333H0.125V20.75ZM0.125 12.2083H30.875V8.79167H0.125V12.2083ZM0.125 0.25V3.66667H30.875V0.25H0.125Z"
+                          fill="#F1F1F1"
+                          fill-rule="evenodd" />
+                </svg>
+            
+
+        
+    
+        
+            </button>
+        
+
+
+
+            
+                <!-- Desktop buttons-->
+                <div class="ncbi-header__desktop-buttons">
+                    
+                        <!-- Desktop search button -->
+                        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+        <button
+            type="button"
+        
+    
+    class="usa-button
+           
+
+           
+               
+               
+               
+               
+            
+
+           
+           
+           usa-button--unstyled ncbi-header__desktop-button
+           "
+    aria-expanded="false"
+    aria-controls="search-field-desktop-navigation"
+    aria-label="Show search overlay"
+    data-testid="toggleSearchPanelButton"
+    data-toggle-search-panel-button
+    >
+    
+        
+
+        
+                            
+
+
+
+    <img
+        src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/search.svg"
+        class="usa-icon "
+        aria-hidden="true"
+        
+        
+    />
+
+
+                            Search
+                        
+
+        
+    
+        
+            </button>
+        
+
+
+                    
+
+                    <!-- Desktop login dropdown -->
+                    
+                        <div class="ncbi-header__login-dropdown">
+                            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+        <button
+            type="button"
+        
+    
+    class="usa-button
+           
+
+           
+               
+               
+               
+               
+            
+
+           
+           
+           usa-button--unstyled ncbi-header__desktop-button ncbi-header__login-dropdown-button
+           "
+    aria-expanded="false"
+    aria-controls="login-dropdown-menu"
+    aria-label="Show login menu"
+    data-testid="toggleLoginMenuDropdown"
+    data-desktop-login-button
+    >
+    
+        
+
+        
+                                
+
+
+
+    <img
+        src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/person.svg"
+        class="usa-icon "
+        aria-hidden="true"
+        
+        
+    />
+
+
+
+                                <span data-login-dropdown-text>Log in</span>
+
+                                <!-- Dropdown icon pointing up -->
+                                
+
+
+
+    <img
+        src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/expand_less.svg"
+        class="usa-icon ncbi-header__login-dropdown-icon ncbi-header__login-dropdown-icon--expand-less ncbi-header__login-dropdown-icon--hidden"
+        aria-hidden="true"
+        data-login-dropdown-up-arrow
+        
+    />
+
+
+
+                                <!-- Dropdown icon pointing down -->
+                                
+
+
+
+    <img
+        src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/expand_more.svg"
+        class="usa-icon ncbi-header__login-dropdown-icon ncbi-header__login-dropdown-icon--expand-more ncbi-header__login-dropdown-icon--hidden"
+        aria-hidden="true"
+        data-login-dropdown-down-arrow
+        
+    />
+
+
+                            
+
+        
+    
+        
+            </button>
+        
+
+
+
+                            <!-- Login dropdown menu -->
+                            <ul class="usa-nav__submenu ncbi-header__login-dropdown-menu"
+                                id="login-dropdown-menu"
+                                data-desktop-login-menu-dropdown
+                                hidden>
+                                
+                                    <li class="usa-nav__submenu-item">
+                                        <!-- Uses custom style overrides to render external and document links. -->
+                                        
+
+
+
+
+
+
+
+
+
+    <a href="https://www.ncbi.nlm.nih.gov/myncbi/" class="usa-link  "  >
+        
+
+        
+            Dashboard
+        
+
+        
+    </a>
+
+
+                                    </li>
+                                
+                                    <li class="usa-nav__submenu-item">
+                                        <!-- Uses custom style overrides to render external and document links. -->
+                                        
+
+
+
+
+
+
+
+
+
+    <a href="https://www.ncbi.nlm.nih.gov/myncbi/collections/bibliography/" class="usa-link  "  >
+        
+
+        
+            Publications
+        
+
+        
+    </a>
+
+
+                                    </li>
+                                
+                                    <li class="usa-nav__submenu-item">
+                                        <!-- Uses custom style overrides to render external and document links. -->
+                                        
+
+
+
+
+
+
+
+
+
+    <a href="https://www.ncbi.nlm.nih.gov/account/settings/" class="usa-link  "  >
+        
+
+        
+            Account settings
+        
+
+        
+    </a>
+
+
+                                    </li>
+                                
+                                <li class="usa-nav__submenu-item">
+                                    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+        <button
+            type="button"
+        
+    
+    class="usa-button
+           
+
+           
+               
+               
+               
+               
+            
+
+           
+           
+           usa-button--outline ncbi-header__login-dropdown-logout-button
+           "
+    
+    
+    
+    data-testid="desktopLogoutButton"
+    data-desktop-logout-button
+    >
+    
+        
+
+        Log out
+
+        
+    
+        
+            </button>
+        
+
+
+                                </li>
+                            </ul>
+                        </div>
+                    
+                </div>
+            
+        </div>
+    </div>
+
+    <!-- Search panel -->
+    
+        <div class="ncbi-search-panel ncbi--show-only-at-desktop"
+             data-header-search-panel
+             hidden>
+            <div class="ncbi-search-panel__container">
+                <form action="https://www.ncbi.nlm.nih.gov/search/all/"
+                      
+                      autocomplete="off"
+                      class="usa-search usa-search--big ncbi-search-panel__form"
+                      data-testid="desktop-navigation-search-form"
+                      method="GET"
+                      role="search">
+                    <label class="usa-sr-only" for="search-field-desktop-navigation">
+                        Search…
+                    </label>
+                    <input class="usa-input"
+                           id="search-field-desktop-navigation"
+                           name="term"
+                           
+                               placeholder="Search NCBI"
+                           
+                           type="search"
+                           value="" />
+                    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+        <button
+            type="submit"
+        
+    
+    class="usa-button
+           
+
+           
+               
+               
+               
+               
+            
+
+           
+           
+           
+           "
+    
+    
+    
+    
+    
+    >
+    
+        
+
+        
+                        <span class="usa-search__submit-text">
+                            Search NCBI
+                        </span>
+                    
+
+        
+    
+        
+            </button>
+        
+
+
+                </form>
+
+                
+            </div>
+        </div>
+    
+
+    <nav aria-label="Primary navigation" class="usa-nav">
+        <p class="usa-sr-only" id="primary-navigation-sr-only-title">
+            Primary site navigation
+        </p>
+
+        <!-- Mobile menu close button -->
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+        <button
+            type="button"
+        
+    
+    class="usa-nav__close ncbi-nav__close-button
+           
+
+           
+               
+               
+               
+               
+            
+
+           
+           
+           
+           "
+    
+    
+    aria-label="Close navigation menu"
+    data-testid="navCloseButton"
+    
+    >
+    
+        
+
+        
+            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/close.svg" alt="Close" />
+        
+
+        
+    
+        
+            </button>
+        
+
+
+
+        
+            <!-- Mobile search component -->
+            <form class="usa-search usa-search--small ncbi--hide-at-desktop"
+                  action="https://www.ncbi.nlm.nih.gov/search/all/"
+                  
+                  autocomplete="off"
+                  data-testid="mobile-navigation-search-form"
+                  method="GET"
+                  role="search">
+                <label class="usa-sr-only" for="search-field-mobile-navigation">
+                    Search
+                </label>
+
+                <input class="usa-input"
+                       id="search-field-mobile-navigation"
+                       type="search"
+                       
+                           placeholder="Search NCBI"
+                       
+                       name="term" />
+
+                
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+        <button
+            type="submit"
+        
+    
+    class="usa-button
+           
+
+           
+               
+               
+               
+               
+            
+
+           
+           
+           
+           "
+    
+    
+    
+    
+    
+    >
+    
+        
+
+        
+                    <!-- This SVG should be kept inline and not replaced with a link to the icon as otherwise it will render in the wrong color -->
+                    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjI0Ij48cGF0aCBkPSJNMCAwaDI0djI0SDB6IiBmaWxsPSJub25lIi8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTE1LjUgMTRoLS43OWwtLjI4LS4yN0E2LjQ3MSA2LjQ3MSAwIDAgMCAxNiA5LjUgNi41IDYuNSAwIDEgMCA5LjUgMTZjMS42MSAwIDMuMDktLjU5IDQuMjMtMS41N2wuMjcuMjh2Ljc5bDUgNC45OUwyMC40OSAxOWwtNC45OS01em0tNiAwQzcuMDEgMTQgNSAxMS45OSA1IDkuNVM3LjAxIDUgOS41IDUgMTQgNy4wMSAxNCA5LjUgMTEuOTkgMTQgOS41IDE0eiIvPjwvc3ZnPg=="
+                         class="usa-search__submit-icon"
+                         alt="Search" />
+                
+
+        
+    
+        
+            </button>
+        
+
+
+            </form>
+
+            
+        
+
+        <!-- Primary navigation menu items -->
+        <!-- This usa-nav__inner wrapper is required to correctly style the navigation items on Desktop -->
+        
+
+        
+            <div class="ncbi-nav__mobile-login-menu ncbi--hide-at-desktop"
+                 data-mobile-login-menu
+                 hidden>
+                <p class="ncbi-nav__mobile-login-menu-status">
+                    Logged in as:
+                    <strong class="ncbi-nav__mobile-login-menu-email"
+                            data-mobile-login-email-text></strong>
+                </p>
+                <ul class="usa-nav__primary usa-accordion">
+                    
+                        <li class="usa-nav__primary-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.ncbi.nlm.nih.gov/myncbi/" class="usa-link  "  >
+        
+
+        
+            Dashboard
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                        <li class="usa-nav__primary-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.ncbi.nlm.nih.gov/myncbi/collections/bibliography/" class="usa-link  "  >
+        
+
+        
+            Publications
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                        <li class="usa-nav__primary-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.ncbi.nlm.nih.gov/account/settings/" class="usa-link  "  >
+        
+
+        
+            Account settings
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                </ul>
+            </div>
+        
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+        <button
+            type="button"
+        
+    
+    class="usa-button
+           
+
+           
+               
+               
+               
+               
+            
+
+           
+           
+           ncbi-nav__mobile-login-button ncbi--hide-at-desktop
+           "
+    
+    
+    
+    data-testid="mobileLoginButton"
+    data-mobile-login-button
+    >
+    
+        
+
+        Log in
+
+        
+    
+        
+            </button>
+        
+
+
+    </nav>
+</header>
+
+    
+    
+        
+
+<section class="pmc-header pmc-header--basic" aria-label="PMC Header with search box">
+    <div class="pmc-nav-container">
+        <div class="pmc-header__bar">
+           <div class="pmc-header__logo">
+               <a href="/" title="Home" aria-label="PMC Home"></a>
+           </div>
+            <button
+                    type="button"
+                    class="usa-button usa-button--unstyled pmc-header__search__button"
+                    aria-label="Open search"
+                    data-ga-category="search"
+                    data-ga-action="PMC"
+                    data-ga-label="pmc_search_panel_mobile"
+            >
+                <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/search.svg" alt="PMC search open icon" aria-hidden="true" class="usa-icon usa-icon--size-4 pmc-icon__open" />
+                <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/close.svg" alt="PMC search close ison" aria-hidden="true" class="usa-icon usa-icon--size-4 pmc-icon__close" />
+            </button>
+        </div>
+        <div class="pmc-header__search">
+            
+
+
+<form class="usa-search usa-search--extra usa-search--article-right-column  pmc-header__search__form" id="pmc-search-form" autocomplete="off" role="search">
+<label class="usa-sr-only" for="pmc-search">Search PMC Full-Text Archive</label>
+<span class="autoComplete_wrapper flex-1">
+<input class="usa-input width-full maxw-none" required="required" placeholder="Search PMC Full-Text Archive" id="pmc-search"  type="search" name="term" data-autocomplete-url="https://pmc.ncbi.nlm.nih.gov/autocomp/search/autocomp/"/>
+</span>
+<button
+class="usa-button"
+type="submit"
+formaction="https://pmc.ncbi.nlm.nih.gov/search/"
+data-ga-category="search"
+data-ga-action="PMC"
+data-ga-label="PMC_search_button"
+>
+<span class="usa-search__submit-text">Search in PMC</span>
+<img
+src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons-bg/search--white.svg"
+class="usa-search__submit-icon"
+alt="Search"
+/>
+</button>
+</form>
+            <div class="display-flex flex-column tablet:flex-row tablet:flex-justify flex-justify-center flex-align-center width-full desktop:maxw-44">
+                <ul class="pmc-header__search__menu">
+                    <li>
+                        
+                            <a class="usa-link" href="/journals/" data-ga-action="featured_link" data-ga-label="journal list">
+                                Journal List
+                            </a>
+                        
+                    </li>
+                    <li>
+                        
+                            <a class="usa-link" href="/about/userguide/" data-ga-action="featured_link"
+                            data-ga-label="user guide">
+                                User Guide
+                            </a>
+                        
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+    
+
+
+        
+        
+
+       
+  <div class="usa-section padding-top-0 desktop:padding-top-6 pmc-article-section" data-article-db="pmc" data-article-id="5495792">
+
+    
+
+   
+
+
+
+<div class="grid-container pmc-actions-bar" aria-label="Actions bar" role="complementary">
+    <div class="grid-row">
+        <div class="grid-col-fill display-flex">
+             <div class="display-flex">
+                <ul class="usa-list usa-list--unstyled usa-list--horizontal">
+                    <li class="margin-right-2 mobile-lg:margin-right-4 display-flex mob">
+                        <button
+                                type="button"
+                                class="usa-button pmc-sidenav__container__open usa-button--unstyled width-auto display-flex"
+                                aria-label="Open resources"
+                                data-extra-class="is-visible-resources"
+                                data-ga-category="resources_accordion"
+                                data-ga-action="click"
+                                data-ga-label="mobile_icon"
+                        >
+                            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/more_vert.svg" alt="Open resources icon" class="usa-icon usa-icon--size-4 usa-icon--link" />
+                        </button>
+                    </li>
+                    
+                    <li class="margin-right-2 mobile-lg:margin-right-4 display-flex mob">
+                        <a
+                                href="https://doi.org/10.1038/s41598-017-04047-3"
+                                class="usa-link display-flex usa-tooltip"
+                                role="button"
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                title="View on publisher site"
+                                data-position="bottom"
+                                aria-label="View on publisher site"
+                                data-ga-category="actions"
+                                data-ga-action="click"
+                                data-ga-label="publisher_link_mobile"
+                        >
+                                <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/launch.svg" alt="View on publisher site icon" class="usa-icon usa-icon--size-4 usa-icon--link" />
+                        </a>
+                    </li>
+                    
+                    
+                        <li class="margin-right-2 mobile-lg:margin-right-4 display-flex">
+                             <a
+                                     href="pdf/41598_2017_Article_4047.pdf"
+                                     class="usa-link display-flex usa-tooltip"
+                                     role="button"
+                                     title="Download PDF"
+                                     data-position="bottom"
+                                     aria-label="Download PDF"
+                                     data-ga-category="actions"
+                                     data-ga-action="click"
+                                     data-ga-label="pdf_download_mobile"
+                             >
+
+                                 <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/file_download.svg" alt="Download PDF icon" aria-hidden="true" class="usa-icon usa-icon--size-4 usa-icon--link" />
+                            </a>
+                        </li>
+                    
+                    <li class="margin-right-2 mobile-lg:margin-right-4 display-flex">
+                        <button
+                            class="usa-button usa-button--unstyled  usa-tooltip collections-dialog-trigger collections-button display-flex collections-button-empty"
+                            title="Add to Collections"
+                            data-position="bottom"
+                            aria-label="Save article in MyNCBI collections."
+                            data-ga-category="actions"
+                            data-ga-action="click"
+                            data-ga-label="collections_button_mobile"
+                            data-collections-open-dialog-enabled="false"
+                            data-collections-open-dialog-url="https://account.ncbi.nlm.nih.gov/?back_url=https%3A%2F%2Fpmc.ncbi.nlm.nih.gov%2Farticles%2FPMC5495792%2F%23open-collections-dialog"
+                            data-in-collections="false"
+                        >
+                            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/action-bookmark-full.svg" alt="Collections icon" aria-hidden="true" class="usa-icon usa-icon--size-4 usa-icon--link usa-icon--bookmark-full" />
+                            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/action-bookmark-empty.svg" alt="Collections icon" aria-hidden="true" class="usa-icon usa-icon--size-4 usa-icon--link usa-icon--bookmark-empty" />
+                        </button>
+                    </li>
+                    
+                    <li class="margin-right-2 mobile-lg:margin-right-4 display-flex">
+                        <button role="button" class="usa-button usa-button--unstyled usa-tooltip citation-dialog-trigger display-flex"
+                            aria-label="Open dialog with citation text in different styles"
+                            title="Cite"
+                            data-position="bottom"
+                            data-ga-category="actions"
+                            data-ga-action="open"
+                            data-ga-label="cite_mobile"
+                            data-all-citations-url="/resources/citations/5495792/"
+                            data-citation-style="nlm"
+                            data-download-format-link="/resources/citations/5495792/export/"
+                        >
+                            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/format_quote.svg" alt="Cite icon" aria-hidden="true" class="usa-icon usa-icon--size-4 usa-icon--link" />
+                        </button>
+                    </li>
+                    
+                    <li class="pmc-permalink display-flex" >
+                         <button
+                                 type="button"
+                                 title="Permalink"
+                                 data-position="bottom"
+                                 class="usa-button usa-button--unstyled display-flex usa-tooltip"
+                                 aria-label="Show article permalink"
+                                 aria-expanded="false"
+                                 aria-haspopup="true"
+                                 data-ga-category="actions"
+                                 data-ga-action="open"
+                                 data-ga-label="permalink_mobile"
+                         >
+                            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/share.svg" alt="Show article permalink icon" aria-hidden="true" class="usa-icon usa-icon--size-4 usa-icon--link" />
+                        </button>
+                        
+
+<div class="pmc-permalink__dropdown" hidden>
+    <div class="pmc-permalink__dropdown__container">
+          <h2 class="usa-modal__heading margin-top-0 margin-bottom-2 text-uppercase font-sans-xs">PERMALINK</h2>
+          <div class="pmc-permalink__dropdown__content">
+              <input type="text" class="usa-input" value="https://pmc.ncbi.nlm.nih.gov/articles/PMC5495792/" aria-label="Article permalink">
+              <button class="usa-button display-inline-flex pmc-permalink__dropdown__copy__btn margin-right-0" title="Copy article permalink" data-ga-category="save_share" data-ga-action="link" data-ga-label="copy_link">
+                  <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/content_copy.svg" alt="Copy icon" aria-hidden="true" class="usa-icon usa-icon--white" />
+                  <span class="margin-left-1">Copy</span>
+              </button>
+          </div>
+    </div>
+</div>
+                    </li>
+                </ul>
+            </div>
+            <button
+                    type="button"
+                    class="usa-button pmc-sidenav__container__open usa-button--unstyled width-auto display-flex"
+                    aria-label="Open article navigation"
+                    data-extra-class="is-visible-in-page"
+                    data-ga-category="actions"
+                    data-ga-action="open"
+                    data-ga-label="article_nav_mobile"
+            >
+                <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/list.svg" alt="Open article navigation icon" aria-hidden="true" class="usa-icon usa-icon--size-4 usa-icon--link" />
+            </button>
+        </div>
+    </div>
+</div>
+    <div class="grid-container desktop:padding-left-6">
+      <div id="article-container" class="grid-row grid-gap">
+        <div class="grid-col-12 desktop:grid-col-8 order-2 pmc-layout__content">
+            <div class="grid-container padding-left-0 padding-right-0">
+                <div class="grid-row desktop:margin-left-neg-6">
+                    <div class="grid-col-12">
+                        <div class="pmc-layout__disclaimer" role="complementary" aria-label="Disclaimer note">
+    As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with,
+    the contents by NLM or the National Institutes of Health.<br/>
+    Learn more:
+    <a class="usa-link" data-ga-category="Link click" data-ga-action="Disclaimer" data-ga-label="New disclaimer box" href="/about/disclaimer/">PMC Disclaimer</a>
+    |
+    <a class="usa-link" data-ga-category="Link click" data-ga-action="PMC Copyright Notice" data-ga-label="New disclaimer box" href="/about/copyright/">
+        PMC Copyright Notice
+    </a>
+</div>
+                    </div>
+                </div>
+                <div class="grid-row pmc-wm desktop:margin-left-neg-6">
+                    <!-- Main content -->
+                    <main
+                      id="main-content"
+                      class="usa-layout-docs__main usa-layout-docs grid-col-12 pmc-layout pmc-prose padding-0"
+                    >
+
+                      
+                        <section class="pmc-journal-banner text-center line-height-none" aria-label="Journal banner"><img src="https://cdn.ncbi.nlm.nih.gov/pmc/banners/logo-scirep.jpg" alt="Scientific Reports logo" usemap="#pmc-banner-imagemap" width="500" height="75"><map name="pmc-banner-imagemap"><area alt="Link to Scientific Reports" title="Link to Scientific Reports" shape="default" href="https://doi.org/10.1038/s41598-017-04047-3" target="_blank" rel="noopener noreferrer"></map></section><article lang="en"><section aria-label="Article citation and metadata"><section class="pmc-layout__citation font-secondary font-xs"><div>
+<div class="display-inline-block"><button type="button" class="cursor-pointer text-no-underline bg-transparent border-0 padding-0 text-left margin-0 text-normal text-primary" aria-controls="journal_context_menu">Sci Rep</button></div>. 2017 Jul 3;7:4519. doi: <a href="https://doi.org/10.1038/s41598-017-04047-3" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">10.1038/s41598-017-04047-3</a>
+</div>
+<nav id="journal_context_menu" hidden="hidden"><ul class="menu-list font-family-ui" role="menu">
+<li role="presentation"><a href='https://pmc.ncbi.nlm.nih.gov/search/?term="Sci%20Rep"[jour]' class="usa-link" role="menuitem">Search in PMC</a></li>
+<li role="presentation"><a href='https://pubmed.ncbi.nlm.nih.gov/?term="Sci%20Rep"[jour]' lang="en" class="usa-link" role="menuitem">Search in PubMed</a></li>
+<li role="presentation"><a href='https://www.ncbi.nlm.nih.gov/nlmcatalog?term="Sci%20Rep"[Title%20Abbreviation]' class="usa-link" role="menuitem">View in NLM Catalog</a></li>
+<li role="presentation"><a href='?term="Sci%20Rep"[jour]' class="usa-link" role="menuitem" data-add-to-search="true">Add to search</a></li>
+</ul></nav></section><section class="front-matter"><div class="ameta p font-secondary font-xs">
+<hgroup><h1>Third-person self-talk facilitates emotion regulation without engaging cognitive control: Converging evidence from ERP and fMRI</h1></hgroup><div class="cg p">
+<a href='https://pubmed.ncbi.nlm.nih.gov/?term="Moser%20JS"[Author]' class="usa-link" aria-describedby="id1"><span class="name western">Jason S Moser</span></a><div hidden="hidden" id="id1">
+<h3><span class="name western">Jason S Moser</span></h3>
+<div class="p">
+<sup>1</sup>Department of Psychology, Michigan State University, East Lansing, Michigan USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Moser%20JS"[Author]' class="usa-link"><span class="name western">Jason S Moser</span></a>
+</div>
+</div>
+<sup>1,</sup><sup>✉</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Dougherty%20A"[Author]' class="usa-link" aria-describedby="id2"><span class="name western">Adrienne Dougherty</span></a><div hidden="hidden" id="id2">
+<h3><span class="name western">Adrienne Dougherty</span></h3>
+<div class="p">
+<sup>2</sup>Department of Psychology, University of Michigan, Ann Arbor, Michigan USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Dougherty%20A"[Author]' class="usa-link"><span class="name western">Adrienne Dougherty</span></a>
+</div>
+</div>
+<sup>2</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Mattson%20WI"[Author]' class="usa-link" aria-describedby="id3"><span class="name western">Whitney I Mattson</span></a><div hidden="hidden" id="id3">
+<h3><span class="name western">Whitney I Mattson</span></h3>
+<div class="p">
+<sup>2</sup>Department of Psychology, University of Michigan, Ann Arbor, Michigan USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Mattson%20WI"[Author]' class="usa-link"><span class="name western">Whitney I Mattson</span></a>
+</div>
+</div>
+<sup>2</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Katz%20B"[Author]' class="usa-link" aria-describedby="id4"><span class="name western">Benjamin Katz</span></a><div hidden="hidden" id="id4">
+<h3><span class="name western">Benjamin Katz</span></h3>
+<div class="p">
+<sup>2</sup>Department of Psychology, University of Michigan, Ann Arbor, Michigan USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Katz%20B"[Author]' class="usa-link"><span class="name western">Benjamin Katz</span></a>
+</div>
+</div>
+<sup>2</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Moran%20TP"[Author]' class="usa-link" aria-describedby="id5"><span class="name western">Tim P Moran</span></a><div hidden="hidden" id="id5">
+<h3><span class="name western">Tim P Moran</span></h3>
+<div class="p">
+<sup>1</sup>Department of Psychology, Michigan State University, East Lansing, Michigan USA </div>
+<div class="p">
+<sup>5</sup>School of Medicine, Emory University, Atlanta, Georgia </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Moran%20TP"[Author]' class="usa-link"><span class="name western">Tim P Moran</span></a>
+</div>
+</div>
+<sup>1,</sup><sup>5</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Guevarra%20D"[Author]' class="usa-link" aria-describedby="id6"><span class="name western">Darwin Guevarra</span></a><div hidden="hidden" id="id6">
+<h3><span class="name western">Darwin Guevarra</span></h3>
+<div class="p">
+<sup>2</sup>Department of Psychology, University of Michigan, Ann Arbor, Michigan USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Guevarra%20D"[Author]' class="usa-link"><span class="name western">Darwin Guevarra</span></a>
+</div>
+</div>
+<sup>2</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Shablack%20H"[Author]' class="usa-link" aria-describedby="id7"><span class="name western">Holly Shablack</span></a><div hidden="hidden" id="id7">
+<h3><span class="name western">Holly Shablack</span></h3>
+<div class="p">
+<sup>2</sup>Department of Psychology, University of Michigan, Ann Arbor, Michigan USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Shablack%20H"[Author]' class="usa-link"><span class="name western">Holly Shablack</span></a>
+</div>
+</div>
+<sup>2</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Ayduk%20O"[Author]' class="usa-link" aria-describedby="id8"><span class="name western">Ozlem Ayduk</span></a><div hidden="hidden" id="id8">
+<h3><span class="name western">Ozlem Ayduk</span></h3>
+<div class="p">
+<sup>3</sup>Department of Psychology, University of California, Berkeley, California, USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Ayduk%20O"[Author]' class="usa-link"><span class="name western">Ozlem Ayduk</span></a>
+</div>
+</div>
+<sup>3</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Jonides%20J"[Author]' class="usa-link" aria-describedby="id9"><span class="name western">John Jonides</span></a><div hidden="hidden" id="id9">
+<h3><span class="name western">John Jonides</span></h3>
+<div class="p">
+<sup>2</sup>Department of Psychology, University of Michigan, Ann Arbor, Michigan USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Jonides%20J"[Author]' class="usa-link"><span class="name western">John Jonides</span></a>
+</div>
+</div>
+<sup>2</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Berman%20MG"[Author]' class="usa-link" aria-describedby="id10"><span class="name western">Marc G Berman</span></a><div hidden="hidden" id="id10">
+<h3><span class="name western">Marc G Berman</span></h3>
+<div class="p">
+<sup>4</sup>Department of Psychology, University of Chicago, Chicago, Illinois USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Berman%20MG"[Author]' class="usa-link"><span class="name western">Marc G Berman</span></a>
+</div>
+</div>
+<sup>4</sup>, <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Kross%20E"[Author]' class="usa-link" aria-describedby="id11"><span class="name western">Ethan Kross</span></a><div hidden="hidden" id="id11">
+<h3><span class="name western">Ethan Kross</span></h3>
+<div class="p">
+<sup>2</sup>Department of Psychology, University of Michigan, Ann Arbor, Michigan USA </div>
+<div class="p">Find articles by <a href='https://pubmed.ncbi.nlm.nih.gov/?term="Kross%20E"[Author]' class="usa-link"><span class="name western">Ethan Kross</span></a>
+</div>
+</div>
+<sup>2,</sup><sup>✉</sup>
+</div>
+<ul class="d-buttons inline-list">
+<li><button class="d-button" aria-controls="aip_a" aria-expanded="false">Author information</button></li>
+<li><button class="d-button" aria-controls="anp_a" aria-expanded="false">Article notes</button></li>
+<li><button class="d-button" aria-controls="clp_a" aria-expanded="false">Copyright and License information</button></li>
+</ul>
+<div class="d-panels font-secondary-light">
+<div id="aip_a" class="d-panel p" style="display: none">
+<div class="p" id="Aff1">
+<sup>1</sup>Department of Psychology, Michigan State University, East Lansing, Michigan USA </div>
+<div id="Aff2">
+<sup>2</sup>Department of Psychology, University of Michigan, Ann Arbor, Michigan USA </div>
+<div id="Aff3">
+<sup>3</sup>Department of Psychology, University of California, Berkeley, California, USA </div>
+<div id="Aff4">
+<sup>4</sup>Department of Psychology, University of Chicago, Chicago, Illinois USA </div>
+<div id="Aff5">
+<sup>5</sup>School of Medicine, Emory University, Atlanta, Georgia </div>
+<div class="author-notes p"><div class="fn" id="_fncrsp93pmc__">
+<sup>✉</sup><p class="display-inline">Corresponding author.</p>
+</div></div>
+</div>
+<div id="anp_a" class="d-panel p" style="display: none"><div class="notes p"><section id="historyarticle-meta1" class="history"><p>Received 2016 Sep 7; Accepted 2017 May 24; Collection date 2017.</p></section></div></div>
+<div id="clp_a" class="d-panel p" style="display: none">
+<div>© The Author(s) 2017</div>
+<p>
+<strong>Open Access</strong> This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons license, and indicate if changes were made. The images or other third party material in this article are included in the article’s Creative Commons license, unless indicated otherwise in a credit line to the material. If material is not included in the article’s Creative Commons license and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this license, visit <a href="http://creativecommons.org/licenses/by/4.0/" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">http://creativecommons.org/licenses/by/4.0/</a>.</p>
+<div class="p"><a href="/about/copyright/" class="usa-link">PMC Copyright notice</a></div>
+</div>
+</div>
+<div>PMCID: PMC5495792  PMID: <a href="https://pubmed.ncbi.nlm.nih.gov/28674404/" class="usa-link">28674404</a>
+</div>
+</div></section></section><section aria-label="Article content"><section class="body main-article-body"><section class="abstract" id="Abs1"><h2>Abstract</h2>
+<p id="Par1">Does silently talking to yourself in the third-person constitute a relatively effortless form of self control? We hypothesized that it does under the premise that third-person self-talk leads people to think about the self similar to how they think about others, which provides them with the psychological distance needed to facilitate self control. We tested this prediction by asking participants to reflect on feelings elicited by viewing aversive images (Study 1) and recalling negative autobiographical memories (Study 2) using either “I” or their name while measuring neural activity via ERPs (Study 1) and fMRI (Study 2). Study 1 demonstrated that third-person self-talk reduced an ERP marker of self-referential emotional reactivity (i.e., late positive potential) within the first second of viewing aversive images without enhancing an ERP marker of cognitive control (i.e., stimulus preceding negativity). Conceptually replicating these results, Study 2 demonstrated that third-person self-talk was linked with reduced levels of activation in an a priori defined fMRI marker of self-referential processing (i.e., medial prefrontal cortex) when participants reflected on negative memories without eliciting increased levels of activity in a priori defined fMRI markers of cognitive control. Together, these results suggest that third-person self-talk may constitute a relatively effortless form of self-control.</p></section><section id="Sec1"><h2 class="pmc_sec_title">Introduction</h2>
+<p id="Par2">We all have an internal monologue that we engage in from time to time; an inner voice that guides our moment-to-moment reflections<sup><a href="#CR1" class="usa-link" aria-describedby="CR1">1</a>–<a href="#CR3" class="usa-link" aria-describedby="CR3">3</a></sup>. Although people frequently engage in such “self-talk”, recent findings indicate that the language they use to refer to the self when they engage in this process influences self-control. Specifically, using one’s own name to refer to the self during introspection, rather than the first-person pronoun “I”, increases peoples’ ability to control their thoughts, feelings, and behavior under stress<sup><a href="#CR4" class="usa-link" aria-describedby="CR4">4</a>–<a href="#CR6" class="usa-link" aria-describedby="CR6">6</a></sup>.</p>
+<p id="Par3">But just how easy is it for people to control their emotions via third-person self-talk ? Emotion regulation, as with many forms of self-control, is typically thought of as an effortful process e.g.<sup><a href="#CR7" class="usa-link" aria-describedby="CR7">7</a></sup>, that depends heavily on cognitive control mechanisms to muffle emotional responses<sup><a href="#CR8" class="usa-link" aria-describedby="CR8">8</a>–<a href="#CR10" class="usa-link" aria-describedby="CR10">10</a></sup>. Might third-person self-talk constitute a relatively effortless form of emotional control that does not require additional cognitive control processes above and beyond those recruited when people typically reflect on negative experiences? Here we suggest that it does.</p>
+<p id="Par4">This prediction is motivated by the observation that people almost exclusively use names to refer to other people. Thus, there is a tight coupling between using proper names, and thinking about others—a coupling that is so tight that we expected using one’s own name to refer to the self would virtually automatically lead people to think about the self similarly to how they think about someone else. If this prediction is correct, and if it is indeed easier for people to reason calmly about other people’s emotions than their own<sup><a href="#CR4" class="usa-link" aria-describedby="CR4">4</a>, <a href="#CR5" class="usa-link" aria-describedby="CR5">5</a></sup>, then third-person self-talk should be linked with reductions in emotional reactivity but not enhancements in cognitive control.</p>
+<p id="Par5">We tested these predictions by asking participants to reflect on their feelings associated with viewing aversive images from the International Affective Picture System (Study 1) and recalling painful autobiographical memories (Study 2) using either <strong>“I”</strong> or <strong>their name</strong> while measuring neural activity via event-related brain potentials (ERPs; Study 1) and functional magnetic resonance imaging (fMRI; Study 2).</p>
+<p id="Par6">In Study 1, we measured ERPs while participants viewed standardized images depicting arousing negative and neutral scenes under two conditions. In the First-Person condition, participants asked themselves <em>“…what am</em> [<em>I</em>] <em>feeling right now? ”</em>; in the Third-Person condition, they asked themselves, “<em>…what is</em> [<em>Participants</em>’ <em>Name</em>] <em>feeling right now</em>” (Fig. <a href="#Fig1" class="usa-link">1</a>, top panel). ERPs have been extensively used to identify the neural mechanisms supporting people’s ability to control emotional responses. This work consistently reveals two waveforms that are involved in emotion regulation: the late positive potential (LPP) and the stimulus preceding negativity (SPN). The LPP is a robust marker of emotional reactivity<sup><a href="#CR9" class="usa-link" aria-describedby="CR9">9</a>, <a href="#CR11" class="usa-link" aria-describedby="CR11">11</a></sup>. It is enlarged to negative and positive stimuli relative to neutral stimuli, especially when such stimuli are self-relevant<sup><a href="#CR12" class="usa-link" aria-describedby="CR12">12</a></sup>, and is closely coupled with subjective ratings and physiological markers of arousal<sup><a href="#CR11" class="usa-link" aria-describedby="CR11">11</a>, <a href="#CR13" class="usa-link" aria-describedby="CR13">13</a></sup>. The frontally distributed SPN, on the other hand, indexes cognitive control processes<sup><a href="#CR9" class="usa-link" aria-describedby="CR9">9</a>, <a href="#CR14" class="usa-link" aria-describedby="CR14">14</a></sup>. Importantly, an extensive body of research indicates that the LPP is attenuated and the SPN amplified during the implementation of effortful emotion regulation strategies such as cognitive reappraisal<sup><a href="#CR15" class="usa-link" aria-describedby="CR15">15</a>–<a href="#CR17" class="usa-link" aria-describedby="CR17">17</a></sup>. Thus, our analyses focused on these waveforms. Based on our theoretical framework, we predicted that third-person self-talk would lead to reductions of the LPP elicited by aversive images but no change in the SPN.
+</p>
+<figure class="fig xbox font-sm" id="Fig1"><h3 class="obj_head">Figure 1.</h3>
+<p class="img-box line-height-none margin-x-neg-2 tablet:margin-x-0 text-center"><img class="graphic" src="https://cdn.ncbi.nlm.nih.gov/pmc/blobs/4e7b/5495792/3662d7e50f9e/41598_2017_4047_Fig1_HTML.jpg" loading="lazy" id="d29e416" height="353" width="675" alt="Figure 1"></p>
+<div class="p text-right font-secondary"><a href="figure/Fig1/" class="usa-link" target="_blank" rel="noopener noreferrer">Open in a new tab</a></div>
+<figcaption><p>Visual depiction of trial structures in Study 1 (top) &amp; Study 2 (bottom). In Study 1, participants first viewed a linguistic cue (“First-Person” or “Third-Person”) for 2 s that directed them to either use I or their own name when thinking about the following picture. Next, a blank screen was presented for 500 ms followed by a white fixation cross lasting 500 ms. Following the fixation cross, an IAPS image was displayed for 6 s. A blank screen then appeared for 2.5 s. In Study 2, each trial began with a 2 s fixation cross. Subsequently, participants saw a linguistic cue for 2 s (“I” or their own name). Next, they saw another fixation cross for 4 s. A memory cue-phrase then appeared on the center of the screen for 15 s, signaling participants to reflect on an autobiographical experience they had generated previously. The same linguistic cue that participants saw at the beginning of the trial appeared beneath the memory cue to ensure that participants continued to reflect on the memory using the appropriate part of speech. Finally, participants had 3 s to rate how they felt using a five-point scale (1 = not at all negative; 5 = very negative).</p></figcaption></figure><p id="Par7">In Study 2, we extended our ERP study in two ways. First, while the standardized images used in Study 1 are useful for studying emotion under tightly controlled conditions, many of the situations that require self-control in daily life are elicited by thinking about idiosyncratic negative experiences. Thus, in Study 2 we used an autobiographical memory paradigm to elicit negative emotion to examine how third-person self-talk operates in a more ecologically valid context (see Fig. <a href="#Fig1" class="usa-link">1</a>, bottom panel).</p>
+<p id="Par8">Second, whereas the ERPs used in Study 1 provide information about the temporal dimensions of self-referential emotional processing and cognitive control, they do not provide detailed information about the specific brain structures involved. Therefore, in Study 2 we used fMRI to test whether third-person self-talk would reduce activations in a priori identified brain regions that are commonly implicated in thinking about the self versus others (e.g., medial prefrontal cortex;<sup><a href="#CR18" class="usa-link" aria-describedby="CR18">18</a></sup>) and emotional reactivity (i.e., the amygdala;<sup><a href="#CR8" class="usa-link" aria-describedby="CR8">8</a></sup>) <em>without</em> increasing activation in fronto-parietal regions that support cognitive control<sup><a href="#CR8" class="usa-link" aria-describedby="CR8">8</a></sup>.</p>
+<p id="Par9">Using both of these neuroimaging methods allowed us to pursue converging evidence for our hypothesis across the temporal and spatial dimensions of self-referential emotional processing and cognitive control. Employing two different emotion elicitation paradigms further allowed us to evaluate whether our hypothesized effects of third-person self-talk would generalize across relatively more standardized versus ideographic stimuli. Together, these two experiments provide a multi-method test of our hypothesis regarding third-person self-talk as a relatively effortless form of self-control.</p></section><section id="Sec2"><h2 class="pmc_sec_title">Results</h2>
+<section id="Sec3"><h3 class="pmc_sec_title">Study 1</h3>
+<p id="Par10">As a preliminary manipulation check, we examined participant compliance with the use of the first- vs. third-person pronouns when focusing on their feelings using a 1 (not at all) to 7 (all the time) likert scale (see Method &amp; Materials section below for more detail). Overall, compliance with the instructions was superb. The mean ratings for the first- (<em>M</em> = 6.66; <em>SD</em> = .86) and third- (<em>M</em> = 6.28; <em>SD</em> = 1.03) person conditions were both well above the scale midpoint (<em>ts</em>(28) &gt; 11.88, <em>ps</em> &lt; 0.001, <em>ds</em> &gt; 3.13) and not significantly different from each other (<em>t</em>(28) = 1.78, <em>p</em> &gt; 0.05, <em>d</em> = 0.40), demonstrating that participants could easily implement both sets of instructions.</p>
+<p id="Par11">We first examined the effect of third-person self-talk on the LPP. Because the main aim of the current investigation was to determine the emotion regulatory effects of third-person self-talk, the focus of our LPP analysis was on the interaction between Valence (negative vs. neutral images) and Self-Talk Strategy (first-person vs. third-person self-talk). Specifically, we tested whether third-person self-talk reduced the emotional modulation (i.e., negative vs. neutral) of the LPP by performing separate repeated measures analyses of variance on the early (400 ms – 1 s) and late (1–6 s) time windows (for similar approach, see<sup><a href="#CR9" class="usa-link" aria-describedby="CR9">9</a>, <a href="#CR19" class="usa-link" aria-describedby="CR19">19</a></sup>). Figure <a href="#Fig2" class="usa-link">2A</a> displays the stimulus-locked ERP waveforms and Fig. <a href="#Fig2" class="usa-link">2B</a> displays the mean amplitudes for the emotional modulation (negative minus neutral difference depicted for both A and B) of the early and late LPP in the first- and third-person self-talk conditions.
+</p>
+<figure class="fig xbox font-sm" id="Fig2"><h4 class="obj_head">Figure 2.</h4>
+<p class="img-box line-height-none margin-x-neg-2 tablet:margin-x-0 text-center"><img class="graphic" src="https://cdn.ncbi.nlm.nih.gov/pmc/blobs/4e7b/5495792/29d5b71f63c6/41598_2017_4047_Fig2_HTML.jpg" loading="lazy" id="d29e523" height="533" width="675" alt="Figure 2"></p>
+<div class="p text-right font-secondary"><a href="figure/Fig2/" class="usa-link" target="_blank" rel="noopener noreferrer">Open in a new tab</a></div>
+<figcaption><p>Study 1 (ERP) Results. <strong>(A)</strong> Picture-locked ERP waveforms at representative left posterior superior site depicting the larger late, but not early, negative-neutral LPP difference wave in the First-Person compared to Third-Person condition in Study 1. Picture onset occurs at 0 ms. Blue shaded area represents time window for analysis of early LPP; yellow shaded area represents time window for analysis of the late LPP. <strong>(B)</strong> Bar graph depicting the larger negative-neutral difference score in the First-Person compared to the Third-Person for the late, but not early, LPP. Error bars reflect+/− 1 <em>SEM</em>. <strong>(C)</strong> Cue-locked ERP waveforms at frontocentral recording sites depicting the null main effect of type of self-talk, averaged across valence, on the SPN in Study 1. Cue onset occurs at 0 ms and picture onset occurs at 3000 ms. Blue shaded area represents time window for analysis of early SPN; yellow shaded area represents time window for analysis of the late SPN. <strong>(D)</strong> Bar graph depicting the null main effect of type of self-talk, averaged across valence, on the early and late SPN. Error bars reflect+/− 1 <em>SEM</em>.</p></figcaption></figure><p id="Par12">Analysis of the early time window revealed no interaction between Valence and Self-Talk Strategy (<em>F</em>
+<sub><em>1,28</em></sub> &lt; 1, <em>p</em> = .36, <em>η</em>
+<sup><em>2</em></sup>
+<sub><em>p</em></sub> = 0.03). Figure <a href="#Fig2" class="usa-link">2B</a> (left side) shows that the negative minus neutral difference scores were identical for first- and third-person trials. However, a significant interaction between Valence and Self-Talk Strategy emerged during the late time window (<em>F</em>
+<sub>1,28</sub> = 5.18, <em>p</em> = .03, <em>η</em>
+<sup><em>2</em></sup>
+<em>s</em>
+<sub><em>p</em></sub> = 0.16). As predicted, on first-person trials, the LPP was significantly greater for negative than neutral images (<em>t</em>(28) = 3.07, <em>p</em> &lt; 0.01, <em>d</em> = 0.89; Fig. <a href="#Fig2" class="usa-link">2B</a> right side, light grey bar shows significant difference between negative and neutral images). However, on third-person trials the LPP for negative and neutral images were indistinguishable (<em>t</em>(28) = 1.50, <em>p</em> = 0.15, <em>d</em> = 0.23; Fig. <a href="#Fig2" class="usa-link">2B</a> right side, dark grey bar shows non-significant difference between negative and neutral images). Direct comparison of the negative minus neutral difference scores for the first-person versus third-person conditions demonstrated the predicted larger difference score for the first- compared to third- person condition (<em>t</em>(28) = 2.18, <em>p</em> = 0.03, <em>d</em> = 0.82; Fig. <a href="#Fig2" class="usa-link">2A and B</a>; see also Fig. <a href="#MOESM1" class="usa-link">S2</a> for topographical distribution of this difference effect).</p>
+<p id="Par13">Next, we examined whether third-person self-talk modulated the SPN. Because we aimed to test whether third-person self-talk cues engaged greater cognitive control than first-person self-talk cues, the focus of our SPN analysis was on the main effect of Self-Talk Strategy (first-person vs. third-person self-talk) – the interaction between Self-Talk Strategy and Valence was irrelevant for the SPN given that participants were unaware of the valence of the upcoming picture at the time of the presentation of the Self-Talk Strategy cue. Specifically, we tested whether third-person self-talk enhanced the amplitude of the SPN by performing separate repeated measures analyses of variance on the early (300–2300 ms) and late (2300 ms – 3 s) time windows. Figure <a href="#Fig2" class="usa-link">2C</a> displays the stimulus-locked ERP waveforms and Fig. <a href="#Fig2" class="usa-link">2D</a> displays the mean amplitudes for the averaged main effect of Self-Talk Strategy, averaged across valence, on the early and late SPN. Consistent with the hypothesis that third-person self-talk does not recruit cognitive control processes, the main effect of Self-Talk Strategy on the early (<em>F</em> = .10, <em>p</em> = 0.76) and late (<em>F</em> = 0.31, <em>p</em> = 0.58) SPN was non-significant (Fig. <a href="#Fig2" class="usa-link">2C and D</a>; see also Fig. <a href="#MOESM1" class="usa-link">S3</a> for topographical distribution of this null effect). Moreover, as expected, there were no interactions between Self-Talk Strategy and Valence for either SPN time window (<em>F</em>s &lt; 1, <em>p</em>s &gt; 0.54).</p></section><section id="Sec4"><h3 class="pmc_sec_title">Study 2</h3>
+<p id="Par14">We contrasted the hemodynamic response on trials in which participants recalled negative autobiographical experiences and then analyzed their feelings surrounding the events using <strong><em>I</em></strong> or <strong><em>their own name</em></strong>. Participants rated how they felt after each trial using a five-point scale, with lower numbers reflecting less distress.</p>
+<p id="Par15">As predicted, participants reported experiencing more negative affect on I trials (<em>M</em> = 3.82, <em>SD</em> = 0.55) than Name trials (<em>M</em> = 3.24, <em>SD</em> = 0.60; <em>t</em>(49) = 7.03, <em>p</em> &lt; 0.001, <em>d</em> = 1.01). Next we examined whether third-person self-talk (compared to first-person self-talk) led to relatively less activation in brain regions that support thinking about the self versus others and emotional reactivity. Because our hypotheses were theory driven, we performed region of interest (ROI) analyses on (a) a set of cortical midline regions commonly implicated in thinking about the self versus others (e.g., medial prefrontal cortex/anterior cingulate cortex) and (b) brain regions involved in emotional reactivity (i.e., the amygdala). Both sets of ROIs were identified from recent meta-analyses<sup><a href="#CR18" class="usa-link" aria-describedby="CR18">18</a>, <a href="#CR20" class="usa-link" aria-describedby="CR20">20</a></sup>.</p>
+<p id="Par16">As Fig. <a href="#Fig3" class="usa-link">3A</a> illustrates, third-person self-talk led to significantly less activity in the left medial prefrontal cortex/anterior cingulate cortex ROI, <em>t</em> = 4.54, <em>k</em> = 143, <em>p</em> &lt; .0001, Sphere at MNI <em>xyz</em> = −6, 46, 20. Note that this peak activity was still significant after correcting for multiple comparisons (5 ROIs examined; p. 005/5 comparisons = p. 001). No other ROIs had activation above signal and cluster thresholds. Whole-brain analyses were consistent with these results (see Fig. <a href="#Fig3" class="usa-link">3B</a>), <em>t</em> = 4.54, <em>k</em> = 258, <em>p</em> &lt; .001, Peak at MNI <em>xyz</em> = 2, 53, 22. [Inspection of the distribution of beta values extracted from the I &gt; Name contrast revealed two extreme values – i.e., participants with beta values that were two standard deviations above the sample mean. Excluding these participants from our analyses did not substantively alter any of the results we report here.]
+</p>
+<figure class="fig xbox font-sm" id="Fig3"><h4 class="obj_head">Figure 3.</h4>
+<p class="img-box line-height-none margin-x-neg-2 tablet:margin-x-0 text-center"><img class="graphic" src="https://cdn.ncbi.nlm.nih.gov/pmc/blobs/4e7b/5495792/8969263c33be/41598_2017_4047_Fig3_HTML.jpg" loading="lazy" id="d29e742" height="424" width="675" alt="Figure 3"></p>
+<div class="p text-right font-secondary"><a href="figure/Fig3/" class="usa-link" target="_blank" rel="noopener noreferrer">Open in a new tab</a></div>
+<figcaption><p>Study 2 (fMRI) Results. Brain imaging results from Study 2 showing that reflecting on negative experiences using “I” instead of one’s own name (I &gt; Name Contrast) is associated with significantly more activity in a region of the medial prefrontal cortex identified as playing a role in self-referential processing in (<strong>A</strong>) a region of interest (ROI colored in blue; activations observed within a priori ROI are overlaid in yellow-orange coloring) and (<strong>B</strong>) whole-brain analysis. Adjacent to each brain map is a bar graph illustrating the extracted mean activation between “I” and “Name” trials from each analysis. * represents <em>p</em> &lt; .05.</p></figcaption></figure><p id="Par17">Finally, we examined whether third-person self-talk led to increases in brain regions that support the cognitive control of emotion. Conceptually replicating the Study 1 results, an ROI analysis performed on the fronto-parietal network commonly implicated in the cognitive control of emotion<sup><a href="#CR20" class="usa-link" aria-describedby="CR20">20</a></sup> did not reveal any significant differences between the two conditions. This was true even when the statistical threshold was dropped to p &lt; .01, unconditional, suggesting that failure to observe activations in these ROIs was not a function of statistical power.</p></section></section><section id="Sec5"><h2 class="pmc_sec_title">Discussion</h2>
+<p id="Par18">Across two neuroscience modalities and two different emotion elicitation procedures, the current findings suggest that third-person self-talk facilitates emotional control without recruiting cognitive control. These results stand in contrast to much of the extant work on self-control, and emotional regulation in particular, which typically conceive of these processes as effortful<sup><a href="#CR8" class="usa-link" aria-describedby="CR8">8</a>–<a href="#CR9" class="usa-link" aria-describedby="CR9">10</a>, <a href="#CR15" class="usa-link" aria-describedby="CR15">15</a></sup>. This is not to say that other forms of automatic self-control do not exist<sup><a href="#CR21" class="usa-link" aria-describedby="CR21">21</a>, <a href="#CR22" class="usa-link" aria-describedby="CR22">22</a></sup>. Rather, our findings add to this work by demonstrating how a linguistic shift that promotes psychological distance from the self modulates emotional responses.</p>
+<p id="Par19">If fronto-parietal mediated cognitive control processes do not enable third-person self-talk, then what does? The theoretical framework and behavioral results<sup><a href="#CR4" class="usa-link" aria-describedby="CR4">4</a></sup> driving this work contend that cueing people to reflect on their emotional experiences using their name quickly changes the way that emotions are represented, allowing people to reflect on the self similarly to how they reflect on others. This framework dovetails with the language-as-context view of emotion, which suggests that language rapidly shapes people’s emotional experiences<sup><a href="#CR23" class="usa-link" aria-describedby="CR23">23</a></sup>. Critically, these ideas were borne out in the current data, which indicated that third-person self-talk led to reduced activity in two markers of self-referential emotional processing—the LPP and the medial prefrontal cortex<sup><a href="#CR9" class="usa-link" aria-describedby="CR9">9</a>, <a href="#CR11" class="usa-link" aria-describedby="CR11">11</a>, <a href="#CR12" class="usa-link" aria-describedby="CR12">12</a></sup>. Most important to the aims of this study, however, these patterns of neural activity were observed in the absence of increases in cognitive control activations.</p>
+<p id="Par20">Although the current findings suggest that third-person self-talk does not recruit <em>cognitive control</em> relative to first-person self-talk, our findings should not be misconstrued as suggesting that cognitive processing is not involved in third-person self-talk. Indeed, diverse theories of emotion agree that basic cognitive operations are involved in generating emotional experience e.g.<sup><a href="#CR24" class="usa-link" aria-describedby="CR24">24</a>, <a href="#CR25" class="usa-link" aria-describedby="CR25">25</a></sup>. What our findings do suggest is that third-person self-talk does not recruit the network of brain regions typically implicated in the cognitive control of emotion<sup><a href="#CR20" class="usa-link" aria-describedby="CR20">20</a></sup>.</p>
+<p id="Par21">It is important to note that we did not observe any modulation of the amygdala as a function of using one’s own name in Study 2. Failure to find this modulation was surprising given prior research that has consistently shown reductions in amygdala activity by reappraisal strategies aimed at regulating negative affect<sup><a href="#CR20" class="usa-link" aria-describedby="CR20">20</a></sup>. However, several studies that have used memory-based paradigms for eliciting emotional reactivity have failed to show significant activations and modulation of the amygdala<sup><a href="#CR26" class="usa-link" aria-describedby="CR26">26</a>, <a href="#CR27" class="usa-link" aria-describedby="CR27">27</a></sup>. Thus, it is possible that failure to see modulation of the amygdala in this study was a function of the paradigm employed. In this vein, it is noteworthy that the bulk of the studies included in the meta-analysis we used to identify brain regions that reappraisal strategies modulate consisted of studies using picture-based emotion elicitation paradigms. However, the decrease in LPP by third-person self-talk in Study 1 does point to the possibility that using one’s own name decreases amygdala activity, as the amplitude of the LPP has been consistently linked with amygdala activity<sup><a href="#CR28" class="usa-link" aria-describedby="CR28">28</a>, <a href="#CR29" class="usa-link" aria-describedby="CR29">29</a></sup>. Regardless, together, the current findings provide preliminary evidence pointing to the effectiveness of third-person self-talk for reducing neural markers of self-referential emotional processing. The exact markers that are modulated likely reflect the type of emotional stimulus encountered – in the present case, either externally presented pictured scenes (Study 1) or internally generated memories (Study 2).</p>
+<p id="Par22">Because of its simplicity and effectiveness, third-person self-talk could prove useful for promoting emotion regulation in daily life. Third person self-talk would be easy to disseminate at a large scale and, based on the current findings, should be fairly easy to implement. The ERP and fMRI signatures of third-person self-talk implementation identified here could be important screening metrics to identify individuals who might benefit the most from using this tool (e.g., individuals who are excessively self-focused in the face of negative experiences), and to track the effects of interventions aimed at cultivating it.</p></section><section id="Sec6"><h2 class="pmc_sec_title">Methods and Materials</h2>
+<section id="Sec7"><h3 class="pmc_sec_title">Study 1</h3>
+<section id="Sec8"><h4 class="pmc_sec_title">Participants and stimuli</h4>
+<p id="Par23">Thirty-seven undergraduates were run through an emotional picture-viewing task in exchange for partial course credit. Informed consent was obtained from all participants. Eight participants were excluded from analyses because of excessive artifacts due to eye movements resulting in rejection of 100% of trials (n = 3) and body movements resulting in rejection of<strong> &gt; </strong>60% of trials (n = 5). The final sample submitted to analysis included 29 (18 female) participants. The mean age was 18.86 (<em>SD</em> = 1.15). All participants were native English speakers. All procedures were performed in accodance with the relevant guidelines and regulations and approved by Michigan State University’s Institutional Review Board.</p>
+<p id="Par24">The stimulus set consisted of 60 neutral and 60 negative images selected from the International Affective Picture System (IAPS). The following images were included: 1050, 1200, 1300, 1525, 1930, 2036, 2102, 2110, 2190, 2200, 2206, 2210, 2214, 2215, 2230, 2320, 2357, 2383, 2393, 2495, 2570, 2661, 2683, 2688, 2692, 2694, 2703, 2710, 2716, 2751, 2753, 2799, 2800, 2810, 2811, 2840, 3001, 3010, 3120, 3181, 3213, 3216, 3220, 3230, 3301, 3350, 3500, 3530, 3550, 5500, 5531, 5971, 6021, 6150, 6211, 6212, 6242, 6300, 6312, 6313, 6315, 6550, 6563, 6821, 6825, 6838, 7000, 7002, 7003, 7004, 7006, 7009, 7010, 7012, 7016, 7018, 7020, 7021, 7025, 7026, 7030, 7031, 7035, 7041, 7050, 7056, 7080, 7100, 7110, 7140, 7150, 7160, 7170, 7175, 7190, 7211, 7217, 7224, 7233, 7235, 7254, 7550, 7620, 7700, 7950, 9250, 9253, 9260, 9410, 9421, 9425, 9428, 9440, 9620, 9622, 9800, 9810, 9903, 9908, 9921.</p>
+<p id="Par25">Normative ratings indicated that negative images were rated as both more negative (Negative: <em>M</em> = 2.50, <em>SD</em> = 0.73; Neutral: <em>M</em> = 4.96, <em>SD</em> = 0.41; <em>t</em>(118) = 22.64, <em>p</em> &lt; .001) and more arousing (Negative: <em>M</em> = 6.06, <em>SD</em> = 0.74; Neutral: <em>M</em> = 3.04, <em>SD</em> = 0.68; <em>t</em>(118) = 23.22, <em>p</em> &lt; .001) than neutral images. Images used for the First and Third person conditions did not differ on either dimension (<em>ts</em>(118) &lt; 1, <em>ps</em> &gt; .44).</p>
+<p id="Par26">The task was administered on a Pentium D class computer, using E-Prime software (Psychology Software Tools; Pennsylvania, US) to control the presentation and timing of all stimuli. Each picture was displayed in color and occupied the entirety of a 19in (48.26 cm) monitor. Participants were seated approximately 60 cm from the monitor.</p></section><section id="Sec9"><h4 class="pmc_sec_title">Procedure</h4>
+<p id="Par27">Participants completed a cue-picture paradigm, similar in format to previous research on emotion regulation<sup><a href="#CR9" class="usa-link" aria-describedby="CR9">9</a>, <a href="#CR16" class="usa-link" aria-describedby="CR16">16</a></sup>. The task comprised two blocks, one for each Instruction Type (i.e. First- vs. Third-Person). The order of Instruction Type block was counterbalanced across participants. Each block contained 60 cue-picture trials comprised of 30 neutral and 30 negative IAPS images equally crossed with the two Instruction Type cues. The order of cue-picture trials was random. Fig. <a href="#Fig1" class="usa-link">1</a> illustrates a schematic of the trial structure across both blocks. For each trial, participants first viewed an instruction phrase (“First-Person” or “Third-Person”) for 2 s that directed them how to think about the following picture. “First-Person” indicated that the participant should reflect on their feelings elicited by the pictures using the pronoun “I” as much as possible (i.e., “…ask yourself ‘what am I feeling right now?’”). “Third-Person” indicated that the participant should reflect on their feelings elicited by the pictures using their own name as much as possible (i.e., “…ask yourself ‘what is [participant’s name] feeling right now?”). Participants were further told not to generate unrelated thoughts or images to alter their responses. For all instructions, participants were told to view the pictures for the entire display period and to not look away or close their eyes. After the instruction phrase, a blank screen was presented for 500 ms followed by a centrally presented white fixation cross lasting 500 ms. Following the fixation cross, the IAPS images were displayed for 6 s. A period of 2.5 s was inserted between the offset of images and the presentation of the next instruction phrase during which time participants were instructed to relax and clear their minds.</p>
+<p id="Par28">Participants completed practice trials before each block to familiarize themselves with the timing of events and instructions. The experimental task then included 120 cue-picture trials: 30 Neutral/First-Person, 30 Neutral/Third-Person, 30 Negative/First-Person, and 30 Negative/Third-Person. At the end of each block participants were asked to rate the extent to which they used the first- vs. third-person pronouns when focusing on their feelings using a 1 (not at all) to 7 (all the time) likert scale.</p></section><section id="Sec10"><h4 class="pmc_sec_title">Psychophysiological Recording and Data Reduction</h4>
+<p id="Par29">Continuous electroencephalographic (EEG) activity was recorded using the ActiveTwo Biosemi system (Biosemi, Amsterdam, The Netherlands). Recordings were taken from 64 Ag-AgCl electrodes embedded in a stretch-lycra cap. Additionally, two electrodes were placed on the left and right mastoids. Electro-oculogram (EOG) activity generated by eye-movements and blinks was recorded at FP1 and three additional electrodes placed inferior to the left pupil and on the left and right outer canthi. During data acquisition, the Common Mode Sense active electrode and Driven Right Leg passive electrode formed the ground per Biosemi design specifications. The function of the CMS-DRL loop, in addition to forming a reference, is simply to constrain the common mode voltage (i.e. the average voltage of the participant), which limits the amount of current that can possibly return to the participant. Bioelectric signals were sampled at 512 Hz.</p>
+<p id="Par30">Initial electrical signal processing was performed offline using BrainVision Analyzer 2 (BrainProducts, Gilching, Germany). Scalp electrode recordings were re-referenced to the mean of the mastoids and band-pass filtered (cutoffs: 0.01–20 Hz; 12 dB/oct rolloff). Ocular artifacts were corrected using the method developed by Gratton and colleagues<sup><a href="#CR30" class="usa-link" aria-describedby="CR30">30</a></sup>. Cue- and picture-locked data were segmented into individual epochs beginning 500 ms before stimulus onset and continuing for 3 s and 6 s, respectively. Physiologic artifacts were detected using a computer-based algorithm such that trials in which the following criteria were met were rejected: a voltage step exceeding 50 μV between contiguous sampling points, a voltage difference of 300 μV within a trial, and a maximum voltage difference of less than 0.5 μV within 100 ms intervals. The average activity in the 500 ms window prior to cue and picture onset served as the baseline and was subtracted from each data point subsequent to cue and picture onset.</p></section><section id="Sec11"><h4 class="pmc_sec_title">Data Analysis Strategy</h4>
+<p id="Par31">For analysis of the LPP, we generated topographically organized clusters of electrodes in order to reduce the spatial dimensions of the dataset. Following the suggestion of Dien and Santuzzi<sup><a href="#CR31" class="usa-link" aria-describedby="CR31">31</a></sup>, we computed the following clusters using the average of the noted electrodes: Left-Anterior-Superior (AF3, F1, F3, FC1 and FC3), Right-Anterior-Superior (AF4, F2, F4, FC2 and FC4), Left-Anterior-Inferior (AF7, F5, F7, FC5, and FT7), Right-Anterior-Inferior (AF8, F6, F8, FC6, and FT8), Left-Posterior-Superior (CP1, CP3, P1, P3, and PO3), Right-Posterior-Superior (CP2, CP4, P2, P4, and PO4), Left-Posterior-Inferior (CP5, P5, P7, PO7, and TP7), and Right-Posterior-Inferior (CP6, P6, P8, PO8, and TP8). Because the LPP is a broad and sustained waveform we conducted two analyses of its amplitude across time, following convention<sup><a href="#CR9" class="usa-link" aria-describedby="CR9">9</a>, <a href="#CR11" class="usa-link" aria-describedby="CR11">11</a></sup>. Specifically, research indicates that early time windows (300–1000 ms) index attention allocation whereas later time windows (&gt;1000 ms) index memory and meaning-making stages<sup><a href="#CR11" class="usa-link" aria-describedby="CR11">11</a></sup>. As such, we submitted the early LPP amplitude elicited between 400–1000 ms to a 2 (Time: 400–700 and 700–1000 ms) X 2 (Valence: Neutral and Negative) X 2 (Self-talk Strategy: First-Person and Third-Person) X 2 (Hemisphere: Left and Right) X 2 (Anterior and Posterior) X 2 (Superior and Inferior) repeated measures analysis of variance (rANOVA). This allowed us to capture the early, attention-related LPP before the sustained portion of the LPP begins around 1000 ms [see also refs <a href="#CR9" class="usa-link" aria-describedby="CR9">9</a> and <a href="#CR18" class="usa-link" aria-describedby="CR18">18</a>]. To understand the timing of memory and meaning-making processes, we submitted the sustained portion of the LPP to a 5 (Time: 1–2 s, 2–3 s, 3–4 s, 4–5 s, and 5–6 s) X 2 (Valence: Neutral and Negative) X 2 (Self-Talk Strategy: First-Person and Third-Person) X 2 (Hemisphere: Left and Right) X 2 (Anterior and Posterior) X 2 (Superior and Inferior) rANOVA [see also refs <a href="#CR9" class="usa-link" aria-describedby="CR9">9</a> and <a href="#CR18" class="usa-link" aria-describedby="CR18">18</a>].</p>
+<p id="Par332">The SPN was identified and quantified at fronto-central electrodes (F1, Fz, F2, FC1, FCz, FC2) as in previous work<sup><a href="#CR9" class="usa-link" aria-describedby="CR9">9</a>, <a href="#CR14" class="usa-link" aria-describedby="CR14">14</a></sup>. Previous work indicates that early enhancement of the SPN reflects orienting to the preceding cue whereas later increases reflect anticipation of and preparation to act on the upcoming imperative stimulus<a href="#CR14" class="usa-link" aria-describedby="CR14">14</a>. Therefore, consistent with past research<sup><a href="#CR9" class="usa-link" aria-describedby="CR9">9</a>, <a href="#CR14" class="usa-link" aria-describedby="CR14">14</a></sup>, the early SPN was defined as the average voltage in the 300–2300 ms time window post-cue onset and the late SPN was defined as the average voltage in the 2300–3000 ms time window post-cue onset, the latter corresponding to the 700 ms immediately preceding picture onset during which time participants viewed the blank screen and fixation cross separating the cue and the picture. The early and late SPN were submitted to separate 2 (Valence: Neutral and Negative) X 2 (Self-talk Strategy: First-Person and Third-Person) rANOVAs.</p>
+<p id="Par33">Additional analyses of the LPP and SPN effects are available in the supplemental materials.</p></section></section><section id="Sec12"><h3 class="pmc_sec_title">Study 2</h3>
+<section id="Sec13"><h4 class="pmc_sec_title">Participants</h4>
+<p id="Par34">Fifty-two individuals (32 females) were recruited for participation. Participants were recruited via flyers posted and advertisements posted on Facebook and Craig’s List. The sample consisted of 71.15% Caucasian, 15.38% Asian, 7.69% African American, 1.92% Native American, and 3.85% other. The mean age was 20.19 (<em>SD</em> = 2.66). All participants were right-handed native English language speakers and received up to $50 for their participation. Informed consent was obtained from all participants. All procedures were performed in accordance with the relevant guidelines and regulations and approved by the University of Michigan’s Institutional Review Board.</p>
+<p id="Par35">Data from two participants was excluded from all analyses due to a technical malfunction during the fMRI task. Specifically, one participant did not see their name appear during the fMRI task, and the scan data from one participant was not properly saved. Thus, all of the descriptive data we report from here on pertains to the subsample of fifty participants that were included in our analyses.</p></section><section id="Sec14"><h4 class="pmc_sec_title">Screening Session: Stimuli Harvesting</h4>
+<p id="Par36">Similar to prior studies that have used script-driven methods, cue phrases were used to trigger the recall of negative autobiographical memories in the scanner. Following protocols implemented in prior research<sup><a href="#CR32" class="usa-link" aria-describedby="CR32">32</a>, <a href="#CR33" class="usa-link" aria-describedby="CR33">33</a></sup>, we obtained memory cues by asking participants to recall and then describe in writing eight highly arousing negative autobiographical experiences during a screening held before the scan session (<em>M</em>
+<sub><em>days</em></sub> = 10.81; <em>SD</em>
+<sub><em>days</em></sub> = 7.87). To qualify for the study, participants had to have experienced eight unique negative events which led them to feel intensely distressed each time they thought about them. To ensure that this criterion was met, a memory was considered “eligible” if participants rated it above the midpoint of a 1 (not intense) to 9 (extremely intense) arousal scale (<em>M</em> = 7.49, <em>SD</em> = 1.07) and below the midpoint on a 1 (extremely negative) to 9 (extremely positive) valence scale (<em>M</em> = 2.05; <em>SD</em> = 0.97).</p></section><section id="Sec15"><h4 class="pmc_sec_title">fMRI Negative Emotion Elicitation Task</h4>
+<p id="Par37">The Negative Emotion Elicitation task was modeled after prior fMRI and behavioral research indicating that cueing people to recall autobiographical negative experiences is an effective way of reactivating intense idiosyncratic negative emotion e.g.<sup><a href="#CR32" class="usa-link" aria-describedby="CR32">32</a>, <a href="#CR33" class="usa-link" aria-describedby="CR33">33</a></sup>. The stimuli for this task consisted of cue phrases (e.g., rejected by Marc; party with Ted) that appeared in the center of each screen, which directed participants to focus on a specific negative past experiences. Participants generated these cue-phrases on their own, before the day of scanning, using a procedure developed in prior research<sup><a href="#CR32" class="usa-link" aria-describedby="CR32">32</a>, <a href="#CR33" class="usa-link" aria-describedby="CR33">33</a></sup>. Specifically, they first wrote about each of their experiences. Subsequently, they were asked to create a cue-phrase that captured the gist of their experience (e.g., barking dog). They were reminded of the cues they generated and the experiences they referred to on the day of scanning following established procedures.</p></section><section id="Sec16"><h4 class="pmc_sec_title">Task Training</h4>
+<p id="Par38">Before scanning, participants were told that each trial would begin with a fixation cross, which they were asked to stare directly at. Next, they were told that they would see a linguistic cue, which would instruct them how to introspect (i.e., using <em>I</em> or <em>their</em> name) during the trial. Next, they were told that they would see another fixation-cross followed by a memory cue-phrase that they generated during the previous session. When they saw the memory cue they were asked to reflect over that memory using the part of speech (I or their own name) that was previously presented to them. To ensure that they used the correct part of speech when introspecting about each memory the same linguistic cue that was presented earlier during the trial appeared beneath the memory cue on the bottom of the screen. Subsequently, participants were told they would have 3-s to rate how they felt using a five-point scale (1 = not at all negative; 5 = very negative; see Fig. <a href="#Fig2" class="usa-link">2</a> for an illustration of the task).</p></section><section id="Sec17"><h4 class="pmc_sec_title">Functional MRI Acquisition and Analysis</h4>
+<p id="Par39">Whole-brain functional data were acquired on a GE Signa 3-Tesla scanner. A spiral sequence with 40 contiguous slices with 3.44 × 3.44 × 3 mm voxels (repetition time (TR) = 2000 ms; echo time (TE) = 30; flip angle = 90°; field of view (FOV) = 22 cm) was used to acquire functional T2* weighted images. Structural data were acquired with a T1-weighted gradient echo anatomical overlay acquired using the same FOV and slices (TR = 250 ms, TE = 5.7 ms, flip angle = 90°). We also collected a 124-slice high-resolution T1-weighted anatomical image using spoiled-gradient-recalled acquisition (SPGR) in steady-state imaging (TR = 9 ms, TE = 1.8 ms, flip angle = 15°, FOV = 25<strong>–</strong>26 cm, slice thickness = 1.2 mm).</p>
+<p id="Par40">Functional images were corrected for differences in slice timing using 4-point sinc-interpolation<sup><a href="#CR34" class="usa-link" aria-describedby="CR34">34</a></sup> and were corrected for head movement using MCFLIRT<sup><a href="#CR35" class="usa-link" aria-describedby="CR35">35</a></sup>. Each SPGR anatomical image was corrected for signal in-homogeneity and skull-stripped using FSL’s Brain Extraction Tool<sup><a href="#CR36" class="usa-link" aria-describedby="CR36">36</a></sup>. These images were then segmented with SPM8 (Wellcome Department of Cognitive Neurology, London) into gray matter, white matter and cerebrospinal fluid and normalization parameters for warping into MNI space were recorded. These normalization parameters were applied to the functional images maintaining their original 3.44 × 3.44 × 3 mm</p>
+<p id="Par41">Functional scans were physio-corrected using retroicorr resolution<sup><a href="#CR37" class="usa-link" aria-describedby="CR37">37</a></sup>. The functional scans were further preprocessed with SPM8’s, slice-time correction, and realignment processing functions. The segmented normalization parameters were then applied to the functional scans to warp them into MNI space. Finally, the functional images were spatially smoothed using a 8-mm full-width at half-maximum Gaussian kernel.</p>
+<p id="Par42">Statistical analyses were conducted using the general linear model framework implemented in SPM8. Boxcar regressors, convolved with the canonical hemodynamic response function, modeled periods for the 2-s linguistic cue (“I” or their own name), 4-s fixation cross, 15-s memory cue, and 3-s affect rating. The fixation-cross epoch was used as an implicit baseline.</p></section><section id="Sec18"><h4 class="pmc_sec_title">Whole Brain Analysis</h4>
+<p id="Par43">Voxelwise statistical parametric maps summarizing differences between trial types were calculated for each participant and then entered into random-effects group analyses, with statistical maps thresholded at <em>P</em> &lt; 0.05 FWER-corrected for multiple comparisons across gray and white matter. This correction entailed a primary threshold of <em>P</em> &lt; 0.005, with an extent threshold of 146 voxels, which was determined using a Monte Carlo simulation method and was calculated using 3DClustSim<sup><a href="#CR38" class="usa-link" aria-describedby="CR38">38</a></sup>. This technique controls for the FWER by simulating null datasets with the same spatial autocorrelation found in the residual images and creates a frequency distribution of different cluster sizes. Clusters larger than the minimum size corresponding to the a priori chosen FWER are then retained for additional analysis. This cluster-based method of thresholding is often more sensitive to activation when one can reasonably expect multiple contiguous activated voxels<sup><a href="#CR38" class="usa-link" aria-describedby="CR38">38</a>, <a href="#CR39" class="usa-link" aria-describedby="CR39">39</a></sup>, and is widely used in fMRI research. Our principle analyses contrasted the hemodynamic response on trials on which participants recalled negative autobiographical experiences and then analyzed their feelings surrounding the events using <strong><em>I</em></strong> or <strong><em>their own name</em></strong>.</p></section><section id="Sec19"><h4 class="pmc_sec_title">Region of Interests (ROIs)</h4>
+<p id="Par44">We performed region of interest analyses on three sets of brain regions: (a) brain regions that support self-referential processing (e.g., medial prefrontal cortex) (b) brain regions involved in emotional reactivity (e.g., the amygdala), and (c) brain regions that support the effortful, cognitive control of emotion (e.g., posterior dorsomedial prefrontal cortex and bilateral dorsolateral PFC and ventrolateral PFC, and posterior parietal cortex).</p>
+<p id="Par45">The coordinates for each set of ROIs were derived from meta-analyses. Specifically, the self-referential processing ROIs were obtained from a meta-analysis based on data from 28 neuroimaging studies that contrasted the evaluation of the self (i.e., thinking about one’s own traits) versus close and distant others (i.e., thinking about others’ traits<sup><a href="#CR18" class="usa-link" aria-describedby="CR18">18</a></sup>). To conservatively select the ROIs of interest for this analysis, only regions that were active for self vs. <em>both</em> close and distant others were included, as the subject’s own name does not neatly fit into either category of the other. The ROIs corresponding to brain regions involved in emotional reactivity and support the implementation of cognitive emotion regulation were obtained from a recent meta-analysis based on data from 48 neuroimaging studies of reappraisal, the most commonly studied form of cognitive emotion regulation<sup><a href="#CR20" class="usa-link" aria-describedby="CR20">20</a></sup>. We used Robert Welsh’s simpleroibuilder to create spherical ROIs around the peak voxels from prior work. The spherical ROIs were generated to have the same volume as those from the original studies. All ROIs were small volume corrected to an FWER equivalent to p &lt; .05.</p></section></section></section><section id="sec20"><h2 class="pmc_sec_title">Electronic supplementary material</h2>
+<section id="Sec20"><section class="sm xbox font-sm" id="MOESM1"><div class="media p"><div class="caption">
+<a href="/articles/instance/5495792/bin/41598_2017_4047_MOESM1_ESM.pdf" data-ga-action="click_feat_suppl" class="usa-link">Supplementary Information</a><sup> (891.7KB, pdf) </sup>
+</div></div></section></section></section><section id="ack1" class="ack"><h2 class="pmc_sec_title">Acknowledgements</h2>
+<p>This research was supported by funds provided by Michigan State University and the National Institutes of Health (HD065879) to JM and both funds provided by the University of Michigan and a grant provided by the John Templeton Foundation (#349798, #348747) to EK.</p></section><section id="notes1"><h2 class="pmc_sec_title">Author Contributions</h2>
+<p>J.M. and E.K. contributed equally to this work. Conceived and designed Study 1: J.M., E.K. Conceived and designed Study 2: M.G.B., J.J., E.K. Performed Study 1: T.M.; Performed Study 2: A.D., H.S: Analyzed the Study 1 data: T.M., J.M.; Analyzed the Study 2 data: D.G., M.G.B., E.K., W.M., B.K.; Wrote the paper: JM, EK; Discussed the results and commented on the manuscript: J.M., A.D., T.M., D.G., H.S., O.A., J.J., M.G.B., E.K., W.M., B.K.</p></section><section id="notes2"><section id="FPar1"><h3 class="pmc_sec_title">Competing Interests</h3>
+<p id="Par46">The authors declare that they have no competing interests.</p></section></section><section id="fn-group1" class="fn-group"><h2 class="pmc_sec_title">Footnotes</h2>
+<div class="fn-group p font-secondary-light font-sm">
+<div class="fn p" id="fn1">
+<p><strong>Electronic supplementary material</strong></p>
+<p>
+<strong>Supplementary information</strong> accompanies this paper at doi:10.1038/s41598-017-04047-3
+</p>
+</div>
+<div class="fn p" id="fn2"><p>
+<strong>Publisher's note:</strong> Springer Nature remains neutral with regard to jurisdictional claims in published maps and institutional affiliations.</p></div>
+</div></section><section id="_ci93_" lang="en" class="contrib-info"><h2 class="pmc_sec_title">Contributor Information</h2>
+<p>Jason S. Moser, Email: jmoser@msu.edu</p>
+<p>Ethan Kross, Email: ekross@umich.edu.</p></section><section id="Bib1" class="ref-list"><h2 class="pmc_sec_title">References</h2>
+<section id="Bib1_sec2"><ul class="ref-list font-sm" style="list-style-type:none">
+<li id="CR1">
+<span class="label">1.</span><cite>Vygotsky, L. <em>Thought and language</em>. (M.I.T. Press).</cite>
+</li>
+<li id="CR2">
+<span class="label">2.</span><cite>Diaz, R. M. &amp; Berk, L. E. Private speech: from social interaction to self-regulation (L. Erlbaum, 1992).</cite>
+</li>
+<li id="CR3">
+<span class="label">3.</span><cite>Kohlberg L, Yaeger J, Hjertholm E. Private speech: four studies and a review of theories. Child Dev. 1968;39:691–736. doi: 10.2307/1126979.</cite> [<a href="https://doi.org/10.2307/1126979" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/5687321/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Child%20Dev&amp;title=Private%20speech:%20four%20studies%20and%20a%20review%20of%20theories&amp;author=L%20Kohlberg&amp;author=J%20Yaeger&amp;author=E%20Hjertholm&amp;volume=39&amp;publication_year=1968&amp;pages=691-736&amp;pmid=5687321&amp;doi=10.2307/1126979&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR4">
+<span class="label">4.</span><cite>Kross E, et al.  Self-talk as a regulatory mechanism: how you do it matters. Journal of personality and social psychology. 2014;106:304–324. doi: 10.1037/a0035173.</cite> [<a href="https://doi.org/10.1037/a0035173" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/24467424/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Journal%20of%20personality%20and%20social%20psychology&amp;title=Self-talk%20as%20a%20regulatory%20mechanism:%20how%20you%20do%20it%20matters&amp;author=E%20Kross&amp;volume=106&amp;publication_year=2014&amp;pages=304-324&amp;pmid=24467424&amp;doi=10.1037/a0035173&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR5">
+<span class="label">5.</span><cite>Grossmann I, Kross E. Exploring Solomon’s Paradox: Self-Distancing Eliminates the Self-Other Asymmetry in Wise Reasoning About Close Relationships in Younger and Older Adults. Psychological science. 2014;25:1571–1580. doi: 10.1177/0956797614535400.</cite> [<a href="https://doi.org/10.1177/0956797614535400" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/24916084/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Psychological%20science&amp;title=Exploring%20Solomon%E2%80%99s%20Paradox:%20Self-Distancing%20Eliminates%20the%20Self-Other%20Asymmetry%20in%20Wise%20Reasoning%20About%20Close%20Relationships%20in%20Younger%20and%20Older%20Adults&amp;author=I%20Grossmann&amp;author=E%20Kross&amp;volume=25&amp;publication_year=2014&amp;pages=1571-1580&amp;pmid=24916084&amp;doi=10.1177/0956797614535400&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR6">
+<span class="label">6.</span><cite>Kross, E., &amp; Ayduk, O. Self-Distancing: Theory, Research and Current Directions. <em>Advances in Experimental Social Psychology</em><strong>55</strong>, 81–136 (2017).</cite>
+</li>
+<li id="CR7">
+<span class="label">7.</span><cite>Baumeister RF, Vohs KD, Tice DM. The Strength Model of Self-Control. Current Directions in Psychological Science. 2007;16:351–355. doi: 10.1111/j.1467-8721.2007.00534.x.</cite> [<a href="https://doi.org/10.1111/j.1467-8721.2007.00534.x" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Current%20Directions%20in%20Psychological%20Science&amp;title=The%20Strength%20Model%20of%20Self-Control&amp;author=RF%20Baumeister&amp;author=KD%20Vohs&amp;author=DM%20Tice&amp;volume=16&amp;publication_year=2007&amp;pages=351-355&amp;doi=10.1111/j.1467-8721.2007.00534.x&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR8">
+<span class="label">8.</span><cite>Ochsner KO, Gross JJ. Cognitive emotion regulation: Insights from social cognitive and affective neuroscience. Current Directions in Psychological Science. 2008;17:153–158. doi: 10.1111/j.1467-8721.2008.00566.x.</cite> [<a href="https://doi.org/10.1111/j.1467-8721.2008.00566.x" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC4241349/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/25425765/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Current%20Directions%20in%20Psychological%20Science&amp;title=Cognitive%20emotion%20regulation:%20Insights%20from%20social%20cognitive%20and%20affective%20neuroscience&amp;author=KO%20Ochsner&amp;author=JJ%20Gross&amp;volume=17&amp;publication_year=2008&amp;pages=153-158&amp;pmid=25425765&amp;doi=10.1111/j.1467-8721.2008.00566.x&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR9">
+<span class="label">9.</span><cite>Moser, J. S., Krompinger, J. W., Dietz, J. &amp; Simons, R. F. Electrophysiological correlates of decreasing and increasing emotional responses to unpleasant pictures. <em>Psychophysiology</em><strong>46</strong>, 17–27, doi:PSYP721 [pii], doi:10.1111/j.1469-8986.2008.00721.x (2009).</cite> [<a href="https://doi.org/10.1111/j.1469-8986.2008.00721.x" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/18992073/" class="usa-link">PubMed</a>]</li>
+<li id="CR10">
+<span class="label">10.</span><cite>Heatherton TF. Neuroscience of self and self-regulation. Annual review of psychology. 2011;62:363–390. doi: 10.1146/annurev.psych.121208.131616.</cite> [<a href="https://doi.org/10.1146/annurev.psych.121208.131616" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC3056504/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/21126181/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Annual%20review%20of%20psychology&amp;title=Neuroscience%20of%20self%20and%20self-regulation&amp;author=TF%20Heatherton&amp;volume=62&amp;publication_year=2011&amp;pages=363-390&amp;pmid=21126181&amp;doi=10.1146/annurev.psych.121208.131616&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR11">
+<span class="label">11.</span><cite>Hajcak, G., Weinberg, A., Macnamara, D. &amp; Foti, D. In <em>Oxford Handbook of ERP Components</em> (eds SJ Luck &amp; ES Kappenman) (Oxford University Press, 2012).</cite>
+</li>
+<li id="CR12">
+<span class="label">12.</span><cite>Herbert C, Pauli P, Herbert BM. Self-reference modulates the processing of emotional stimuli in the absence of explicit self-referential appraisal instructions. Social cognitive and affective neuroscience. 2011;6:653–661. doi: 10.1093/scan/nsq082.</cite> [<a href="https://doi.org/10.1093/scan/nsq082" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC3190208/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/20855295/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Social%20cognitive%20and%20affective%20neuroscience&amp;title=Self-reference%20modulates%20the%20processing%20of%20emotional%20stimuli%20in%20the%20absence%20of%20explicit%20self-referential%20appraisal%20instructions&amp;author=C%20Herbert&amp;author=P%20Pauli&amp;author=BM%20Herbert&amp;volume=6&amp;publication_year=2011&amp;pages=653-661&amp;pmid=20855295&amp;doi=10.1093/scan/nsq082&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR13">
+<span class="label">13.</span><cite>Liu Y, Huang H, McGinnis-Deweese M, Keil A, Ding M. Neural substrate of the late positive potential in emotional processing. The Journal of neuroscience: the official journal of the Society for Neuroscience. 2012;32:14563–14572. doi: 10.1523/JNEUROSCI.3109-12.2012.</cite> [<a href="https://doi.org/10.1523/JNEUROSCI.3109-12.2012" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC3516184/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/23077042/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=The%20Journal%20of%20neuroscience:%20the%20official%20journal%20of%20the%20Society%20for%20Neuroscience&amp;title=Neural%20substrate%20of%20the%20late%20positive%20potential%20in%20emotional%20processing&amp;author=Y%20Liu&amp;author=H%20Huang&amp;author=M%20McGinnis-Deweese&amp;author=A%20Keil&amp;author=M%20Ding&amp;volume=32&amp;publication_year=2012&amp;pages=14563-14572&amp;pmid=23077042&amp;doi=10.1523/JNEUROSCI.3109-12.2012&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR14">
+<span class="label">14.</span><cite>Brunia, C., Boxtel, K. &amp; Bocker, v. In <em>The Oxford handbook of event-related potential components</em> (eds SJ Luck &amp; ES Kappenman) 189–207 (Oxford University Press, 2012).</cite>
+</li>
+<li id="CR15">
+<span class="label">15.</span><cite>Shafir R, Schwartz N, Blechert J, Sheppes G. Emotional intensity influences pre-implementation and implementation of distraction and reappraisal. Social cognitive and affective neuroscience. 2015;10:1329–1337. doi: 10.1093/scan/nsv022.</cite> [<a href="https://doi.org/10.1093/scan/nsv022" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC4590533/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/25700568/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Social%20cognitive%20and%20affective%20neuroscience&amp;title=Emotional%20intensity%20influences%20pre-implementation%20and%20implementation%20of%20distraction%20and%20reappraisal&amp;author=R%20Shafir&amp;author=N%20Schwartz&amp;author=J%20Blechert&amp;author=G%20Sheppes&amp;volume=10&amp;publication_year=2015&amp;pages=1329-1337&amp;pmid=25700568&amp;doi=10.1093/scan/nsv022&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR16">
+<span class="label">16.</span><cite>Thiruchselvam R, Blechert J, Sheppes G, Rydstrom A, Gross JJ. The temporal dynamics of emotion regulation: an EEG study of distraction and reappraisal. Biol Psychol. 2011;87:84–92. doi: 10.1016/j.biopsycho.2011.02.009.</cite> [<a href="https://doi.org/10.1016/j.biopsycho.2011.02.009" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/21354262/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Biol%20Psychol&amp;title=The%20temporal%20dynamics%20of%20emotion%20regulation:%20an%20EEG%20study%20of%20distraction%20and%20reappraisal&amp;author=R%20Thiruchselvam&amp;author=J%20Blechert&amp;author=G%20Sheppes&amp;author=A%20Rydstrom&amp;author=JJ%20Gross&amp;volume=87&amp;publication_year=2011&amp;pages=84-92&amp;pmid=21354262&amp;doi=10.1016/j.biopsycho.2011.02.009&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR17">
+<span class="label">17.</span><cite>Paul S, Simon D, Kniesche R, Kathmann N, Endrass T. Timing effects of antecedent- and response-focused emotion regulation strategies. Biol Psychol. 2013;94:136–142. doi: 10.1016/j.biopsycho.2013.05.019.</cite> [<a href="https://doi.org/10.1016/j.biopsycho.2013.05.019" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/23747981/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Biol%20Psychol&amp;title=Timing%20effects%20of%20antecedent-%20and%20response-focused%20emotion%20regulation%20strategies&amp;author=S%20Paul&amp;author=D%20Simon&amp;author=R%20Kniesche&amp;author=N%20Kathmann&amp;author=T%20Endrass&amp;volume=94&amp;publication_year=2013&amp;pages=136-142&amp;pmid=23747981&amp;doi=10.1016/j.biopsycho.2013.05.019&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR18">
+<span class="label">18.</span><cite>Araujo HF, Kaplan J, Damasio A. Cortical midline structures and autobiographical-self processes: an activation-likelihood estimation meta-analysis. Frontiers in human neuroscience. 2013;7:548. doi: 10.3389/fnhum.2013.00548.</cite> [<a href="https://doi.org/10.3389/fnhum.2013.00548" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC3762365/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/24027520/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Frontiers%20in%20human%20neuroscience&amp;title=Cortical%20midline%20structures%20and%20autobiographical-self%20processes:%20an%20activation-likelihood%20estimation%20meta-analysis&amp;author=HF%20Araujo&amp;author=J%20Kaplan&amp;author=A%20Damasio&amp;volume=7&amp;publication_year=2013&amp;pages=548&amp;pmid=24027520&amp;doi=10.3389/fnhum.2013.00548&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR19">
+<span class="label">19.</span><cite>Moser JS, Hartwig R, Moran TP, Jendrusina AA, Kross E. Neural markers of positive reappraisal and their associations with trait reappraisal and worry. J Abnorm Psychol. 2014;123:91–105. doi: 10.1037/a0035817.</cite> [<a href="https://doi.org/10.1037/a0035817" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/24661162/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=J%20Abnorm%20Psychol&amp;title=Neural%20markers%20of%20positive%20reappraisal%20and%20their%20associations%20with%20trait%20reappraisal%20and%20worry&amp;author=JS%20Moser&amp;author=R%20Hartwig&amp;author=TP%20Moran&amp;author=AA%20Jendrusina&amp;author=E%20Kross&amp;volume=123&amp;publication_year=2014&amp;pages=91-105&amp;pmid=24661162&amp;doi=10.1037/a0035817&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR20">
+<span class="label">20.</span><cite>Buhle JT, et al.  Cognitive reappraisal of emotion: a meta-analysis of human neuroimaging studies. Cerebral cortex. 2014;24:2981–2990. doi: 10.1093/cercor/bht154.</cite> [<a href="https://doi.org/10.1093/cercor/bht154" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC4193464/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/23765157/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Cerebral%20cortex&amp;title=Cognitive%20reappraisal%20of%20emotion:%20a%20meta-analysis%20of%20human%20neuroimaging%20studies&amp;author=JT%20Buhle&amp;volume=24&amp;publication_year=2014&amp;pages=2981-2990&amp;pmid=23765157&amp;doi=10.1093/cercor/bht154&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR21">
+<span class="label">21.</span><cite>Mauss, I., Bunge, S. &amp; Gross, J. J. Automatic emotion regulation. <em>Social and Personality Psychology Compass</em><strong>1</strong> (2007).</cite>
+</li>
+<li id="CR22">
+<span class="label">22.</span><cite>Williams LE, Bargh JA, Nocera CC, Gray JR. The unconscious regulation of emotion: nonconscious reappraisal goals modulate emotional reactivity. Emotion. 2009;9:847–854. doi: 10.1037/a0017745.</cite> [<a href="https://doi.org/10.1037/a0017745" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC2796590/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/20001127/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Emotion&amp;title=The%20unconscious%20regulation%20of%20emotion:%20nonconscious%20reappraisal%20goals%20modulate%20emotional%20reactivity&amp;author=LE%20Williams&amp;author=JA%20Bargh&amp;author=CC%20Nocera&amp;author=JR%20Gray&amp;volume=9&amp;publication_year=2009&amp;pages=847-854&amp;pmid=20001127&amp;doi=10.1037/a0017745&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR23">
+<span class="label">23.</span><cite>Barrett LF, Lindquist KA, Gendron M. Language as context for the perception of emotion. Trends in cognitive sciences. 2007;11:327–332. doi: 10.1016/j.tics.2007.06.003.</cite> [<a href="https://doi.org/10.1016/j.tics.2007.06.003" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC2225544/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/17625952/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Trends%20in%20cognitive%20sciences&amp;title=Language%20as%20context%20for%20the%20perception%20of%20emotion&amp;author=LF%20Barrett&amp;author=KA%20Lindquist&amp;author=M%20Gendron&amp;volume=11&amp;publication_year=2007&amp;pages=327-332&amp;pmid=17625952&amp;doi=10.1016/j.tics.2007.06.003&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR24">
+<span class="label">24.</span><cite>Ellsworth, P. C. &amp; Scherer, K. R. In Ha<em>ndb</em>ook of <em>af</em>fecti<em>ve sciences</em> (eds M. R.J. Davidson, H. Goldsmith &amp; K.R. Scherer) (Oxford University Press, 2003).</cite>
+</li>
+<li id="CR25">
+<span class="label">25.</span><cite>Lindquist KA, Barrett LF. A functional architecture of the human brain: emerging insights from the science of emotion. Trends in cognitive sciences. 2012;16:533–540. doi: 10.1016/j.tics.2012.09.005.</cite> [<a href="https://doi.org/10.1016/j.tics.2012.09.005" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC3482298/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/23036719/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Trends%20in%20cognitive%20sciences&amp;title=A%20functional%20architecture%20of%20the%20human%20brain:%20emerging%20insights%20from%20the%20science%20of%20emotion&amp;author=KA%20Lindquist&amp;author=LF%20Barrett&amp;volume=16&amp;publication_year=2012&amp;pages=533-540&amp;pmid=23036719&amp;doi=10.1016/j.tics.2012.09.005&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR26">
+<span class="label">26.</span><cite>Kross E, Berman MG, Mischel W, Smith EE, Wager TD. Social rejection shares somatosensory representations with physical pain. Proc Natl Acad Sci USA. 2011;108:6270–6275. doi: 10.1073/pnas.1102693108.</cite> [<a href="https://doi.org/10.1073/pnas.1102693108" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC3076808/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/21444827/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Proc%20Natl%20Acad%20Sci%20USA&amp;title=Social%20rejection%20shares%20somatosensory%20representations%20with%20physical%20pain&amp;author=E%20Kross&amp;author=MG%20Berman&amp;author=W%20Mischel&amp;author=EE%20Smith&amp;author=TD%20Wager&amp;volume=108&amp;publication_year=2011&amp;pages=6270-6275&amp;pmid=21444827&amp;doi=10.1073/pnas.1102693108&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR27">
+<span class="label">27.</span><cite>Kross E, Egner T, Ochsner K, Hirsch J, Downey G. Neural dynamics of rejection sensitivity. Journal of Cognitive Neuroscience. 2007;19:945–956. doi: 10.1162/jocn.2007.19.6.945.</cite> [<a href="https://doi.org/10.1162/jocn.2007.19.6.945" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/17536965/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Journal%20of%20Cognitive%20Neuroscience&amp;title=Neural%20dynamics%20of%20rejection%20sensitivity&amp;author=E%20Kross&amp;author=T%20Egner&amp;author=K%20Ochsner&amp;author=J%20Hirsch&amp;author=G%20Downey&amp;volume=19&amp;publication_year=2007&amp;pages=945-956&amp;pmid=17536965&amp;doi=10.1162/jocn.2007.19.6.945&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR28">
+<span class="label">28.</span><cite>Sabatinelli D, Keil A, Frank DW, Lang PJ. Emotional perception: correspondence of early and late event-related potentials with cortical and subcortical functional MRI. Biol Psychol. 2013;92:513–519. doi: 10.1016/j.biopsycho.2012.04.005.</cite> [<a href="https://doi.org/10.1016/j.biopsycho.2012.04.005" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC3447123/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/22560889/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Biol%20Psychol&amp;title=Emotional%20perception:%20correspondence%20of%20early%20and%20late%20event-related%20potentials%20with%20cortical%20and%20subcortical%20functional%20MRI&amp;author=D%20Sabatinelli&amp;author=A%20Keil&amp;author=DW%20Frank&amp;author=PJ%20Lang&amp;volume=92&amp;publication_year=2013&amp;pages=513-519&amp;pmid=22560889&amp;doi=10.1016/j.biopsycho.2012.04.005&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR29">
+<span class="label">29.</span><cite>Sabatinelli D, Lang PJ, Keil A, Bradley MM. Emotional perception: correlation of functional MRI and event-related potentials. Cerebral cortex. 2007;17:1085–1091. doi: 10.1093/cercor/bhl017.</cite> [<a href="https://doi.org/10.1093/cercor/bhl017" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/16769742/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Cerebral%20cortex&amp;title=Emotional%20perception:%20correlation%20of%20functional%20MRI%20and%20event-related%20potentials&amp;author=D%20Sabatinelli&amp;author=PJ%20Lang&amp;author=A%20Keil&amp;author=MM%20Bradley&amp;volume=17&amp;publication_year=2007&amp;pages=1085-1091&amp;pmid=16769742&amp;doi=10.1093/cercor/bhl017&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR30">
+<span class="label">30.</span><cite>Gratton G, Coles MG, Donchin E. A new method for off-line removal of ocular artifact. Electroencephalography and clinical neurophysiology. 1983;55:468–484. doi: 10.1016/0013-4694(83)90135-9.</cite> [<a href="https://doi.org/10.1016/0013-4694(83)90135-9" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/6187540/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Electroencephalography%20and%20clinical%20neurophysiology&amp;title=A%20new%20method%20for%20off-line%20removal%20of%20ocular%20artifact&amp;author=G%20Gratton&amp;author=MG%20Coles&amp;author=E%20Donchin&amp;volume=55&amp;publication_year=1983&amp;pages=468-484&amp;pmid=6187540&amp;doi=10.1016/0013-4694(83)90135-9&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR31">
+<span class="label">31.</span><cite>Dien, J. &amp; Santuzzi, A. M. In E<em>ven</em>t-relate<em>d</em> poten<em>tials: A methods handbook</em> (ed. T.C. Handy) (MIT Press, 2005).</cite>
+</li>
+<li id="CR32">
+<span class="label">32.</span><cite>Kross E, Berman MG, Mischel W, Smith EE, Wager TD. Social rejection shares somatosensory representations with physical pain. Proceedings of the National Academy of Sciences, United States of America. 2011;108:6270–6275. doi: 10.1073/pnas.1102693108.</cite> [<a href="https://doi.org/10.1073/pnas.1102693108" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC3076808/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/21444827/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Proceedings%20of%20the%20National%20Academy%20of%20Sciences,%20United%20States%20of%20America&amp;title=Social%20rejection%20shares%20somatosensory%20representations%20with%20physical%20pain&amp;author=E%20Kross&amp;author=MG%20Berman&amp;author=W%20Mischel&amp;author=EE%20Smith&amp;author=TD%20Wager&amp;volume=108&amp;publication_year=2011&amp;pages=6270-6275&amp;pmid=21444827&amp;doi=10.1073/pnas.1102693108&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR33">
+<span class="label">33.</span><cite>Kross E, Davidson M, Weber J, Ochsner K. Coping with emotions past: the neural bases of regulating affect associated with negative autobiographical memories. Biological Psychiatry. 2009;65:361–366. doi: 10.1016/j.biopsych.2008.10.019.</cite> [<a href="https://doi.org/10.1016/j.biopsych.2008.10.019" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC2726992/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/19058792/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Biological%20Psychiatry&amp;title=Coping%20with%20emotions%20past:%20the%20neural%20bases%20of%20regulating%20affect%20associated%20with%20negative%20autobiographical%20memories&amp;author=E%20Kross&amp;author=M%20Davidson&amp;author=J%20Weber&amp;author=K%20Ochsner&amp;volume=65&amp;publication_year=2009&amp;pages=361-366&amp;pmid=19058792&amp;doi=10.1016/j.biopsych.2008.10.019&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR34">
+<span class="label">34.</span><cite>Oppenheim, A. V., Schafer, R. W. &amp; Buck, J. R. <em>Discrete-Time Signal processing</em>. 2nd edition edn (Prentice-Hall, 1999).</cite>
+</li>
+<li id="CR35">
+<span class="label">35.</span><cite>Jenkinson M, Bannister P, Brady M, Smith S. Improved optimization for the robust and accurate linear registration and motion correction of brain images. NeuroImage. 2002;17:825–841. doi: 10.1006/nimg.2002.1132.</cite> [<a href="https://doi.org/10.1006/nimg.2002.1132" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/12377157/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=NeuroImage&amp;title=Improved%20optimization%20for%20the%20robust%20and%20accurate%20linear%20registration%20and%20motion%20correction%20of%20brain%20images&amp;author=M%20Jenkinson&amp;author=P%20Bannister&amp;author=M%20Brady&amp;author=S%20Smith&amp;volume=17&amp;publication_year=2002&amp;pages=825-841&amp;pmid=12377157&amp;doi=10.1006/nimg.2002.1132&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR36">
+<span class="label">36.</span><cite>Smith SM, et al.  Advances in functional and structural MR image analysis and implementation as FSL. NeuroImage. 2004;23(Suppl 1):S208–219. doi: 10.1016/j.neuroimage.2004.07.051.</cite> [<a href="https://doi.org/10.1016/j.neuroimage.2004.07.051" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/15501092/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=NeuroImage&amp;title=Advances%20in%20functional%20and%20structural%20MR%20image%20analysis%20and%20implementation%20as%20FSL&amp;author=SM%20Smith&amp;volume=23&amp;issue=Suppl%201&amp;publication_year=2004&amp;pages=S208-219&amp;pmid=15501092&amp;doi=10.1016/j.neuroimage.2004.07.051&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR37">
+<span class="label">37.</span><cite>Glover GH, Li TQ, Ress D. Image-based method for retrospective correction of physiological motion effects in fMRI: RETROICOR. Magn Reson Imaging. 2000;44:162–167. doi: 10.1002/1522-2594(200007)44:1&lt;162::aid-mrm23&gt;3.0.co;2-e.</cite> [<a href="https://doi.org/10.1002/1522-2594(200007)44:1&lt;162::aid-mrm23&gt;3.0.co;2-e" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/10893535/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Magn%20Reson%20Imaging&amp;title=Image-based%20method%20for%20retrospective%20correction%20of%20physiological%20motion%20effects%20in%20fMRI:%20RETROICOR&amp;author=GH%20Glover&amp;author=TQ%20Li&amp;author=D%20Ress&amp;volume=44&amp;publication_year=2000&amp;pages=162-167&amp;pmid=10893535&amp;doi=10.1002/1522-2594(200007)44:1&lt;162::aid-mrm23&gt;3.0.co;2-e&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR38">
+<span class="label">38.</span><cite>Forman SD, et al.  Improved assessment of significant activation in functional magnetic resonance imaging (fMRI): use of a cluster-size threshold. Magn Reson Med. 1995;33:636–647. doi: 10.1002/mrm.1910330508.</cite> [<a href="https://doi.org/10.1002/mrm.1910330508" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/7596267/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Magn%20Reson%20Med&amp;title=Improved%20assessment%20of%20significant%20activation%20in%20functional%20magnetic%20resonance%20imaging%20(fMRI):%20use%20of%20a%20cluster-size%20threshold&amp;author=SD%20Forman&amp;volume=33&amp;publication_year=1995&amp;pages=636-647&amp;pmid=7596267&amp;doi=10.1002/mrm.1910330508&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+<li id="CR39">
+<span class="label">39.</span><cite>Petersson KM, Nichols TE, Poline JB, Holmes AP. Statistical limitations in functional neuroimaging. II. Signal detection and statistical inference. Philos Trans R Soc Lond B Biol Sci. 1999;354:1261–1281. doi: 10.1098/rstb.1999.0478.</cite> [<a href="https://doi.org/10.1098/rstb.1999.0478" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">DOI</a>] [<a href="/articles/PMC1692643/" class="usa-link">PMC free article</a>] [<a href="https://pubmed.ncbi.nlm.nih.gov/10466150/" class="usa-link">PubMed</a>] [<a href="https://scholar.google.com/scholar_lookup?journal=Signal%20detection%20and%20statistical%20inference.%20Philos%20Trans%20R%20Soc%20Lond%20B%20Biol%20Sci&amp;title=Statistical%20limitations%20in%20functional%20neuroimaging.%20II&amp;author=KM%20Petersson&amp;author=TE%20Nichols&amp;author=JB%20Poline&amp;author=AP%20Holmes&amp;volume=354&amp;publication_year=1999&amp;pages=1261-1281&amp;pmid=10466150&amp;doi=10.1098/rstb.1999.0478&amp;" class="usa-link usa-link--external" data-ga-action="click_feat_suppl" target="_blank" rel="noopener noreferrer">Google Scholar</a>]</li>
+</ul></section></section><section id="_ad93_" lang="en" class="associated-data"><h2 class="pmc_sec_title">Associated Data</h2>
+<p class="font-secondary"><em>This section collects any data citations, data availability statements, or supplementary materials included in this article.</em></p>
+<section id="_adsm93_" lang="en" class="supplementary-materials"><h3 class="pmc_sec_title">Supplementary Materials</h3>
+<section class="sm xbox font-sm" id="db_ds_supplementary-material1_reqid_"><div class="media p"><div class="caption">
+<a href="/articles/instance/5495792/bin/41598_2017_4047_MOESM1_ESM.pdf" data-ga-action="click_feat_suppl" class="usa-link">Supplementary Information</a><sup> (891.7KB, pdf) </sup>
+</div></div></section></section></section></section><footer class="p courtesy-note font-secondary font-sm text-center"><hr class="headless">
+<p>Articles from Scientific Reports are provided here courtesy of <strong>Nature Publishing Group</strong></p></footer></section></article>
+
+                      
+
+                    </main>
+                </div>
+            </div>
+        </div>
+
+        
+
+
+
+<!-- Secondary navigation placeholder -->
+<div class="pmc-sidenav desktop:grid-col-4 display-flex">
+    <section class="pmc-sidenav__container" aria-label="Article resources and navigation">
+        <button type="button" class="pmc-sidenav__container__close">
+            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/close.svg" role="img" alt="Close" />
+        </button>
+    <div class="display-none desktop:display-block">
+       <section class="margin-top-4 desktop:margin-top-0">
+              <h2 class="margin-top-0">ACTIONS</h2>
+           <ul class="usa-list usa-list--unstyled usa-list--actions">
+               
+               <li>
+                     <a
+                             href="https://doi.org/10.1038/s41598-017-04047-3"
+                             class="usa-button usa-button--outline width-24 font-xs display-inline-flex flex-align-center flex-justify-start padding-left-1"
+                             target="_blank"
+                             rel="noreferrer noopener"
+                             data-ga-category="actions"
+                             data-ga-action="click"
+                             data-ga-label="publisher_link_desktop"
+                     >
+                         <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/launch.svg" alt="View on publisher site icon" class="usa-icon usa-icon--size-3 usa-icon--link"/>
+                         <span class="display-inline-flex flex-justify-center flex-1 padding-right-2">View on publisher site</span>
+                     </a>
+               </li>
+               
+               
+               <li>
+                    <a
+                            href="pdf/41598_2017_Article_4047.pdf"
+                            class="usa-button usa-button--outline width-24 display-inline-flex flex-align-center flex-justify-start padding-left-1"
+                            data-ga-category="actions"
+                            data-ga-action="click"
+                            data-ga-label="pdf_download_desktop"
+                    >
+                         <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/file_download.svg" alt="Download PDF icon" class="usa-icon usa-icon--size-3 usa-icon--link"/>
+                        <span class="display-inline-flex flex-justify-center flex-1">PDF (1.9 MB)</span>
+                    </a>
+               </li>
+               
+                
+               <li>
+                   <button role="button" class="usa-button width-24 citation-dialog-trigger display-inline-flex flex-align-center flex-justify-start padding-left-1"
+                        aria-label="Open dialog with citation text in different styles"
+                        data-ga-category="actions"
+                        data-ga-action="open"
+                        data-ga-label="cite_desktop"
+                        data-all-citations-url="/resources/citations/5495792/"
+                        data-citation-style="nlm"
+                        data-download-format-link="/resources/citations/5495792/export/"
+                    >
+                       <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/format_quote.svg" alt="Cite icon" class="usa-icon usa-icon--size-3 usa-icon--white"/>
+                       <span class="display-inline-flex flex-justify-center flex-1 button-label">Cite</span>
+                    </button>
+               </li>
+                
+               <li>
+
+                        <button class="usa-button width-24 collections-dialog-trigger collections-button display-inline-flex flex-align-center flex-justify-start padding-left-1 collections-button-empty"
+                              aria-label="Save article in MyNCBI collections."
+                              data-ga-category="actions"
+                              data-ga-action="click"
+                              data-ga-label="collections_button_desktop"
+                              data-collections-open-dialog-enabled="false"
+                              data-collections-open-dialog-url="https://account.ncbi.nlm.nih.gov/?back_url=https%3A%2F%2Fpmc.ncbi.nlm.nih.gov%2Farticles%2FPMC5495792%2F%23open-collections-dialog"
+                              data-in-collections="false">
+                            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/action-bookmark-full.svg" alt="Collections icon" class="usa-icon usa-icon--size-3 usa-icon--white usa-icon--bookmark-full" hidden />
+                            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/action-bookmark-empty.svg" alt="Collections icon" class="usa-icon usa-icon--size-3 usa-icon--white usa-icon--bookmark-empty" hidden />
+                            <span class="display-inline-flex flex-justify-center flex-1">Collections</span>
+                       </button>
+               </li>
+               <li class="pmc-permalink">
+                    <button
+                            type="button"
+                            class="usa-button width-24 display-inline-flex flex-align-center flex-justify padding-left-1 shadow-none"
+                            aria-label="Show article permalink"
+                            aria-expanded="false"
+                            aria-haspopup="true"
+                            data-ga-category="actions"
+                            data-ga-action="open"
+                            data-ga-label="permalink_desktop"
+                    >
+                        <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/share.svg" alt="Permalink icon" class="usa-icon usa-icon--size-3 usa-icon--white"/>
+                        <span class="display-inline-flex flex-justify-center flex-1 button-label">Permalink</span>
+                    </button>
+                   
+
+<div class="pmc-permalink__dropdown" hidden>
+    <div class="pmc-permalink__dropdown__container">
+          <h2 class="usa-modal__heading margin-top-0 margin-bottom-2 text-uppercase font-sans-xs">PERMALINK</h2>
+          <div class="pmc-permalink__dropdown__content">
+              <input type="text" class="usa-input" value="https://pmc.ncbi.nlm.nih.gov/articles/PMC5495792/" aria-label="Article permalink">
+              <button class="usa-button display-inline-flex pmc-permalink__dropdown__copy__btn margin-right-0" title="Copy article permalink" data-ga-category="save_share" data-ga-action="link" data-ga-label="copy_link">
+                  <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/content_copy.svg" alt="Copy icon" aria-hidden="true" class="usa-icon usa-icon--white" />
+                  <span class="margin-left-1">Copy</span>
+              </button>
+          </div>
+    </div>
+</div>
+               </li>
+           </ul>
+       </section>
+     </div>
+
+        <section class="pmc-resources margin-top-6 desktop:margin-top-4" data-page-path="/articles/PMC5495792/">
+            <h2 class="margin-top-0">RESOURCES</h2>
+            
+                <div class="usa-accordion usa-accordion--multiselectable" data-allow-multiple>
+                    <h3 class="usa-accordion__heading">
+                        <button
+                        type="button"
+                        class="usa-accordion__button"
+                        aria-expanded="false"
+                        aria-controls="resources-similar-articles"
+                        data-ga-category="resources_accordion"
+                        data-ga-action="open_similar_articles"
+                        data-ga-label="/articles/PMC5495792/"
+                        data-action-open="open_similar_articles"
+                        data-action-close="close_similar_articles"
+                        >
+                            Similar articles
+                        </button>
+                    </h3>
+                    <div
+                            id="resources-similar-articles"
+                            class="usa-accordion__content usa-prose"
+                            
+                                data-source-url="/resources/similar-article-links/28674404/"
+                            
+                    >
+                        
+                    </div>
+                    <h3 class="usa-accordion__heading">
+                        <button
+                        type="button"
+                        class="usa-accordion__button"
+                        aria-expanded="false"
+                        aria-controls="resources-cited-by-other-articles"
+                        data-ga-category="resources_accordion"
+                        data-ga-action="open_cited_by"
+                        data-ga-label="/articles/PMC5495792/"
+                        data-action-open="open_cited_by"
+                        data-action-close="close_cited_by"
+                        >
+                             Cited by other articles
+                        </button>
+                    </h3>
+                    <div
+                            id="resources-cited-by-other-articles"
+                            class="usa-accordion__content usa-prose"
+                            
+                                data-source-url="/resources/cited-by-links/28674404/"
+                            
+                    >
+                          
+                    </div>
+                    
+                        <h3 class="usa-accordion__heading">
+                            <button
+                            type="button"
+                            class="usa-accordion__button"
+                            aria-expanded="false"
+                            aria-controls="resources-links-to-ncbi-databases"
+                            data-ga-category="resources_accordion"
+                            data-ga-action="open_NCBI_links"
+                            data-ga-label="/articles/PMC5495792/"
+                            data-action-open="open_NCBI_links"
+                            data-action-close="close_NCBI_link"
+                            >
+                                 Links to NCBI Databases
+                            </button>
+                        </h3>
+                        <div
+                                id="resources-links-to-ncbi-databases"
+                                class="usa-accordion__content usa-prose"
+                                data-source-url="/resources/db-links/5495792/"
+                        >
+                        </div>
+                    
+                    
+                </div>
+            
+        </section>
+
+
+        <section
+        class="usa-in-page-nav usa-in-page-nav--wide margin-top-6 desktop:margin-top-4"
+        data-title-text="On this page"
+        data-title-heading-level="h2"
+        data-scroll-offset="0"
+        data-root-margin="-10% 0px -80% 0px"
+        data-main-content-selector="main"
+        data-threshold="1"
+        hidden
+        ></section>
+    </section>
+</div>
+
+        
+
+<div class="overlay" role="dialog" aria-label="Citation Dialog" hidden>
+    <div class="dialog citation-dialog" aria-hidden="true">
+        <div class="display-inline-flex flex-align-center flex-justify width-full margin-bottom-2">
+            <h2 class="usa-modal__heading margin-0">Cite</h2>
+             <button type="button" class="usa-button usa-button--unstyled close-overlay text-black width-auto"  tabindex="1">
+                 <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/close.svg" alt="Close icon" class="usa-icon usa-icon--size-3 usa-icon--button" />
+             </button>
+        </div>
+
+        
+
+<div class="citation-text-block">
+  <div class="citation-text margin-bottom-2"></div>
+  <ul class="usa-list usa-list--unstyled display-inline-flex flex-justify width-full flex-align-center">
+      <li>
+        <button
+          class="usa-button usa-button--unstyled text-no-underline display-flex flex-align-center copy-button dialog-focus"
+          data-ga-category="save_share"
+          data-ga-action="cite"
+          data-ga-label="copy"
+          tabindex="2">
+            <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/content_copy.svg" alt="Copy icon" class="usa-icon usa-icon--size-3 usa-icon--link" />
+            <span>Copy</span>
+        </button>
+      </li>
+      <li>
+          <a
+              href="#"
+              role="button"
+              class="usa-button usa-button--unstyled text-no-underline display-flex flex-align-center export-button"
+              data-ga-category="save_share"
+              data-ga-action="cite"
+              data-ga-label="download"
+              title="Download a file for external citation management software"
+              tabindex="3">
+                <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/file_download.svg" alt="Download icon" aria-hidden="true" class="usa-icon usa-icon--size-3 usa-icon--link" />
+                <span class="display-none mobile-lg:display-inline">Download .nbib</span>
+                <span class="display-inline mobile-lg:display-none">.nbib</span>
+            </a>
+      </li>
+      <li>
+          
+
+<div class="display-inline-flex flex-align-center">
+  <label class="usa-label margin-top-0">Format:</label>
+  <select aria-label="Format" class="usa-select citation-style-selector padding-1 margin-top-0 border-0 padding-right-4" tabindex="4" >
+    
+      <option data-style-url-name="ama"
+              value="AMA"
+              >
+        AMA
+      </option>
+    
+      <option data-style-url-name="apa"
+              value="APA"
+              >
+        APA
+      </option>
+    
+      <option data-style-url-name="mla"
+              value="MLA"
+              >
+        MLA
+      </option>
+    
+      <option data-style-url-name="nlm"
+              value="NLM"
+              selected="selected">
+        NLM
+      </option>
+    
+  </select>
+</div>
+      </li>
+  </ul>
+</div>
+    </div>
+</div>
+
+        <div class="overlay" role="dialog" hidden>
+  <div id="collections-action-dialog" class="dialog collections-dialog" aria-hidden="true">
+   <div class="display-inline-flex flex-align-center flex-justify width-full margin-bottom-2">
+        <h2 class="usa-modal__heading margin-0">Add to Collections</h2>
+    </div>
+    <div class="collections-action-panel action-panel">
+      
+
+
+<form id="collections-action-dialog-form"
+      class="usa-form maxw-full collections-action-panel-form action-panel-content action-form action-panel-smaller-selectors"
+      data-existing-collections-url="/list-existing-collections/"
+      data-add-to-existing-collection-url="/add-to-existing-collection/"
+      data-create-and-add-to-new-collection-url="/create-and-add-to-new-collection/"
+      data-myncbi-max-collection-name-length="100"
+      data-collections-root-url="https://www.ncbi.nlm.nih.gov/myncbi/collections/">
+
+    <input type="hidden" name="csrfmiddlewaretoken" value="GIZaxwdEJbKuEZ8w5BonCYIvrk96RIR9qZNUDcRbVWhZl3OWEGUwfqCC8oOQ63bZ">
+
+    <fieldset class="usa-fieldset margin-bottom-2">
+        <div class="usa-radio">
+            <input type="radio"
+            id="collections-action-dialog-new"
+            class="usa-radio__input usa-radio__input--tile collections-new  margin-top-0"
+            name="collections"
+            value="new"
+            data-ga-category="collections_button"
+            data-ga-action="click"
+            data-ga-label="collections_radio_new" />
+            <label class="usa-radio__label" for="collections-action-dialog-new">Create a new collection</label>
+        </div>
+        <div class="usa-radio">
+            <input type="radio"
+            id="collections-action-dialog-existing"
+            class="usa-radio__input usa-radio__input--tile collections-existing"
+            name="collections"
+            value="existing"
+            checked="true"
+            data-ga-category="collections_button"
+            data-ga-action="click"
+            data-ga-label="collections_radio_existing" />
+            <label class="usa-radio__label" for="collections-action-dialog-existing">Add to an existing collection</label>
+        </div>
+    </fieldset>
+
+    <fieldset class="usa-fieldset margin-bottom-2">
+        <div class="action-panel-control-wrap new-collections-controls">
+           <label for="collections-action-dialog-add-to-new" class="usa-label margin-top-0">
+                Name your collection
+               <abbr title="required" class="usa-hint usa-hint--required text-no-underline">*</abbr>
+          </label>
+          <input
+            type="text"
+            name="add-to-new-collection"
+            id="collections-action-dialog-add-to-new"
+            class="usa-input collections-action-add-to-new"
+            pattern="[^&quot;&amp;=&lt;&gt;/]*" title="The following characters are not allowed in the Name field: &quot;&amp;=&lt;&gt;/"
+            maxlength=""
+            data-ga-category="collections_button"
+            data-ga-action="create_collection"
+            data-ga-label="non_favorties_collection"
+            required
+          />
+        </div>
+        <div class="action-panel-control-wrap existing-collections-controls">
+             <label for="collections-action-dialog-add-to-existing" class="usa-label margin-top-0">
+                Choose a collection
+              </label>
+              <select id="collections-action-dialog-add-to-existing"
+                      class="usa-select collections-action-add-to-existing"
+                      data-ga-category="collections_button"
+                      data-ga-action="select_collection"
+                      data-ga-label="($('.collections-action-add-to-existing').val() === 'Favorites') ? 'Favorites' : 'non_favorites_collection'">
+              </select>
+              <div class="collections-retry-load-on-error usa-input-error-message selection-validation-message">
+                Unable to load your collection due to an error<br>
+                <a href="#">Please try again</a>
+              </div>
+        </div>
+    </fieldset>
+
+    <div class="display-inline-flex">
+        <button class="usa-button margin-top-0 action-panel-submit"
+            type="submit"
+            data-loading-label="Adding..."
+            data-pinger-ignore
+            data-ga-category="collections_button"
+            data-ga-action="click"
+            data-ga-label="add">
+          Add
+        </button>
+        <button class="usa-button usa-button--outline margin-top-0 action-panel-cancel"
+                aria-label="Close 'Add to Collections' panel"
+                ref="linksrc=close_collections_panel"
+                data-ga-category="collections_button"
+                data-ga-action="click"
+                data-ga-label="cancel">
+          Cancel
+        </button>
+    </div>
+</form>
+    </div>
+  </div>
+</div>
+
+        
+
+      </div>
+    </div>
+  </div>
+
+
+
+        
+    
+    
+
+<footer class="ncbi-footer ncbi-dark-background " >
+    
+        <div class="ncbi-footer__icon-section">
+            <div class="ncbi-footer__social-header">
+                Follow NCBI
+            </div>
+
+            <div class="grid-container ncbi-footer__ncbi-social-icons-container">
+                
+                    <a href="https://twitter.com/ncbi"
+                       class="ncbi-footer__social-icon ncbi-footer__social-icon--gray"
+                       target="_blank"
+                       rel="noreferrer noopener">
+                        <svg width="40"
+                             height="40"
+                             viewBox="0 0 40 40"
+                             fill="none"
+                             xmlns="http://www.w3.org/2000/svg"
+                             focusable="false"
+                             aria-hidden="true">
+                            <path d="m6.067 8 10.81 13.9L6 33.2h4.2l8.4-9.1 7.068 9.1H34L22.8 18.5 31.9 8h-3.5l-7.7 8.4L14.401 8H6.067Zm3.6 1.734h3.266l16.8 21.732H26.57L9.668 9.734Z">
+                            </path>
+                        </svg>
+                        <span class="usa-sr-only">NCBI on X (formerly known as Twitter)</span>
+                    </a>
+                
+
+                
+                    <a href="https://www.facebook.com/ncbi.nlm"
+                       class="ncbi-footer__social-icon ncbi-footer__social-icon--gray"
+                       target="_blank"
+                       rel="noreferrer noopener">
+                        <svg width="16"
+                             height="29"
+                             focusable="false"
+                             aria-hidden="true"
+                             viewBox="0 0 16 29"
+                             fill="none"
+                             xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3.8809 21.4002C3.8809 19.0932 3.8809 16.7876 3.8809 14.478C3.8809 14.2117 3.80103 14.1452 3.54278 14.1492C2.53372 14.1638 1.52334 14.1492 0.514288 14.1598C0.302626 14.1598 0.248047 14.0972 0.248047 13.8936C0.256034 12.4585 0.256034 11.0239 0.248047 9.58978C0.248047 9.37013 0.302626 9.30224 0.528931 9.3049C1.53798 9.31688 2.54837 9.3049 3.55742 9.31555C3.80103 9.31555 3.8809 9.26097 3.87957 9.00272C3.87158 8.00565 3.85428 7.00592 3.90753 6.00884C3.97142 4.83339 4.31487 3.73115 5.04437 2.78467C5.93095 1.63318 7.15699 1.09005 8.56141 0.967577C10.5582 0.79319 12.555 0.982221 14.5518 0.927641C14.7102 0.927641 14.7462 0.99287 14.7449 1.13664C14.7449 2.581 14.7449 4.02668 14.7449 5.47104C14.7449 5.67604 14.6517 5.68669 14.4946 5.68669C13.4523 5.68669 12.4113 5.68669 11.3703 5.68669C10.3506 5.68669 9.92057 6.10868 9.90593 7.13904C9.89661 7.7647 9.91525 8.39303 9.89794 9.01869C9.88995 9.26364 9.96583 9.31822 10.2015 9.31688C11.7204 9.30623 13.2393 9.31688 14.7595 9.3049C15.0257 9.3049 15.0723 9.3728 15.0444 9.62439C14.89 10.9849 14.7515 12.3467 14.6144 13.7085C14.5691 14.1571 14.5785 14.1585 14.1458 14.1585C12.8386 14.1585 11.5313 14.1665 10.2254 14.1518C9.95119 14.1518 9.89794 14.2317 9.89794 14.4899C9.90593 19.0799 9.89794 23.6752 9.91125 28.2612C9.91125 28.5674 9.8407 28.646 9.53186 28.6433C7.77866 28.6273 6.02414 28.6366 4.27094 28.634C3.82499 28.634 3.87158 28.6992 3.87158 28.22C3.87602 25.9472 3.87913 23.6739 3.8809 21.4002Z">
+                            </path>
+                        </svg>
+                        <span class="usa-sr-only">NCBI on Facebook</span>
+                    </a>
+                
+
+                
+                    <a href="https://www.linkedin.com/company/ncbinlm"
+                       class="ncbi-footer__social-icon ncbi-footer__social-icon--gray"
+                       target="_blank"
+                       rel="noreferrer noopener">
+                        <svg width="25"
+                             height="23"
+                             viewBox="0 0 26 24"
+                             fill="none"
+                             xmlns="http://www.w3.org/2000/svg"
+                             focusable="false"
+                             aria-hidden="true">
+                            <path d="M14.6983 9.98423C15.6302 9.24808 16.5926 8.74754 17.6762 8.51991C19.673 8.09126 21.554 8.30824 23.1262 9.7526C24.2351 10.7723 24.7529 12.1115 25.0165 13.5612C25.1486 14.3363 25.2105 15.1218 25.2015 15.9081C25.2015 18.3043 25.2015 20.6898 25.2082 23.0806C25.2082 23.3468 25.1549 23.444 24.8621 23.4414C23.1297 23.4272 21.3992 23.4272 19.6704 23.4414C19.4041 23.4414 19.3429 23.3588 19.3442 23.1019C19.3535 20.5194 19.3442 17.9368 19.3442 15.3543C19.3442 14.0005 18.3258 12.9448 17.0266 12.9488C15.7273 12.9528 14.6983 14.0071 14.6983 15.361C14.6983 17.9328 14.6917 20.5047 14.6983 23.0753C14.6983 23.3708 14.6198 23.444 14.3296 23.4427C12.6185 23.4294 10.9079 23.4294 9.19779 23.4427C8.93155 23.4427 8.86099 23.3735 8.86232 23.1086C8.8783 19.7619 8.88628 16.4144 8.88628 13.066C8.88628 11.5688 8.87874 10.0708 8.86365 8.57182C8.86365 8.3575 8.90758 8.27896 9.14054 8.28029C10.9048 8.29094 12.6687 8.29094 14.4321 8.28029C14.6464 8.28029 14.6983 8.34818 14.6983 8.54653C14.6903 9.00047 14.6983 9.45441 14.6983 9.98423Z">
+                            </path>
+                            <path d="M6.55316 15.8443C6.55316 18.2564 6.55316 20.6699 6.55316 23.082C6.55316 23.3629 6.48127 23.4388 6.19906 23.4374C4.47737 23.4241 2.75568 23.4241 1.03399 23.4374C0.767751 23.4374 0.69986 23.3629 0.701191 23.1006C0.709178 18.2648 0.709178 13.4281 0.701191 8.59053C0.701191 8.34026 0.765089 8.27237 1.01669 8.2737C2.74991 8.28435 4.48048 8.28435 6.20838 8.2737C6.47462 8.2737 6.5465 8.33627 6.54517 8.6065C6.54783 11.0186 6.55316 13.4308 6.55316 15.8443Z">
+                            </path>
+                            <path d="M3.65878 0.243898C5.36804 0.243898 6.58743 1.45529 6.58743 3.1406C6.58743 4.75801 5.32145 5.95742 3.60819 5.96807C3.22177 5.97614 2.83768 5.90639 2.47877 5.76299C2.11985 5.61959 1.79344 5.40546 1.51897 5.13334C1.24449 4.86123 1.02755 4.53668 0.881058 4.17902C0.734563 3.82136 0.661505 3.43788 0.666231 3.05141C0.67555 1.42601 1.9362 0.242566 3.65878 0.243898Z">
+                            </path>
+                        </svg>
+                        <span class="usa-sr-only">NCBI on LinkedIn</span>
+                    </a>
+                
+
+                
+                    <a href="https://github.com/ncbi"
+                       class="ncbi-footer__social-icon ncbi-footer__social-icon--gray"
+                       target="_blank"
+                       rel="noreferrer noopener">
+                        <svg width="28"
+                             height="27"
+                             viewBox="0 0 28 28"
+                             fill="none"
+                             xmlns="http://www.w3.org/2000/svg"
+                             focusable="false"
+                             aria-hidden="true">
+                            <path d="M16.7228 20.6334C17.5057 20.5527 18.2786 20.3944 19.0301 20.1608C21.3108 19.4193 22.5822 17.8259 22.963 15.4909C23.1228 14.5112 23.1814 13.5287 22.9883 12.5437C22.8106 11.6423 22.4013 10.8028 21.8007 10.1076C21.7526 10.0605 21.7197 10 21.7064 9.934C21.6931 9.86799 21.7 9.79952 21.7262 9.73748C22.0856 8.6206 21.9711 7.51969 21.601 6.42677C21.582 6.3497 21.5345 6.2827 21.468 6.23923C21.4016 6.19577 21.3211 6.17906 21.2429 6.19248C20.7329 6.21649 20.2313 6.33051 19.7611 6.52928C19.1103 6.7908 18.4899 7.12198 17.9104 7.51703C17.84 7.56996 17.7581 7.60551 17.6713 7.62078C17.5846 7.63605 17.4954 7.6306 17.4112 7.60489C15.2596 7.05882 13.0054 7.06203 10.8554 7.61421C10.7806 7.63586 10.7018 7.63967 10.6253 7.62534C10.5487 7.611 10.4766 7.57892 10.4148 7.53167C9.64788 7.03247 8.85171 6.58918 7.96368 6.33359C7.65781 6.24338 7.34123 6.19458 7.02239 6.18849C6.94879 6.17986 6.87462 6.19893 6.81432 6.242C6.75402 6.28507 6.71191 6.34904 6.69621 6.42145C6.32342 7.51437 6.2209 8.61527 6.56307 9.73348C6.59635 9.84264 6.64694 9.93316 6.54177 10.0516C5.47666 11.2604 5.09988 12.6834 5.19574 14.2676C5.2663 15.4244 5.46201 16.5466 6.01454 17.5769C6.84399 19.1171 8.21664 19.9119 9.85158 20.3352C10.3938 20.4706 10.9444 20.5698 11.4998 20.632C11.5384 20.7492 11.4506 20.7798 11.408 20.8291C11.1734 21.1179 10.9894 21.4441 10.8634 21.7942C10.7622 22.0458 10.8315 22.4039 10.6065 22.5516C10.263 22.7766 9.83827 22.8485 9.42421 22.8871C8.17936 23.0056 7.26471 22.4877 6.6283 21.4348C6.25552 20.8184 5.76956 20.3325 5.08523 20.0663C4.76981 19.9325 4.42139 19.8967 4.08537 19.9638C3.7898 20.029 3.73788 20.1901 3.93891 20.4111C4.03639 20.5234 4.14989 20.6207 4.27575 20.6999C4.9796 21.1318 5.51717 21.7884 5.80152 22.5636C6.37002 23.9973 7.48039 24.5697 8.93825 24.6323C9.43741 24.6575 9.93768 24.615 10.4254 24.5058C10.5892 24.4672 10.6531 24.4872 10.6517 24.6762C10.6451 25.4936 10.6637 26.3123 10.6517 27.131C10.6517 27.6635 10.1684 27.9297 9.58663 27.7393C8.17396 27.2671 6.84977 26.5631 5.66838 25.656C2.59555 23.2891 0.720966 20.1861 0.217704 16.3376C-0.357453 11.9127 0.911353 8.00824 3.98551 4.73881C6.11909 2.42656 8.99932 0.939975 12.1203 0.540191C16.5351 -0.0601815 20.4347 1.14323 23.7232 4.16373C26.2449 6.47869 27.724 9.37672 28.1048 12.7726C28.5828 17.0325 27.3686 20.7945 24.4768 23.9827C22.9762 25.6323 21.0956 26.8908 18.9982 27.6488C18.8783 27.6927 18.7585 27.738 18.636 27.7726C18.0356 27.9404 17.6189 27.6395 17.6189 27.0098C17.6189 25.7452 17.6308 24.4806 17.6295 23.2159C17.6329 22.9506 17.6128 22.6856 17.5696 22.4238C17.4325 21.6664 17.3419 21.484 16.7228 20.6334Z">
+                            </path>
+                        </svg>
+                        <span class="usa-sr-only">NCBI on GitHub</span>
+                    </a>
+                
+
+                
+                    <a href="https://ncbiinsights.ncbi.nlm.nih.gov/"
+                       class="ncbi-footer__social-icon ncbi-footer__social-icon--gray"
+                       target="_blank"
+                       rel="noreferrer noopener">
+                        <svg width="26"
+                             height="26"
+                             viewBox="0 0 27 27"
+                             fill="none"
+                             xmlns="http://www.w3.org/2000/svg"
+                             focusable="false"
+                             aria-hidden="true">
+                            <path d="M23.7778 26.4574C23.1354 26.3913 22.0856 26.8024 21.636 26.3087C21.212 25.8444 21.4359 24.8111 21.324 24.0347C19.9933 14.8323 14.8727 8.80132 6.09057 5.85008C4.37689 5.28406 2.58381 4.99533 0.779072 4.99481C0.202773 4.99481 -0.0229751 4.83146 0.00455514 4.21479C0.0660406 3.08627 0.0660406 1.95525 0.00455514 0.826734C-0.0413285 0.0815827 0.259669 -0.0193618 0.896534 0.00266238C6.96236 0.222904 12.3693 2.24179 16.9889 6.16209C22.9794 11.2478 26.1271 17.7688 26.4372 25.648C26.4629 26.294 26.3179 26.5271 25.6609 26.4684C25.0827 26.417 24.4991 26.4574 23.7778 26.4574Z">
+                            </path>
+                            <path d="M14.8265 26.441C14.0924 26.441 13.2371 26.6795 12.6626 26.3786C12.0092 26.0372 12.3781 25.0644 12.246 24.378C11.1154 18.5324 6.6849 14.5497 0.74755 14.1001C0.217135 14.0615 -0.0104482 13.9422 0.0134113 13.3659C0.0519536 12.1454 0.0482829 10.9213 0.0134113 9.69524C-0.00127145 9.14464 0.196946 9.03268 0.703502 9.04736C9.21217 9.27128 16.5994 16.2511 17.2804 24.7231C17.418 26.4446 17.418 26.4446 15.6579 26.4446H14.832L14.8265 26.441Z">
+                            </path>
+                            <path d="M3.58928 26.4555C2.64447 26.4618 1.73584 26.0925 1.06329 25.4289C0.39073 24.7653 0.00933763 23.8617 0.0030097 22.9169C-0.00331824 21.9721 0.365937 21.0635 1.02954 20.3909C1.69315 19.7184 2.59675 19.337 3.54156 19.3306C4.48637 19.3243 5.39499 19.6936 6.06755 20.3572C6.7401 21.0208 7.1215 21.9244 7.12782 22.8692C7.13415 23.814 6.7649 24.7226 6.10129 25.3952C5.43768 26.0677 4.53409 26.4491 3.58928 26.4555Z">
+                            </path>
+                        </svg>
+                        <span class="usa-sr-only">NCBI RSS feed</span>
+                    </a>
+                
+            </div>
+        </div>
+    
+
+    <div data-testid="gridContainer"
+         class="grid-container ncbi-footer__container">
+        <div class="grid-row ncbi-footer__main-content-container"
+             data-testid="grid">
+            
+                <div class="ncbi-footer__column">
+                    
+                        <p class="ncbi-footer__circled-icons-heading">
+                            Connect with NLM
+                        </p>
+                    
+
+                    <div class="ncbi-footer__circled-icons-list">
+                        
+                            <a href=https://twitter.com/nlm_nih class="ncbi-footer__social-icon ncbi-footer__social-icon--circled" target="_blank" rel="noreferrer noopener">
+                                <svg width="32"
+                                     height="32"
+                                     viewBox="0 0 40 40"
+                                     fill="none"
+                                     xmlns="http://www.w3.org/2000/svg"
+                                     focusable="false"
+                                     aria-hidden="true">
+                                    <path d="m6.067 8 10.81 13.9L6 33.2h4.2l8.4-9.1 7.068 9.1H34L22.8 18.5 31.9 8h-3.5l-7.7 8.4L14.401 8H6.067Zm3.6 1.734h3.266l16.8 21.732H26.57L9.668 9.734Z">
+                                    </path>
+                                </svg>
+                                <span class="usa-sr-only">NLM on X (formerly known as Twitter)</span>
+                            </a>
+                        
+
+                        
+                            <a href=https://www.facebook.com/nationallibraryofmedicine class="ncbi-footer__social-icon ncbi-footer__social-icon--circled" target="_blank" rel="noreferrer noopener">
+                                <svg width="13"
+                                     height="24"
+                                     viewBox="0 0 13 24"
+                                     fill="none"
+                                     xmlns="http://www.w3.org/2000/svg"
+                                     focusable="false"
+                                     aria-hidden="true">
+                                    <path d="M4.11371 23.1369C4.11371 23.082 4.11371 23.0294 4.11371 22.9745V12.9411H0.817305C0.6709 12.9411 0.670898 12.9411 0.670898 12.8016C0.670898 11.564 0.670898 10.3287 0.670898 9.09341C0.670898 8.97903 0.705213 8.95158 0.815017 8.95158C1.8673 8.95158 2.91959 8.95158 3.97417 8.95158H4.12057V8.83263C4.12057 7.8055 4.12057 6.7738 4.12057 5.74897C4.1264 4.92595 4.31387 4.11437 4.66959 3.37217C5.12916 2.38246 5.94651 1.60353 6.95717 1.1921C7.64827 0.905008 8.3913 0.764035 9.13953 0.778051C10.0019 0.791777 10.8644 0.830666 11.7268 0.860404C11.8869 0.860404 12.047 0.894717 12.2072 0.90158C12.2964 0.90158 12.3261 0.940469 12.3261 1.02968C12.3261 1.5421 12.3261 2.05452 12.3261 2.56465C12.3261 3.16857 12.3261 3.7725 12.3261 4.37642C12.3261 4.48165 12.2964 4.51367 12.1912 4.51138C11.5369 4.51138 10.8804 4.51138 10.2261 4.51138C9.92772 4.51814 9.63058 4.5526 9.33855 4.61433C9.08125 4.6617 8.84537 4.78881 8.66431 4.97766C8.48326 5.16652 8.3662 5.40755 8.32972 5.66661C8.28476 5.89271 8.26027 6.1224 8.25652 6.35289C8.25652 7.19014 8.25652 8.02969 8.25652 8.86923C8.25652 8.89439 8.25652 8.91955 8.25652 8.95615H12.0219C12.1797 8.95615 12.182 8.95616 12.1614 9.10714C12.0768 9.76596 11.9876 10.4248 11.9029 11.0813C11.8312 11.6319 11.7626 12.1824 11.697 12.733C11.6719 12.9434 11.6787 12.9434 11.4683 12.9434H8.26338V22.899C8.26338 22.979 8.26338 23.0591 8.26338 23.1392L4.11371 23.1369Z">
+                                    </path>
+                                </svg>
+                                <span class="usa-sr-only">NLM on Facebook</span>
+                            </a>
+                        
+
+                        
+                            <a href=https://www.youtube.com/user/NLMNIH class="ncbi-footer__social-icon ncbi-footer__social-icon--circled" target="_blank" rel="noreferrer noopener">
+                                <svg width="21"
+                                     height="15"
+                                     viewBox="0 0 21 15"
+                                     fill="none"
+                                     xmlns="http://www.w3.org/2000/svg"
+                                     focusable="false"
+                                     aria-hidden="true">
+                                    <path d="M19.2561 1.47914C18.9016 1.15888 18.5699 0.957569 17.2271 0.834039C15.5503 0.678484 13.2787 0.655608 11.563 0.65332H9.43556C7.71987 0.65332 5.4483 0.678484 3.77151 0.834039C2.43098 0.957569 2.097 1.15888 1.74242 1.47914C0.813665 2.32097 0.619221 4.62685 0.598633 6.89384C0.598633 7.31781 0.598633 7.74101 0.598633 8.16345C0.626084 10.4121 0.827391 12.686 1.74242 13.521C2.097 13.8412 2.4287 14.0425 3.77151 14.1661C5.4483 14.3216 7.71987 14.3445 9.43556 14.3468H11.563C13.2787 14.3468 15.5503 14.3216 17.2271 14.1661C18.5676 14.0425 18.9016 13.8412 19.2561 13.521C20.1712 12.6929 20.3725 10.451 20.3999 8.22064C20.3999 7.74025 20.3999 7.25986 20.3999 6.77946C20.3725 4.54907 20.1689 2.30724 19.2561 1.47914ZM8.55942 10.5311V4.65201L13.5601 7.50005L8.55942 10.5311Z"
+                                          fill="white" />
+                                </svg>
+                                <span class="usa-sr-only">NLM on YouTube</span>
+                            </a>
+                        
+                    </div>
+                </div>
+            
+
+            
+                <address class="ncbi-footer__address ncbi-footer__column">
+                    
+        <p>
+            <a class="usa-link usa-link--external"
+            href="https://www.google.com/maps/place/8600+Rockville+Pike,+Bethesda,+MD+20894/%4038.9959508,
+            -77.101021,17z/data%3D!3m1!4b1!4m5!3m4!1s0x89b7c95e25765ddb%3A0x19156f88b27635b8!8m2!3d38.9959508!
+            4d-77.0988323"
+            rel="noopener noreferrer" target="_blank">National Library of Medicine
+            <br/> 8600 Rockville Pike<br/> Bethesda, MD 20894</a>
+        </p>
+    
+                </address>
+            
+
+            
+                <ul class="usa-list usa-list--unstyled ncbi-footer__vertical-list ncbi-footer__column">
+                    
+                        <li class="ncbi-footer__vertical-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.nlm.nih.gov/web_policies.html" class="usa-link  usa-link--alt ncbi-footer__link"  >
+        
+
+        
+            Web Policies
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                        <li class="ncbi-footer__vertical-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.nih.gov/institutes-nih/nih-office-director/office-communications-public-liaison/freedom-information-act-office" class="usa-link  usa-link--alt ncbi-footer__link"  >
+        
+
+        
+            FOIA
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                        <li class="ncbi-footer__vertical-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.hhs.gov/vulnerability-disclosure-policy/index.html" class="usa-link usa-link--external usa-link--alt ncbi-footer__link" rel="noreferrer noopener" target='_blank' >
+        
+
+        
+            HHS Vulnerability Disclosure
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                </ul>
+            
+
+            
+                <ul class="usa-list usa-list--unstyled ncbi-footer__vertical-list ncbi-footer__column">
+                    
+                        <li class="ncbi-footer__vertical-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://support.nlm.nih.gov/" class="usa-link  usa-link--alt ncbi-footer__link"  >
+        
+
+        
+            Help
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                        <li class="ncbi-footer__vertical-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.nlm.nih.gov/accessibility.html" class="usa-link  usa-link--alt ncbi-footer__link"  >
+        
+
+        
+            Accessibility
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                        <li class="ncbi-footer__vertical-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.nlm.nih.gov/careers/careers.html" class="usa-link  usa-link--alt ncbi-footer__link"  >
+        
+
+        
+            Careers
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                </ul>
+            
+        </div>
+
+        
+            <div class="grid-row grid-col-12" data-testid="grid">
+                <ul class="ncbi-footer__bottom-links-list">
+                    
+                        <li class="ncbi-footer__bottom-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.nlm.nih.gov/" class="usa-link  usa-link--alt ncbi-footer__link"  >
+        
+
+        
+            NLM
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                        <li class="ncbi-footer__bottom-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.nih.gov/" class="usa-link  usa-link--alt ncbi-footer__link"  >
+        
+
+        
+            NIH
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                        <li class="ncbi-footer__bottom-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.hhs.gov/" class="usa-link usa-link--external usa-link--alt ncbi-footer__link" rel="noreferrer noopener" target='_blank' >
+        
+
+        
+            HHS
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                        <li class="ncbi-footer__bottom-list-item">
+                            
+
+
+
+
+
+
+
+
+
+    <a href="https://www.usa.gov/" class="usa-link usa-link--external usa-link--alt ncbi-footer__link" rel="noreferrer noopener" target='_blank' >
+        
+
+        
+            USA.gov
+        
+
+        
+    </a>
+
+
+                        </li>
+                    
+                </ul>
+            </div>
+        
+    </div>
+</footer>
+
+    
+
+
+        
+        
+    
+  <script  type="text/javascript" src="https://cdn.ncbi.nlm.nih.gov/core/pinger/pinger.js"> </script>
+
+
+    
+        
+
+<button class="back-to-top" data-ga-category="pagination" data-ga-action="back_to_top">
+    <label>Back to Top</label>
+    <img src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/img/usa-icons/arrow_upward.svg" alt="back to top icon" class="usa-icon usa-icon--size-3 order-0 usa-icon--white" />
+</button>
+    
+
+
+        
+    
+    <div id="icon-container" style="display: none;"></div>
+    
+    
+        
+    <script type="application/javascript">
+    window.ncbi = window.ncbi || {};
+    window.ncbi.pmc = window.ncbi.pmc || {};
+    window.ncbi.pmc.options = {
+        logLevel: 'INFO',
+        
+        staticEndpoint: 'https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/',
+        
+        citeCookieName: 'pmc-cf',
+    };
+</script>
+    <script type="module" crossorigin="" src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/base-Cp_Il6gk.js"></script>
+<link href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/vendor-Co8Vdmw2.js" type="text/javascript" crossorigin="anonymous" rel="modulepreload" as="script" />
+    
+    <script type="text/javascript" src="https://cdn.ncbi.nlm.nih.gov/core/jquery/jquery-3.6.0.min.js">&#xA0;</script>
+    <script type="text/javascript">
+        jQuery.getScript("https://cdn.ncbi.nlm.nih.gov/core/alerts/alerts.js", function () {
+            galert(['div.nav_and_browser', 'div.header', '#universal_header', '.usa-banner', 'body > *:nth-child(1)'])
+        });
+    </script>
+
+
+    <script type="text/javascript">var exports = {};</script>
+     <script src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/CACHE/js/output.4e25b6297b38.js"></script>
+
+    <script type="module" crossorigin="" src="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/article-D47MIn9n.js"></script>
+<link href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/vendor-Co8Vdmw2.js" type="text/javascript" crossorigin="anonymous" rel="modulepreload" as="script" />
+<link href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/index-DXSA0fsx.js" type="text/javascript" crossorigin="anonymous" rel="modulepreload" as="script" />
+<link href="https://cdn.ncbi.nlm.nih.gov/pmc/pd-medc-pmc-cloudpmc-viewer/production/9b1d9d87/var/data/static/assets/secure-cookie-Br6x5jtB.js" type="text/javascript" crossorigin="anonymous" rel="modulepreload" as="script" />
+    
+    
+
+    </body>
+</html>
