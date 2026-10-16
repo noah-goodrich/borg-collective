@@ -1,0 +1,13 @@
+{
+  "desc": "A PR stacked on another open PR is never offered as mergeable now",
+  "program": "2026-10-16-stacked-pr-merge-readiness",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#436",
+      "status": "open",
+      "why": "borg next and borg link wait on the parent PR instead of offering merge now"
+    }
+  ]
+}
