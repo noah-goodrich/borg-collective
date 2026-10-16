@@ -12,7 +12,7 @@ user-invocable: true
 
 You synthesize on top of the `borg link` engine. Explain like the reader is 10: plain, terse, most-urgent-first. Do not hard-wrap output.
 
-`scope.kind` is the engine's answer: `orchestrator` (the Queen session) gets the Queen view; `repository` (a repository, a linked worktree, or an explicit repository name) gets a page about exactly that one directory. Answer; do not re-render. In a drone the SessionStart hook already injected the latest checkpoint, so run this skill only when asked, never as a session-start ritual.
+`scope.kind` is the engine's answer: `orchestrator` (the Queen session, at `BORG_ORCHESTRATOR_ROOT`) gets the Queen view; `repository` (a repository, a linked worktree, or an explicit repository name) gets a page about exactly that one directory. Answer; do not re-render. In a drone the SessionStart hook already injected the latest checkpoint, so run this skill only when asked, never as a session-start ritual.
 
 ## Step 1 — Run the engine, then branch on `scope.kind`
 

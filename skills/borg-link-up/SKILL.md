@@ -1,8 +1,8 @@
 ---
 name: borg-link-up
 description: >
-  "Link up" to the collective: flush session state to a checkpoint in
-  <repository>/.borg/checkpoints/ that the next SessionStart restores. Use when ending a session,
+  "Link up" to the collective: flush session state to a checkpoint at
+  <repository>/.borg/checkpoints/<timestamp>.md, which the next SessionStart restores. Use when ending a session,
   before a break, or when switching repositories.
 allowed-tools: Bash(borg checkpoint-prepare *)
 ---

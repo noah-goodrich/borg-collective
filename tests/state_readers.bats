@@ -188,7 +188,10 @@ _orch_overview() {
     _new '{"status":"active","last_activity":"2026-02-01T00:00:00Z"}'
     out="$(_orch_overview)"
     [[ "$out" == *"proj [active]"* ]]
-    [[ "$out" == *"nopath [idle]"* ]]
+    # A repository with no path has never been active, so the overview counts it instead of listing it; the
+    # count proves the row was read whole (a shifted column would drop it or its neighbour).
+    [[ "$out" == *"+ 1 idle 30+ days (borg link for all)"* ]]
+    [[ "$out" == *"(2 repositories)"* ]]
 }
 
 @test "link-down capacity count: reads new-then-legacy through the registry repo" {
