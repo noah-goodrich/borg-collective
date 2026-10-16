@@ -4,9 +4,12 @@
 # launchd's minimal environment, parses "Current session: N% used", and caches the answer for 120s.
 #
 # borg_resume_probe prints N (0..100) and returns 0, or prints a message on stderr and returns 1.
+# A usage-billed account (Enterprise seat) has no session limit: its /usage prints a cost summary ("Total cost:")
+# and no "Current session:" line. That is a valid state, not a parse failure: the probe prints the word
+# "unmetered" and returns 0. Callers must test for it before comparing the answer as a number.
 # Test seam: BORG_RESUME_USAGE_CMD (a shell command whose stdout replaces the claude call), honoured only when
 # BORG_RESUME_DIR is set. The claude call is bounded by BORG_RESUME_PROBE_TIMEOUT seconds (default 30).
-# Cache: <borg_resume_dir>/usage-probe.json {"at":<epoch>,"session_pct":N}. Needs resume-paths.sh sourced.
+# Cache: <borg_resume_dir>/usage-probe.json {"at":<epoch>,"session_pct":N} (unmetered: "session_pct":"unmetered"). Needs resume-paths.sh sourced.
 # Bash 3.2 safe; never exits the caller.
 
 BORG_RESUME_PROBE_TTL="${BORG_RESUME_PROBE_TTL:-120}"
@@ -27,7 +30,17 @@ borg_resume_probe() {
         _at="$(jq -r '"\(.at // "")"' "$_cache" 2>/dev/null)"
         _pct="$(jq -r '"\(.session_pct // "")"' "$_cache" 2>/dev/null)"
         case "$_at$_pct" in
-            *[!0-9]* | "") ;;
+            *[!0-9]* | "")
+                if [ "$_pct" = unmetered ]; then
+                    case "$_at" in "" | *[!0-9]*) ;; *)
+                        if [ "$_at" -le "$_now" ] && [ $((_now - _at)) -lt "$BORG_RESUME_PROBE_TTL" ]; then
+                            printf 'unmetered\n'
+                            return 0
+                        fi
+                        ;;
+                    esac
+                fi
+                ;;
             *)
                 if [ "$_at" -le "$_now" ] && [ $((_now - _at)) -lt "$BORG_RESUME_PROBE_TTL" ]; then
                     printf '%s\n' "$_pct"
@@ -79,6 +92,13 @@ borg_resume_probe() {
     _pct="$(printf '%s\n' "$_out" | grep -oE 'Current session: [0-9]+% used' | head -1 | sed -E 's/^Current session: ([0-9]+)% used$/\1/')"
     case "$_pct" in
         "" | *[!0-9]*)
+            # No session line. A cost summary ("Total cost:") instead of limits is the unmetered shape.
+            if printf '%s\n' "$_out" | grep -qE '^Total cost:'; then
+                mkdir -p "$_dir" 2>/dev/null &&
+                    printf '{"at":%s,"session_pct":"unmetered"}\n' "$_now" | borg_resume_write_atomic "$_cache" 2>/dev/null
+                printf 'unmetered\n'
+                return 0
+            fi
             printf 'borg-resume probe: could not parse "Current session: N%% used" from /usage output\n' >&2
             return 1
             ;;

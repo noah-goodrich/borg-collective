@@ -33,6 +33,11 @@
 #   status:"suspect"  pane_count:0 but the independent process cross-check (proc_count > 0)
 #                      disagrees — likely the pane-matching regex is blind to a real session.
 #                      session_pct/week_pct/resets_at:null, same as idle otherwise.
+#   status:"unmetered" /usage printed a cost summary ("Total cost:") and no "Current session:" line: a
+#                      usage-billed account with no session limit. Not an error and not UNKNOWN.
+#                      session_pct/week_pct/resets_at:null. One row per probe like every other state, but the
+#                      LOG notes it only when the state changes (see _note_state), so it is not one warning
+#                      per pass. Readers that need a percentage already require status:"ok" and skip it.
 #   status:"error"    session_pct/week_pct/resets_at:null, plus a `reason` field:
 #                        "binary_not_found" — claude not resolvable on PATH (exit 1, permanent
 #                                             misconfiguration).
@@ -389,6 +394,27 @@ _guardian_record_ok() {
     fi
 }
 
+# Log a state-of-the-account line once, on entry, and a "no longer" line on exit. The previous state is the
+# `usage_state` key in guardian state (merged, so the sweep and streak keys survive).
+_note_state() {
+    local want="$1" msg="$2" prev merged
+    prev=$(_guardian_get usage_state)
+    [[ "$prev" == "$want" ]] && return 0
+    log "$msg"
+    if merged=$(_guardian_read_all | jq -c --arg s "$want" '. + {usage_state:$s}' 2>/dev/null) \
+            && _guardian_atomic_write "$merged"; then :; fi
+}
+
+# A metered reading after an unmetered stretch (the account changed): note it once and clear the state.
+_clear_state() {
+    local prev merged
+    prev=$(_guardian_get usage_state)
+    [[ -n "$prev" ]] || return 0
+    log "state: no longer $prev — /usage reports session limits again"
+    if merged=$(_guardian_read_all | jq -c '. + {usage_state:""}' 2>/dev/null) \
+            && _guardian_atomic_write "$merged"; then :; fi
+}
+
 # Fire the sweep: deliver to every active Claude pane, at most once per window (idempotence keyed on
 # the reset timestamp). Marks the window swept only if at least one pane was attempted, so a breach
 # with zero panes re-arms on the next poll rather than silently consuming the window.
@@ -528,6 +554,17 @@ week_line=$(echo "$output" | grep -oE 'Current week \(all models\): [0-9]+% used
 week_pct=$(echo "$week_line" | sed -E 's/^Current week \(all models\): ([0-9]+)% used$/\1/') || week_pct=""
 if [[ "$week_pct" == "$week_line" ]]; then week_pct=""; fi
 
+# A usage-billed account has no session limit: /usage prints a cost summary and no session line. Shape
+# test only (no `claude auth status` call per pass). Anything else without a session line stays a failure.
+if [[ -z "$session_line" ]] && printf '%s\n' "$output" | grep -qE '^Total cost:'; then
+    _note_state unmetered "usage-billed account: /usage reports cost, not session limits — no session limit applies (unmetered)"
+    row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
+        '{ts:$ts, status:"unmetered", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
+    _append_sample "$row"
+    _guardian_record_ok
+    exit 0
+fi
+
 if [[ -z "$session_pct" ]] || ! [[ "$session_pct" =~ ^[0-9]+$ ]] || [[ "$session_pct" -gt 100 ]]; then
     log "WARNING: could not parse session_pct from /usage output — state UNKNOWN"
     _log_output_excerpt "$output"
@@ -554,6 +591,7 @@ row=$(jq -c -n \
     '{ts:$ts, status:"ok", pane_count:$pane_count, session_pct:$session_pct, week_pct:$week_pct, resets_at:$resets_at}')
 
 _append_sample "$row"
+_clear_state
 log "sample: session_pct=$session_pct week_pct=$week_pct resets_at=$resets_at"
 _guardian_record_ok
 
