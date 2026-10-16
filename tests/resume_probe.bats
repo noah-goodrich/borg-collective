@@ -104,3 +104,37 @@ STUB
     [ "$status" -ne 0 ]
     [[ "$output" == *"exited"* ]]
 }
+
+@test "a subscription fixture still parses the session percent" {
+    BORG_RESUME_USAGE_CMD="cat ${BATS_TEST_DIRNAME}/fixtures/usage-output.txt" run "$BR" probe
+    [ "$status" -eq 0 ]
+    [ "$output" = "21" ]
+}
+
+@test "a cost-style /usage (no session line) is the unmetered state, exit 0" {
+    BORG_RESUME_USAGE_CMD="cat ${BATS_TEST_DIRNAME}/fixtures/usage-output-unmetered.txt" run "$BR" probe
+    [ "$status" -eq 0 ]
+    [ "$output" = "unmetered" ]
+}
+
+@test "unmetered is cached for the TTL so the claude call is not repeated" {
+    printf '#!/bin/sh\nprintf x >> "$STUB_LOG"\ncat "%s"\n' "${BATS_TEST_DIRNAME}/fixtures/usage-output-unmetered.txt" >"$STUBDIR/claude"
+    BORG_CLAUDE_BIN="$STUBDIR/claude" run "$BR" probe
+    BORG_CLAUDE_BIN="$STUBDIR/claude" run "$BR" probe
+    [ "$output" = "unmetered" ]
+    [ "$(cat "$STUB_LOG")" = "x" ]
+}
+
+@test "a cost summary that also has a session line is a normal reading" {
+    BORG_RESUME_USAGE_CMD="printf 'Total cost: \$1\nCurrent session: 9%% used\n'" run "$BR" probe
+    [ "$status" -eq 0 ]
+    [ "$output" = "9" ]
+}
+
+@test "neither shape (garbage, empty) still fails" {
+    BORG_RESUME_USAGE_CMD="echo Total duration of nothing" run "$BR" probe
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"could not parse"* ]]
+    BORG_RESUME_USAGE_CMD="true" run "$BR" probe
+    [ "$status" -ne 0 ]
+}

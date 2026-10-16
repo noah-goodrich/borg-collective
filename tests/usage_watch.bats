@@ -10,6 +10,7 @@ load test_helper/setup
 SCRIPT="${BATS_TEST_DIRNAME}/../bin/borg-usage-watch"
 FIXTURE="${BATS_TEST_DIRNAME}/fixtures/usage-output.txt"
 IDLE_FIXTURE="${BATS_TEST_DIRNAME}/fixtures/usage-output-idle.txt"
+UNMETERED_FIXTURE="${BATS_TEST_DIRNAME}/fixtures/usage-output-unmetered.txt"
 PANES_FIXTURE="${BATS_TEST_DIRNAME}/fixtures/tmux-panes.txt"
 PLIST="${BATS_TEST_DIRNAME}/../launchd/borg.usage-watch.plist"
 INSTALL_SH="${BATS_TEST_DIRNAME}/../install.sh"
@@ -1011,4 +1012,58 @@ _launchd_path_value() {
     run env -i HOME="$fake_home" PATH="/usr/bin:/bin" BORG_CLAUDE_SEARCH_DIRS="$fake_home/none" /bin/bash -c \
         "source '${BATS_TEST_DIRNAME}/../lib/borg/claude-bin.sh'; borg_resolve_claude_bin"
     [ "$status" -ne 0 ]
+}
+
+# ─── unmetered account: /usage reports cost, not session limits (issue #424) ────────────────
+#
+# A usage-billed seat has no session limit. That is a valid state, not a parse failure: every
+# pass still writes one row (the self-audit contract) but the log notes it only on a change of state.
+
+@test "unmetered: cost-style /usage -> status unmetered row, null readings, no parse_failed" {
+    _write_mock_claude "cat '$UNMETERED_FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(_row_field '.status')" = "unmetered" ]
+    [ "$(_row_field '.session_pct')" = "null" ]
+    ! grep -q "WARNING" "$BORG_USAGE_LOG"
+    ! grep -q "could not parse" "$BORG_USAGE_LOG"
+}
+
+@test "unmetered: logged once across several passes, a row every pass, no guardian streak" {
+    _write_mock_claude "cat '$UNMETERED_FIXTURE'"
+    for _ in 1 2 3 4; do
+        run "$SCRIPT" --once
+        [ "$status" -eq 0 ]
+        _advance_epoch
+    done
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "4" ]
+    [ "$(grep -c 'unmetered' "$BORG_USAGE_LOG")" = "1" ]
+    [ "$(jq -r '.consecutive_unknown // 0' "$BORG_USAGE_GUARDIAN_STATE")" = "0" ]
+}
+
+@test "unmetered: a later metered reading is logged as a change and parses normally" {
+    _write_mock_claude "cat '$UNMETERED_FIXTURE'"
+    run "$SCRIPT" --once
+    _advance_epoch
+    _write_mock_claude "cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$(tail -n 1 "$BORG_USAGE_SAMPLES" | jq -r .status)" = "ok" ]
+    grep -q "no longer unmetered" "$BORG_USAGE_LOG"
+}
+
+@test "unmetered: garbage output is still a parse_failed error with a warning" {
+    _write_mock_claude "echo 'Total nonsense'"
+    run "$SCRIPT" --once
+    [ "$(_row_field '.status')" = "error" ]
+    [ "$(_row_field '.reason')" = "parse_failed" ]
+    grep -q "WARNING" "$BORG_USAGE_LOG"
+}
+
+@test "unmetered: the dispatch guard stays open on an unmetered last row" {
+    _write_mock_claude "cat '$UNMETERED_FIXTURE'"
+    run "$SCRIPT" --once
+    run env BORG_USAGE_HALT_ENABLED=1 BORG_USAGE_SAMPLES="$BORG_USAGE_SAMPLES" \
+        BORG_USAGE_NOW_EPOCH="$BORG_USAGE_NOW_EPOCH" \
+        bash -c "echo '{\"tool_name\":\"Agent\"}' | '${BATS_TEST_DIRNAME}/../hooks/borg-dispatch-guard.sh'"
+    [ "$status" -eq 0 ]
 }
