@@ -632,6 +632,25 @@ EOF
     [[ "$output" == *"resume-probe"*"FAIL"* ]] || false
 }
 
+@test "resume: an unmetered (usage-billed) account -> INFO, not FAIL, and says why" {
+    _resume_install
+    export BORG_RESUME_USAGE_CMD="cat ${BATS_TEST_DIRNAME}/fixtures/usage-output-unmetered.txt"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-probe"*"INFO"* ]] || false
+    [[ "$output" == *"usage-billed"* ]] || false
+    [[ "$output" == *"no session limit"* ]] || false
+    [[ "$output" != *"resume-probe"*"FAIL"* ]] || false
+}
+
+@test "resume: garbage /usage output is still a probe FAIL" {
+    _resume_install
+    export BORG_RESUME_USAGE_CMD="echo Total gibberish"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"resume-probe"*"FAIL"* ]] || false
+}
+
 @test "resume: a cached good probe does not hide a failing probe" {
     _resume_install
     printf '{"at":%s,"session_pct":5}\n' "$(date +%s)" > "$RESUME_DIR/usage-probe.json"

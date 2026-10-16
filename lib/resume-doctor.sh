@@ -165,7 +165,10 @@ _rd_probe() {
         BORG_CLAUDE_BIN="$_cbin" BORG_RESUME_DIR="$_scratch" BORG_RESUME_PROBE_TTL=0 BORG_RESUME_PROBE_TIMEOUT=20 \
         BORG_RESUME_USAGE_CMD="$([ "${BORG_RESUME_DOCTOR_TEST:-}" = 1 ] && printf '%s' "${BORG_RESUME_USAGE_CMD:-}")" "$_bin" probe 2>&1)" || _rc=$?
     rm -r "$_scratch" 2>/dev/null
-    if [ "$_rc" -eq 0 ]; then
+    if [ "$_rc" -eq 0 ] && [ "$_out" = unmetered ]; then
+        _rd_row INFO resume-probe "usage-billed account: /usage reports cost, no session limit" \
+            "limit-class resumes and the guardian's limit thresholds do not apply on this account"
+    elif [ "$_rc" -eq 0 ]; then
         _rd_row OK resume-probe "usage probe works under the launchd environment (${_out}% used)"
     else
         _rd_row FAIL resume-probe "usage probe failed under the launchd environment: ${_out:-exit $_rc}" \

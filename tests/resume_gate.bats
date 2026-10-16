@@ -45,6 +45,7 @@ STUB
     cat >"${BATS_TEST_TMPDIR}/bin/usage" <<STUB
 #!/bin/bash
 [ -e "${BATS_TEST_TMPDIR}/usage.fail" ] && exit 1
+[ -e "${BATS_TEST_TMPDIR}/usage.unmetered" ] && exec cat "${BATS_TEST_DIRNAME}/fixtures/usage-output-unmetered.txt"
 printf 'Current session: %s%% used\n' "\$(cat "${BATS_TEST_TMPDIR}/usage.pct")"
 STUB
     cat >"${BATS_TEST_TMPDIR}/bin/notify" <<STUB
@@ -824,4 +825,24 @@ mk_injected() { # <rid> [injected_at offset]
     at 5
     watch
     [ "$(rf r_x .state)" = deferred ]
+}
+
+@test "unmetered account: a limit-class record is never injected and does not fail closed every pass" {
+    mk_main "$SID"
+    mk_rec r_lim1 "$SID" main usage_limit scheduled "$T0" "$T0" '.reset_text = "resets 7:10am (UTC)"'
+    touch "${BATS_TEST_TMPDIR}/usage.unmetered"
+    watch
+    [ "$(n_inject)" = 0 ]
+    [ "$(rf r_lim1 .state)" = notify_only ]
+    [ "$(rf r_lim1 .probe_fails)" = null ]
+}
+
+@test "unmetered account: a non-limit class resumes exactly as before" {
+    mk_main "$SID"
+    touch "${BATS_TEST_TMPDIR}/usage.unmetered"
+    at 0
+    watch
+    at 60
+    watch
+    [ "$(n_inject)" = 1 ]
 }

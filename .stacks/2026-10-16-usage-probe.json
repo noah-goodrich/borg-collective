@@ -1,0 +1,12 @@
+{
+  "desc": "The usage probe recognises a usage-billed account whose /usage reports cost, not session limits",
+  "program": "2026-10-16-usage-probe",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#430",
+      "why": "Unmetered state in the probe, the poller, the resume gate and doctor; refs #424"
+    }
+  ]
+}

@@ -689,7 +689,17 @@ EOF
 
     # Headroom. Limit-class fails CLOSED; other classes proceed when the probe cannot answer.
     _hm="$(_rg_int BORG_RESUME_HEADROOM_MAX 90)"
-    if _pct="$(_rg_probe)" && [ -n "$_pct" ]; then
+    _pct="$(_rg_probe)" || _pct=""
+    if [ "$_pct" = unmetered ]; then
+        # A usage-billed account has no session limit, so there is no headroom to gate on and no limit to resume
+        # from. A limit-class record cannot be a real session limit here: hand it to the user, never inject it.
+        if [ "$_limit" = 1 ]; then
+            _rg_each _rg_to notify_only unmetered_account
+            _rg_note "$_lead" unmetered \
+                "This account is usage-billed (no session limit), so the limit-class resume $_lrid is not retried. Resume by hand: borg resume run $_lrid"
+            return 0
+        fi
+    elif [ -n "$_pct" ]; then
         if [ "$_pct" -ge "$_hm" ]; then
             _rg_each _rg_defer headroom $(($(_rc_now) + 300))
             return 0
