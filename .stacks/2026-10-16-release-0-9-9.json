@@ -1,0 +1,43 @@
+{
+  "desc": "The registry contract, front-door surface fixes, the chunked recon sweep, the unmetered usage state and the lean Queen startup land, then VERSION 0.9.9 and the plugin mirror rebuild.",
+  "program": "2026-10-16-release-0-9-9",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#426",
+      "why": "registry contract: the file uses only repositories"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#427",
+      "why": "front-door W2 surface bugs"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#428",
+      "why": "chunked recon sweep with a watchdog"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#430",
+      "why": "unmetered usage-billed account state"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#431",
+      "why": "lean Queen startup context"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#432",
+      "status": "open",
+      "why": "VERSION 0.9.9, release notes, then tag and plugin mirror"
+    }
+  ]
+}
