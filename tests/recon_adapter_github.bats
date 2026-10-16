@@ -388,3 +388,11 @@ _open_body() {
         "${BATS_TEST_TMPDIR}/doc.json"
     [ "$output" = "false/MERGEABLE/APPROVED false/CONFLICTING/CHANGES_REQUESTED true/UNKNOWN/REVIEW_REQUIRED false/UNKNOWN/null" ]
 }
+
+@test "adapter: the PR url passes through on every item" {
+    _repo_with_remote alpha "git@github.com:owner/alpha.git"
+    _mock_gh "$(_open_body "" "$(_pr_json 5 OPEN 2026-08-20T10:00:00Z)")"
+    _sweep_doc
+    run jq -r ".items | map(.url) | join(\" \")" "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "u" ]
+}

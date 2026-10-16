@@ -168,6 +168,7 @@ def test_rows_json_payload_has_you_and_agent_quiet_rows(state, monkeypatch, caps
         "owner",
         "ready",
         "ref",
+        "url",
         "age",
         "status",
         "waiting_reason",

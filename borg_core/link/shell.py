@@ -358,6 +358,18 @@ def read_assimilated(repository_path: str | None, max_items: int = 3) -> list[di
     return result
 
 
+def _repository_heads(registry: dict) -> list[tuple[str, str]]:
+    """`core.repository_paths`, cut to ONE entry per repository: a worktree is a view of its repository.
+
+    Entries sharing a registry `repo` key read the same tree of `docs/plans`, so counting each registered
+    directory printed one directive title once per worktree. The group's head (the main checkout, else the
+    first member) stands for the repository; an entry with no `repo` is a group of one and is kept.
+    """
+    entries = registry.get("repositories") or {}
+    heads = {head for head, _ in worktree.repository_groups(list(entries), entries)}
+    return [(name, path) for name, path in core.repository_paths(registry) if name in heads]
+
+
 def collect_all_directives(registry: dict) -> list[dict]:
     """Directives across every reachable repository, mirroring _borg_collect_all_directives.
 
@@ -365,7 +377,7 @@ def collect_all_directives(registry: dict) -> list[dict]:
     JSON insertion order, which json.loads preserves and the rendered order depends on.
     """
     collected: list[dict] = []
-    for name, repository_path in core.repository_paths(registry):
+    for name, repository_path in _repository_heads(registry):
         if not name or not repository_path or repository_path == "null":
             continue
         for item in read_directives(repository_path):
@@ -383,7 +395,7 @@ def collect_all_assimilated(registry: dict, max_items: int = 3) -> list[dict]:
     WITH its ".md" suffix, because the shell sorts basenames, not slugs.
     """
     candidates: list[dict] = []
-    for name, repository_path in core.repository_paths(registry):
+    for name, repository_path in _repository_heads(registry):
         directory = _usable_path(repository_path)
         if not name or directory is None:
             continue

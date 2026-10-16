@@ -412,6 +412,32 @@ def test_work_items_pr_rule_precedence():
     assert (row["owner"], row["ready"]) == ("AGENT", "◌")
 
 
+def test_work_items_review_required_is_waiting_not_a_merge_you_can_do():
+    row = _one(_pr(7, review_decision="REVIEW_REQUIRED"))
+    assert (row["next_step"], row["owner"], row["ready"]) == ("await review #7", "—", "… wait")
+    assert row["ref"] == "o/r#7"
+    row = _one(_pr(8, review_decision="APPROVED"))
+    assert (row["next_step"], row["owner"]) == ("merge #8", "YOU")
+    row = _one(_pr(9, review_decision="REVIEW_REQUIRED", checks="fail"))
+    assert row["next_step"] == "fix #9 CI"
+
+
+def test_work_items_review_required_rows_do_not_fill_the_cap():
+    prs = [_pr(n, review_decision="REVIEW_REQUIRED") for n in range(1, 8)] + [_pr(20), _pr(21)]
+    rows, _ = core.work_items([_rank("p")], {"p": prs}, {}, {})
+    shown, hidden = core.cap_rows(rows)
+    assert [r["ref"] for r in shown] == ["o/r#20", "o/r#21"]
+    assert hidden["overflow"] == 0
+
+
+def test_pr_url_rides_to_the_wire_row_and_session_rows_have_none():
+    url = "https://github.com/example-org/example-repo/pull/6"
+    ranked = [_rank("p", "waiting", "needs input")]
+    work, _ = core.work_items(ranked, {"p": [_pr(6, url=url)]}, {}, {})
+    rows = core.numbered_rows(work, ranked)
+    assert [(r["ref"], r["url"]) for r in rows] == [(None, ""), ("o/r#6", url)]
+
+
 def test_work_items_ignores_closed_prs_and_author():
     rows, quiet = core.work_items([_rank("p")], {"p": [_pr(1, state="merged")]}, {}, {})
     assert rows == [] and quiet == ["p"]

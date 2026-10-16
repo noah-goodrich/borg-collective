@@ -78,12 +78,14 @@ mean paying for a network round trip and then rendering the same overview as bef
 - **WAITING ON YOU is the board's last block, and you surface it too (inside Claude first).** It reads
   the top-level `.waiting` key, which is `borg next`'s own YOU rows (decided 2026-10-09: link and next
   share one router for "what's mine"). `.waiting.rows[]` are the rows the chooser shows (at most 5, each
-  `{project, item, next_step, owner:"YOU", ref, age, waiting_reason}`); `.waiting.hidden_lines` is the
-  chooser's own `+N more decisions` / `+N agent tasks` / `+N stale drafts` text; `.waiting.degraded` is a
-  note when the sweep or rows failed (say it once). Under `--local` there is no sweep, so no PR rows. Then
-  add every `yours` manifest decision (the `gates[].kind == "decision"` routing above) whose ref is not
-  already a row. Print the block LAST, one line per item: the repository, the `next_step`, the `item`, and
-  `unblocks N` (`len(.nodes[ref].children)`) for manifest items; then the `hidden_lines` verbatim. No age
+  `{project, item, next_step, owner:"YOU", ref, url, age, waiting_reason}`; `url` is the PR's address, empty
+  on session rows); `.waiting.hidden_lines` is the chooser's own `+N more decisions` / `+N agent tasks` /
+  `+N stale drafts` text; `.waiting.degraded` is a note when the sweep or rows failed (say it once). Under
+  `--local` there is no sweep, so no PR rows. Then add every `yours` manifest decision (the
+  `gates[].kind == "decision"` routing above) whose ref is not already a row. Print the block LAST, one line
+  per item: the repository, the `next_step` (as a markdown link to `url` when it is non-empty, e.g.
+  `[merge #7](url)`), the `item`, and `unblocks N` (`len(.nodes[ref].children)`) for manifest items; then
+  the `hidden_lines` verbatim. No age
   invention. **It is ALWAYS present**: with no rows and every manifest `known`, print the single line
   `nothing waits on you`; if a manifest with refs is `unlooked` and nothing else qualified, say "nobody
   looked" instead. `.waiting` is ADDITIVE (absent in `--porcelain`), so `DOCUMENT_VERSION` stays 2.

@@ -417,6 +417,34 @@ def test_collect_all_assimilated_respects_max_items(isolated_env):
     assert len(shell.collect_all_assimilated(registry, max_items=2)) == 2
 
 
+def _worktree_registry(isolated_env, directives=None, assimilated=None):
+    """One repository registered as its main checkout plus two linked worktrees (same `repo` key), and a loner."""
+    common = str(isolated_env / "main" / ".git")
+    files = {"directives": directives or [("d1.md", "# Shared\n")], "assimilated": assimilated or []}
+    main = _repository(isolated_env, "main", **files)
+    wt_a = _repository(isolated_env, "main-a", **files)
+    wt_b = _repository(isolated_env, "main-b", **files)
+    other = _repository(isolated_env, "other", directives=[("d1.md", "# Other\n")])
+    return {
+        "repositories": {
+            "main-a": {"path": wt_a, "repo": common},
+            "main": {"path": main, "repo": common},
+            "main-b": {"path": wt_b, "repo": common},
+            "other": {"path": other},
+        }
+    }
+
+
+def test_collect_all_directives_counts_a_repository_once_not_once_per_worktree(isolated_env):
+    result = shell.collect_all_directives(_worktree_registry(isolated_env))
+    assert [(e["project"], e["title"]) for e in result] == [("main", "Shared"), ("other", "Other")]
+
+
+def test_collect_all_assimilated_counts_a_repository_once_not_once_per_worktree(isolated_env):
+    registry = _worktree_registry(isolated_env, assimilated=[("2026-02-02-mid.md", "# Mid\nShipped: 2026-02-02\n")])
+    assert [(e["project"], e["title"]) for e in shell.collect_all_assimilated(registry)] == [("main", "Mid")]
+
+
 def test_collectors_skip_unreachable_repositories(isolated_env):
     registry = {"repositories": {"gone": {"path": str(isolated_env / "does-not-exist")}}}
     assert shell.collect_all_directives(registry) == []
