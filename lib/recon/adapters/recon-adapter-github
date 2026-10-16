@@ -33,11 +33,10 @@
 # ONE BATCHED GraphQL CALL, NOT N REST CALLS. This adapter previously issued `gh pr list` once per
 # repository inside a serial `while read` loop, plus a `gh auth status` and a `gh api user` prelude.
 # Measured on a 14-repository registry that cost 12.6s — and it was the single largest latency in
-# borg, not the targeted-fetch work it was assumed to be. The whole sweep is now one aliased GraphQL
-# query. Measured on the same registry: 2.3s for all 14 repositories, 0.69s for one, and the GraphQL
-# rate-limit cost is 1 point whether the query carries 14 nodes or 112 — the call is effectively
-# O(1) in repository count, so there is no reason to chunk or paginate at any registry size we will
-# ever see.
+# borg, not the targeted-fetch work it was assumed to be. The sweep became aliased GraphQL queries.
+# Measured on the same registry: 2.3s for all 14 repositories, 0.69s for one, and the GraphQL
+# rate-limit cost is 1 point whether a query carries 14 nodes or 112. Wall time is NOT O(1) in
+# repository count on a big registry, though: see CHUNKED below, a single query for 27 entries timed out.
 #
 # The two prelude calls are gone with it: `viewer { login }` rides along in the same query (replacing
 # `gh api user`, ~0.47s), and the `gh auth status` probe (~1.0s) is dropped because the one real call
@@ -152,31 +151,87 @@ if [ "$SWEPT" -eq 0 ]; then
     exit 0
 fi
 
-# Build the batched document: viewer once, then one aliased repository node per registered repository.
+# CHUNKED, NOT ONE QUERY. A single document for the whole registry stops working once the registry is
+# big enough: GitHub abandons a GraphQL request that runs past its server-side timeout (about 10s) and
+# answers with no `data` at all, so ONE slow node blanks every repository's items. Reported against a
+# 27-entry registry: 1 repository 1.1s, the first 13 failed at 11.1s, all 27 failed at 11.5s. Query
+# cost is not O(1) in repository count after all, because each repository carries up to 130 PR nodes
+# and every open one a statusCheckRollup.
+#
+# So the registry is split into chunks of BORG_RECON_GITHUB_CHUNK repositories (default $DEFAULT_CHUNK),
+# each its own request, run BORG_RECON_GITHUB_JOBS at a time (default $DEFAULT_JOBS) so the whole
+# sweep stays inside the caller budget (`DEFAULT_SWEEP_TIMEOUT_SECONDS`, 10s in borg link). Both
+# defaults come from measurement on ONE machine (17 repositories, doubled to 34; numbers in the pull
+# request that introduced them), not from the machine that reported the timeout. One wave holds up to
+# JOBS x CHUNK = 40 repositories; a larger registry takes more waves, each costing about one request
+# time, so the 10s fit is only measured up to that size. A chunk
+# that fails costs only its own repositories: the other chunks' items are still returned and the
+# summary names the repositories the failed chunk covered and gh's own error text.
+DEFAULT_CHUNK=5
+DEFAULT_JOBS=8
+DEFAULT_TIMEOUT=6
+# A knob is read as DECIMAL (a zero-padded `08` would otherwise be an invalid octal in bash arithmetic),
+# falls back to its default on anything that is not a positive integer, and is clamped to a ceiling so
+# an absurd value cannot build one enormous query, fork hundreds of requests or disable the watchdog.
+# More than 4 digits is already past every ceiling, which also keeps the arithmetic from overflowing.
+knob() {
+    local value="$1" default="$2" ceiling="$3"
+    case "$value" in '' | *[!0-9]*) printf '%s' "$default"; return ;; esac
+    while [ "${value#0}" != "$value" ]; do value="${value#0}"; done
+    [ -n "$value" ] || { printf "%s" "$default"; return; }
+    if [ "${#value}" -gt 4 ]; then printf '%s' "$ceiling"; return; fi
+    value=$((10#$value))
+    if [ "$value" -eq 0 ]; then printf '%s' "$default"; return; fi
+    if [ "$value" -gt "$ceiling" ]; then value="$ceiling"; fi
+    printf '%s' "$value"
+}
+CHUNK="$(knob "${BORG_RECON_GITHUB_CHUNK:-}" "$DEFAULT_CHUNK" 50)"
+JOBS="$(knob "${BORG_RECON_GITHUB_JOBS:-}" "$DEFAULT_JOBS" 16)"
+REQUEST_TIMEOUT="$(knob "${BORG_RECON_GITHUB_TIMEOUT:-}" "$DEFAULT_TIMEOUT" 60)"
+
+WORKDIR="$(mktemp -d)"
+trap 'rm -f "$REPOS_FILE"; rm -rf "$WORKDIR"' EXIT
+
+# Build the batched documents: per chunk, viewer once, then one aliased repository node per registered
+# repository. Aliases are numbered across the WHOLE registry (r0..rN), not per chunk, so ALIAS_MAP
+# resolves any chunk's response unchanged.
 PR_FIELDS='number title state isDraft updatedAt url headRefName baseRefName author { login }'
 PR_FIELDS_OPEN="$PR_FIELDS mergeable reviewDecision commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
-QUERY='query { viewer { login }'
 IDX=0
+NCHUNKS=0
+QUERY=""
 while IFS=$'\t' read -r REGISTERED_NAME REPO; do
     [ -n "$REPO" ] || continue
     OWNER="${REPO%%/*}"
     NAME="${REPO#*/}"
+    if [ $((IDX % CHUNK)) -eq 0 ]; then
+        QUERY='query { viewer { login }'
+    fi
     QUERY="$QUERY r${IDX}: repository(owner: \"$OWNER\", name: \"$NAME\") {"
     QUERY="$QUERY pullRequests(first: 30, orderBy: {field: UPDATED_AT, direction: DESC}) {"
     QUERY="$QUERY nodes { $PR_FIELDS } }"
     QUERY="$QUERY openPrs: pullRequests(states: OPEN, first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) {"
     QUERY="$QUERY nodes { $PR_FIELDS_OPEN } } }"
+    printf '%s\n' "$REPO" >> "$WORKDIR/repos.$NCHUNKS"
     IDX=$((IDX + 1))
+    if [ $((IDX % CHUNK)) -eq 0 ]; then
+        printf '%s }' "$QUERY" > "$WORKDIR/query.$NCHUNKS"
+        NCHUNKS=$((NCHUNKS + 1))
+        QUERY=""
+    fi
 done < "$REPOS_FILE"
-QUERY="$QUERY }"
+if [ -n "$QUERY" ]; then
+    printf '%s }' "$QUERY" > "$WORKDIR/query.$NCHUNKS"
+    NCHUNKS=$((NCHUNKS + 1))
+fi
 
 # OPEN PRs ARE NEVER SINCE-FILTERED (AC5). A second aliased connection, `openPrs`, asks for OPEN PRs
-# only, `first: 100`, in the SAME query (still one round trip, one rate-limit point). 100 is GitHub's
-# per-connection page maximum and no registered repo is near it; paging would cost an extra call per
-# overflowing repo for a case that does not exist, so open PRs beyond 100 are a known, accepted bound.
-# The 30-newest `pullRequests` list keeps its cap and the since-mark for merged/closed PRs; the two
-# lists are unioned and de-duplicated by number, and only non-open PRs are since-filtered. Items gain the additive
-# fields url, draft, checks, mergeable, review_decision (validate_item ignores extra keys).
+# only, `first: 100`, in the SAME query. 100 is GitHub's per-connection page maximum and no registered
+# repo is near it; paging would cost an extra call per overflowing repo for a case that does not
+# exist, so open PRs beyond 100 are a known, accepted bound. The 30-newest `pullRequests` list keeps
+# its cap and the since-mark for merged/closed PRs; the two lists are unioned and de-duplicated by
+# number, and only non-open PRs are since-filtered. Items gain the additive fields url, draft, checks,
+# mergeable, review_decision (validate_item ignores extra keys).
 #
 # `first: 30` mirrors the REST `--limit 30` bound, so a busy repo still cannot flood the sweep.
 #
@@ -194,52 +249,153 @@ QUERY="$QUERY }"
 # live batch containing one deleted PR: exit 1, `errors: [NOT_FOUND]`, and all valid siblings
 # resolved. Discarding stdout on a non-zero exit would throw away an entire good sweep because one
 # repository was renamed or made private, and would render the whole track failed. So: capture
-# stdout unconditionally, and decide on the PAYLOAD.
-RESPONSE="$(gh api graphql -f query="$QUERY" 2>/dev/null || true)"
+# stdout unconditionally, and decide on the PAYLOAD. stderr is kept too, per chunk: it is the only
+# place gh says WHY a request failed.
+# PER-REQUEST WATCHDOG. A hung gh call (a stalled connection, a server that never answers) would hold
+# its whole wave at the bare `wait` until the caller's budget killed the adapter, and every chunk's
+# items would be lost with it. So each request runs under a watchdog of REQUEST_TIMEOUT seconds
+# (default $DEFAULT_TIMEOUT: a request is about 1s, so 6s is generous for a slow one yet leaves a
+# single wave room inside the 10s budget). macOS has no coreutils `timeout` and the system bash is
+# 3.2 (no `wait -n`), so the watchdog is a few lines of perl, which both platforms ship: it moves
+# itself into a fresh process group, forks gh into it, and arms alarm(). On expiry it drops a marker
+# file and sends SIGTERM to the whole group, which takes gh and anything gh forked with it, so no gh
+# or sleep outlives the request. perl handles that TERM itself (a handler, not IGNORE, because an
+# ignored signal would survive exec into gh) so it reaps the child and exits normally, which keeps bash
+# from printing a "Killed" notice into the adapter's stderr. The alarm belongs to the perl process, so
+# it fires on its own even if the adapter is killed first: nothing lingers past REQUEST_TIMEOUT.
+# Without perl the request still runs, just unguarded.
+WATCHDOG='my ($mark, $secs) = splice(@ARGV, 0, 2);
+setpgrp(0, 0);
+$SIG{TERM} = sub { };
+my $pid = fork();
+exit 127 unless defined $pid;
+if (!$pid) { exec @ARGV; exit 127; }
+$SIG{ALRM} = sub { if (open(my $f, ">", $mark)) { close $f; } kill "TERM", -$$; };
+alarm $secs;
+waitpid($pid, 0);
+exit($? >> 8);'
+HAVE_PERL=0
+command -v perl >/dev/null 2>&1 && HAVE_PERL=1
 
-printf '%s' "$RESPONSE" | jq -e 'has("data") and (.data != null)' >/dev/null 2>&1 \
-    || emit_skip "gh graphql sweep failed (unauthenticated, offline, or rate-limited) — github track skipped"
+run_chunk() {
+    local query
+    query="$(cat "$WORKDIR/query.$1")"
+    if [ "$HAVE_PERL" -eq 1 ]; then
+        perl -e "$WATCHDOG" "$WORKDIR/timeout.$1" "$REQUEST_TIMEOUT" \
+            gh api graphql -f query="$query" > "$WORKDIR/out.$1" 2> "$WORKDIR/err.$1" || true
+    else
+        gh api graphql -f query="$query" > "$WORKDIR/out.$1" 2> "$WORKDIR/err.$1" || true
+    fi
+}
 
-ME="$(printf '%s' "$RESPONSE" | jq -r '.data.viewer.login // ""' 2>/dev/null || echo "")"
+C=0
+RUNNING=0
+while [ "$C" -lt "$NCHUNKS" ]; do
+    run_chunk "$C" &
+    RUNNING=$((RUNNING + 1))
+    C=$((C + 1))
+    if [ "$RUNNING" -ge "$JOBS" ]; then
+        wait
+        RUNNING=0
+    fi
+done
+wait
 
-ITEMS="$(printf '%s' "$RESPONSE" | jq -c \
-    --argjson map "$ALIAS_MAP" --arg source "$SOURCE" --arg me "$ME" --arg since "$SINCE_DATE" '
-    [ .data as $d
-      | $map[]
-      | . as $m
-      | ($d[$m.alias] // null)
-      | select(. != null)
-      | (((.openPrs.nodes // []) + (.pullRequests.nodes // [])) | unique_by(.number))[]
-      | select(.state == "OPEN" or ((.updatedAt | split("T")[0]) >= $since))
-      | {
-          project: $m.name,
-          source:  $source,
-          ref:     ($m.repo + "#" + (.number|tostring)),
-          title:   .title,
-          state:   (.state | ascii_downcase),
-          changed: ("updated " + .updatedAt + "; state=" + (.state|ascii_downcase)
-                    + (if .isDraft then "; draft" else "" end)),
-          owner:   (if ($me != "" and (.author.login // "") == $me) then "you" else "unknown" end),
-          action_needed: ((.state == "OPEN") and (.isDraft | not)),
-          urgency: (if (.state != "OPEN") then "fyi"
-                    elif (.title | test("urgent|hotfix|revert|broken|p0|sev";"i")) then "now"
-                    else "this_week" end),
-          one_line: ("#" + (.number|tostring) + " " + .title + " [" + (.state|ascii_downcase) + "]"),
-          repo:     $m.repo,
-          url:      (.url // ""),
-          head_ref: (.headRefName // ""),
-          base_ref: (.baseRefName // ""),
-          draft:    (.isDraft // false),
-          checks:   ((.commits.nodes[0].commit.statusCheckRollup.state // "") as $c
-                     | if $c == "SUCCESS" then "pass"
-                       elif ($c == "FAILURE" or $c == "ERROR") then "fail"
-                       elif ($c == "PENDING" or $c == "EXPECTED") then "pending"
-                       else "none" end),
-          mergeable:       (.mergeable // "UNKNOWN"),
-          review_decision: (.reviewDecision // null)
-        } ]' 2>/dev/null || echo "[]")"
+# gh's own words for a failed chunk, on one bounded line: stderr first, else the first GraphQL error
+# message in the body, else a plain statement that nothing usable came back.
+failure_text() {
+    local text
+    if [ -e "$WORKDIR/timeout.$1" ]; then
+        printf 'timed out after %ss' "$REQUEST_TIMEOUT"
+        return
+    fi
+    text="$(tr '\n\r\t' '   ' < "$WORKDIR/err.$1" | tr -s ' ' | sed -E 's/^ +//; s/ +$//' | cut -c1-200)"
+    if [ -z "$text" ]; then
+        text="$(jq -r '.errors[0].message // empty' "$WORKDIR/out.$1" 2>/dev/null \
+            | tr '\n\r\t' '   ' | tr -s ' ' | cut -c1-200 || true)"
+    fi
+    printf '%s' "${text:-no usable response from gh}"
+}
+
+# Names a failed chunk covered, capped so a large chunk cannot flood the summary.
+covered_text() {
+    local total
+    total="$(grep -c . "$WORKDIR/repos.$1" || true)"
+    if [ "$total" -gt 12 ]; then
+        head -n 12 "$WORKDIR/repos.$1" | paste -sd, - | sed 's/,/, /g' | sed "s/\$/ and $((total - 12)) more/"
+    else
+        paste -sd, - < "$WORKDIR/repos.$1" | sed 's/,/, /g'
+    fi
+}
+
+ITEM_FILES=()
+SWEPT_OK=0
+FAILED_CHUNKS=0
+FAILED_NOTE=""
+FIRST_FAILURE=""
+C=0
+while [ "$C" -lt "$NCHUNKS" ]; do
+    RESPONSE="$(cat "$WORKDIR/out.$C")"
+    if printf '%s' "$RESPONSE" | jq -e 'has("data") and (.data != null)' >/dev/null 2>&1; then
+        ME="$(printf '%s' "$RESPONSE" | jq -r '.data.viewer.login // ""' 2>/dev/null || echo "")"
+        printf '%s' "$RESPONSE" | jq -c \
+            --argjson map "$ALIAS_MAP" --arg source "$SOURCE" --arg me "$ME" --arg since "$SINCE_DATE" '
+            [ .data as $d
+              | $map[]
+              | . as $m
+              | ($d[$m.alias] // null)
+              | select(. != null)
+              | (((.openPrs.nodes // []) + (.pullRequests.nodes // [])) | unique_by(.number))[]
+              | select(.state == "OPEN" or ((.updatedAt | split("T")[0]) >= $since))
+              | {
+                  project: $m.name,
+                  source:  $source,
+                  ref:     ($m.repo + "#" + (.number|tostring)),
+                  title:   .title,
+                  state:   (.state | ascii_downcase),
+                  changed: ("updated " + .updatedAt + "; state=" + (.state|ascii_downcase)
+                            + (if .isDraft then "; draft" else "" end)),
+                  owner:   (if ($me != "" and (.author.login // "") == $me) then "you" else "unknown" end),
+                  action_needed: ((.state == "OPEN") and (.isDraft | not)),
+                  urgency: (if (.state != "OPEN") then "fyi"
+                            elif (.title | test("urgent|hotfix|revert|broken|p0|sev";"i")) then "now"
+                            else "this_week" end),
+                  one_line: ("#" + (.number|tostring) + " " + .title + " [" + (.state|ascii_downcase) + "]"),
+                  repo:     $m.repo,
+                  url:      (.url // ""),
+                  head_ref: (.headRefName // ""),
+                  base_ref: (.baseRefName // ""),
+                  draft:    (.isDraft // false),
+                  checks:   ((.commits.nodes[0].commit.statusCheckRollup.state // "") as $c
+                             | if $c == "SUCCESS" then "pass"
+                               elif ($c == "FAILURE" or $c == "ERROR") then "fail"
+                               elif ($c == "PENDING" or $c == "EXPECTED") then "pending"
+                               else "none" end),
+                  mergeable:       (.mergeable // "UNKNOWN"),
+                  review_decision: (.reviewDecision // null)
+                } ]' > "$WORKDIR/items.$C" 2>/dev/null || printf '[]' > "$WORKDIR/items.$C"
+        ITEM_FILES+=("$WORKDIR/items.$C")
+        SWEPT_OK=$((SWEPT_OK + $(grep -c . "$WORKDIR/repos.$C" || true)))
+    else
+        FAILED_CHUNKS=$((FAILED_CHUNKS + 1))
+        ERR="$(failure_text "$C")"
+        [ -n "$FIRST_FAILURE" ] || FIRST_FAILURE="$ERR"
+        FAILED_NOTE="${FAILED_NOTE:+$FAILED_NOTE; }$(covered_text "$C") — $ERR"
+    fi
+    C=$((C + 1))
+done
+
+# EVERY chunk failed: nothing was looked at, which is a skip, with gh's reason and what it covered.
+if [ "$SWEPT_OK" -eq 0 ]; then
+    emit_skip "gh graphql sweep failed for $SWEPT repo(s): $FAILED_NOTE — github track skipped"
+fi
+
+ITEMS="$(jq -s -c 'add // []' "${ITEM_FILES[@]}" 2>/dev/null || echo "[]")"
 
 COUNT="$(printf '%s' "$ITEMS" | jq 'length' 2>/dev/null || echo 0)"
-SUMMARY="swept $SWEPT github repo(s) since $SINCE_DATE — $COUNT PR item(s)"
+SUMMARY="swept $SWEPT_OK github repo(s) since $SINCE_DATE — $COUNT PR item(s)"
+if [ "$FAILED_CHUNKS" -gt 0 ]; then
+    SUMMARY="swept $SWEPT_OK of $SWEPT github repo(s) since $SINCE_DATE — $COUNT PR item(s); $FAILED_CHUNKS request(s) failed, not swept: $FAILED_NOTE"
+fi
 jq -n --arg s "$SOURCE" --arg m "$SUMMARY" --argjson items "$ITEMS" \
     '{source:$s, summary:$m, items:$items}'
