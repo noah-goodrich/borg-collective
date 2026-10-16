@@ -82,20 +82,26 @@ git -C <BORG> pull --ff-only
 git -C <PLUGINS> pull --ff-only
 ```
 
-c. Refresh what borg installs. `borg setup` refreshes the hooks, the bin utilities and the tmux binding, and rebuilds the local plugin mirror. Skills and agents ship through the plugin in the next step. Run it from any directory:
+c. Update every plugin installed from that marketplace, not only borg-collective. The marketplace checkout carries all of its plugins, and a release of the mirror can bump several at once. List what is installed, then update each entry whose name ends in `@<MARKETPLACE>`:
+
+```
+claude plugin list
+claude plugin update borg-collective@<MARKETPLACE>
+claude plugin update <OTHER-PLUGIN>@<MARKETPLACE>
+claude plugin list
+```
+
+   Run the `update` line once per `<name>@<MARKETPLACE>` entry in the first listing (an entry's `Read from:` line also points into `<PLUGINS>`). Entries from other marketplaces are not yours to update here. The second listing should show each updated plugin at the version in its own `.claude-plugin/plugin.json` under `<PLUGINS>`. `claude plugin update` says to restart to apply; step e does that.
+
+d. Refresh what borg installs, right away, before anything else runs against the registry. `borg setup` refreshes the hooks, the bin utilities and the tmux binding, migrates an old registry key (section 5), and rebuilds the local plugin mirror. Skills and agents ship through the plugin in the previous step. Run the installed `borg` from any directory, but never from a git worktree of borg-collective, because that registers skill paths under the worktree:
 
 ```
 borg setup
 ```
 
-d. Update the plugin, then check the version it reports:
-
-```
-claude plugin update borg-collective@<MARKETPLACE>
-claude plugin list
-```
-
 e. Restart every open Claude Code session. A running session keeps the hooks and skills it loaded at start, so it can report the new version while still running old code. A resumed conversation (`claude --resume` or `claude --continue`) loads the new instruction and skill files but keeps the old context. For a fresh conversation, start `claude` without a resume flag, or open a managed window with `borg init` or `drone up`.
+
+f. Check the install with `borg doctor`, then read what it should show in section 6.
 
 Then do section 5 and section 6.
 
@@ -109,7 +115,8 @@ Find the row for the version you started from. If you skipped several releases, 
 | Before 0.9.4, or never ran install.sh | Launchd agents, below |
 | 0.9.6 | None |
 | 0.9.7 | Registry key, below |
-| 0.9.8 | Registry key, then 0.9.9 update order, below |
+| 0.9.8 | 0.9.9 update order, below |
+| 0.9.9 | None (current release) |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
 
@@ -129,23 +136,43 @@ run-in <BORG> ./install.sh
 
 0.9.9 is the contract step of the registry key rename (below): the registry file uses only `repositories`, and the old `projects` key is no longer read. The order of the upgrade matters on a machine whose registry still has the old key.
 
-1. Run `borg setup` right after updating the plugin. It renames the key and writes a timestamped backup first.
-2. Until setup has migrated the file, hooks and the notify daemon read the unmigrated file as empty, and every other borg and drone command refuses it with a pointer to the fix. `borg doctor` shows a FAIL row named `registry-key`.
-3. A machine that already migrated the registry in 0.9.8 has nothing extra to do for this.
+The path from 0.9.8, in order (the commands are in section 4):
 
-Two more things to know. A machine signed in with a usage-billed account (one whose `/usage` reports cost, not session limits) now shows `resume-probe` as INFO in `borg doctor`, not FAIL. And restart every open Claude Code session after the plugin update: the borg `simplify` skill is retired in favour of the built-in `/simplify`, several borg skill descriptions are shorter, and a running session keeps the old ones.
+1. Pull both checkouts.
+2. Update every plugin installed from the marketplace, borg-collective and any other (a mirror release can bump several at once).
+3. Run `borg setup` right away. It renames the key and writes a timestamped backup first.
+4. Restart every open Claude Code session.
+5. Run `borg doctor` and compare it with the rows below.
+
+Until setup has migrated the file, hooks and the notify daemon read the unmigrated file as empty, and every other borg and drone command refuses it with a pointer to the fix. `borg doctor` shows a FAIL row named `registry-key`. A machine that already migrated the registry in 0.9.8 has nothing extra to do for this; its `registry-key` row is OK from the start.
+
+What changes for a session after the restart: the plugin ships one fewer borg skill, several borg skill descriptions are shorter, and the research plugin keeps a single front door, `/research`. A running session keeps the skills it loaded until it restarts.
+
+What `borg doctor` should show after 0.9.9:
+
+- `registry-key` is OK and names `repositories`.
+- `resume-probe` is OK on a subscription account. On a usage-billed account (one whose `/usage` reports cost, not session limits, such as an Enterprise seat) it is INFO, "usage-billed account", not FAIL. A FAIL on that row on any account means `/usage` could not be read at all.
+- `resume-watch` and `resume-log` are OK once `install.sh` has loaded the launchd agents (see "Launchd agents" above). `resume-log` can be WARN ("no watcher pass recorded yet") for the first minute after an install; run doctor again.
+- `resume-guardian` is WARN and stays so. It says the usage guardian looks dead and that this is a warning only, because borg-resume runs its own probe.
+- `resume-switch` is INFO, "off (injection allowed)", unless you paused resume on purpose.
+- Any other WARN or FAIL row is worth reading.
+
+Checks that the new behaviour works, with `borg link --overview` on a machine that has `gh` signed in:
+
+- The GitHub track runs: it is not skipped, and the SIGNALS section has no line starting `sweep: adapter 'github'`. Rows under WAITING ON YOU carry their PR number as a link in terminals that render links.
+- If the sweep still fails, that SIGNALS line now carries gh's own error text and names the repositories the failed request covered, where 0.9.8 only said it failed. Partial results are kept, so one slow request no longer blanks the rest. Fix what gh names (sign in with `gh auth login`, or wait out a rate limit).
+- For a large registry, three knobs tune the sweep, set in the shell profile: `BORG_RECON_GITHUB_CHUNK` (repositories per request, default 5, at most 50), `BORG_RECON_GITHUB_JOBS` (requests in flight, default 8, at most 16) and `BORG_RECON_GITHUB_TIMEOUT` (seconds per request, default 6, at most 60). If requests time out, lower the chunk size first. `borg link` gives the whole sweep 10 seconds, so raising the timeout alone does not help there.
+- The Queen session's startup roster folds repositories idle for 30 days or more into one count line. `BORG_QUEEN_IDLE_DAYS` changes the cutoff; a non-numeric value falls back to 30. The full list is always `borg link`.
+
+Leftovers from earlier upgrades, each safe to repeat. `borg scan` skips temporary directories now, but an entry registered earlier stays: remove it with `borg rm <name>`. `borg reap` lists registry entries whose directory no longer exists, and `borg reap --drop-missing` removes exactly those entries from the registry and touches nothing on disk. `borg reap` also downgrades sessions with no live process to idle, which is what clears stale "waiting" rows.
 
 ### Registry key (`projects` to `repositories`)
 
-The registry file (`~/.config/borg/registry.json`, or under `XDG_CONFIG_HOME`) keeps its repositories under a top-level key. The key moved from `projects` to `repositories` in three steps. Step one, in 0.9.6, made every reader accept both. Step two, in 0.9.8 as noah-goodrich/borg-collective#420, made every writer keep whichever key the file already has. Step three, the first release after 0.9.8, drops the old key: from that release on, the old `projects` key is no longer read, and a new registry file is created with `repositories`.
+The registry file (`~/.config/borg/registry.json`, or under `XDG_CONFIG_HOME`) keeps its repositories under a top-level key. The key moved from `projects` to `repositories` in three steps. Step one, in 0.9.6, made every reader accept both. Step two, in 0.9.8 as noah-goodrich/borg-collective#420, made every writer keep whichever key the file already has. Step three, in 0.9.9, drops the old key: from that release on, the old `projects` key is no longer read, and a new registry file is created with `repositories`.
 
 The normal upgrade handles it. Section 4 runs `borg setup`, and `borg setup` renames the key for you. It is safe to repeat: when the file already has `repositories` it does nothing, and when it renames it writes a timestamped backup next to the file first (`registry.json.bak.<UTC stamp>`).
 
-A registry file that still has only `projects` is never read as an empty registry and never overwritten. Every borg command that reads the registry stops with this message and changes nothing:
-
-```
-borg: registry file (<path>) still uses the retired 'projects' key, which is no longer read; run `borg setup` or `python3 -m borg_core.registry.cli migrate-key` to rename it to 'repositories'
-```
+A registry file that still has only `projects` is never read as an empty registry and never overwritten. Every borg command that reads the registry stops with a message that starts "borg: registry file (<path>) still uses the retired 'projects' key, which is no longer read", names `borg setup` and `python3 -m borg_core.registry.cli migrate-key` as the fix, and changes nothing.
 
 `borg doctor` shows the same condition as a FAIL row named `registry-key`. The python tools print the same sentence as an error. If you see it, rename the key by hand with the steps below. If you ran `borg setup` as part of the upgrade you will not see it.
 
@@ -182,8 +209,7 @@ Since 0.9.6, borg reads stack manifests only from `<repository>/.stacks/`. A rep
 borg link --overview
 ```
 
-   Each affected repository is named in a warning that mentions `borg stack migrate`. If none is named, this migration is done. A registered path that is a subdirectory of a repository, not its top level, is skipped by name ("not a git repository (or not the top level of one)"). Re-register it at the repository root (or run migrate from the root), then migrate and commit there.
-
+   Each affected repository is named in a warning that mentions `borg stack migrate`. If none is named, this migration is done. A registered path that is a subdirectory of a repository, not its top level, is skipped by `borg stack migrate`, by name ("not a git repository (or not the top level of one)"), and stays named by `borg link --overview` afterwards. This is the usual reason a machine still shows unmigrated manifests after running the migration. Fix it by registering the repository root and removing the subdirectory entry: `borg add <REPOSITORY-ROOT>`, then `borg rm <SUBDIRECTORY-NAME>` (names come from `borg link --overview`), then migrate and commit at the root.
 2. For each named repository: if there is uncommitted work under its old `.borg/chains/` or `.borg/programs/` folder, commit or clean it first, because migrate skips a repository with uncommitted changes there. Ask the person if unsure.
 
 3. Preview, then migrate. `<REPOSITORY>` is a registered name or a directory. Migrate moves the manifests into `.stacks/` and stages the move; it never commits.
@@ -198,13 +224,13 @@ git -C <REPOSITORY> status --short
 
 5. If the repository's default branch already carries the migrated file, merge the default branch instead and delete the old copy.
 
-6. Run `borg link --overview` again. The warning should be gone for each migrated repository.
+6. Run `borg link --overview` again. The warning should be gone for each migrated repository. If the page still names a repository, re-read step 1: the entry is most likely a subdirectory registration, and migrate will not touch it until that is fixed.
 
 ## 6. Verify
 
 - `borg version` prints the release you expect. The expected release is the content of the `VERSION` file in `<BORG>`.
-- `borg doctor` is green. One warning is known and benign: a `resume-guardian` row that reads `usage guardian last active ...` (or `no usage-guardian.json`) is marked `WARN` and says it is a warning only, because borg-resume runs its own usage probe. Any other `WARN` or `FAIL` row is worth reading. A `gh` row below the version floor means upgrading `gh`.
-- `borg link --overview` renders a page, with no unmigrated-manifest warnings.
+- `borg doctor` is green. One warning is known and benign: a `resume-guardian` row that reads `usage guardian last active ...` (or `no usage-guardian.json`) is marked `WARN` and says it is a warning only, because borg-resume runs its own usage probe. On a usage-billed account `resume-probe` reads `INFO`, which is also correct. Any other `WARN` or `FAIL` row is worth reading. A `gh` row below the version floor means upgrading `gh`. The full list of rows to expect after 0.9.9 is in section 5.
+- `borg link --overview` renders a page, with no unmigrated-manifest warnings and no `sweep: adapter 'github'` line under SIGNALS.
 - In a Claude Code session started after the update, or from a shell with `claude plugin list`, the `borg-collective` plugin shows the same version as `borg version`.
 
 ## 7. Rollback
@@ -239,3 +265,4 @@ To return to the current release afterwards: `git -C <BORG> checkout main`, then
 - `claude plugin update` says there is nothing to do. The marketplace checkout was not pulled, so the update source is still the old version. Pull `<PLUGINS>` (section 4, step b) and run the update again. If the marketplace comes from a GitHub repository rather than a folder, run `claude plugin marketplace update <MARKETPLACE>` first.
 - borg says `unknown command` after the pull. `PATH` points at a different checkout than the one you pulled. Run `command -v borg | xargs readlink -f`, then either pull that checkout or run `./install.sh` from the intended checkout, which re-points the `borg` link (ask first on a machine that already has borg).
 - Hooks and skills still look old. The Claude Code session was started before the update. Restart it.
+- A plugin other than borg-collective is still on its old version, or a skill that was removed still appears. Only the plugins you updated by name were updated. Run `claude plugin list`, update every `<name>@<MARKETPLACE>` entry (section 4, step c), and restart.

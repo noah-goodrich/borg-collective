@@ -43,6 +43,13 @@
       "ref": "noah-goodrich/borg-collective#432",
       "status": "merged",
       "why": "VERSION 0.9.9, release notes, then tag and plugin mirror"
+    },
+    {
+      "lane": "_default",
+      "order": "7",
+      "ref": "noah-goodrich/borg-collective#434",
+      "status": "open",
+      "why": "walk docs/upgrading.md for a 0.9.8 to 0.9.9 machine"
     }
   ]
 }
