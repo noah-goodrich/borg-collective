@@ -1,11 +1,10 @@
 ---
 name: fable-reviewer
 description: >
-  Fable's 5-gate working discipline, distilled into a skill so Opus 4.8 / Sonnet inherit the same rigor
-  when running in the Borg environment. Forces scope-before-work, evidence-before-reasoning, adversarial
-  self-review, verification against the real bats/pytest suites, and response calibration. Use when
-  starting a non-trivial change in borg-collective / claude-plugins, when a task risks scope creep
-  or vibe-coding, or when the user says /fable-reviewer, "apply the gates", or "fable mode".
+  Fable's 5-gate working discipline: scope before work, evidence before reasoning, adversarial
+  self-review, real test runs, calibrated replies. Use when starting a non-trivial change, when a
+  task risks scope creep, or when the user says /fable-reviewer, "apply the gates", or "fable
+  mode".
 user-invocable: true
 ---
 

@@ -134,17 +134,6 @@ Scope decides the page. In the Queen session (the workspace root) it gives the o
 **Why it exists**: You forget what every repository is doing. This skill rebuilds the picture without
 round-tripping through multiple commands.
 
-### /simplify — Review and Fix Changed Code
-
-**Activation**: Manual (`/simplify`), borg-installed (not a Claude Code built-in)
-
-Reviews code touched in the current session for reuse, quality, and efficiency, then fixes any
-issues found directly — dead code, redundant logic, reinvented utilities, unnecessary complexity.
-Operates only on files changed this session, not the whole repo.
-
-**Why it exists**: Catches the small messes that accumulate during implementation before they ship,
-without requiring a separate manual pass.
-
 ### /borg-next — What Needs Attention
 
 **Activation**: Manual (`/borg-next`)
@@ -271,8 +260,8 @@ design, and more.
 
 ## Built-in Claude Code Skills
 
-These come with Claude Code — no installation needed. (`/simplify` is a borg-installed skill, not a
-built-in — see the Borg Skills section above.)
+These come with Claude Code — no installation needed. (`/simplify` is one of them. Borg shipped its own
+copy until 2026-10-16, which matched the same requests, so it was retired in favour of the built-in.)
 
 | Skill | What it does | When to use |
 |-------|-------------|-------------|

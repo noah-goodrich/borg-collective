@@ -1,12 +1,10 @@
 ---
 name: borg-link
 description: >
-  The front door — the neural link to the collective. Scope decides the page. In the Queen
-  session (the orchestrator, at BORG_ORCHESTRATOR_ROOT) it is the cross-repository overview with
-  directives and recent ships. Anywhere else (a repository or a linked worktree, or an explicit
-  repository name) it is a page about exactly that one directory: identity, live session and status,
-  its own latest checkpoint, its own waiting row and its next action. Use when the user asks for status, overview, briefing,
-  "what's going on", or repository details.
+  The front door to the collective. In the Queen session it is the cross-repository overview with
+  directives and recent ships; in a repository or worktree, or for a named repository, it is a page
+  on that one directory. Use when the user asks for status, overview, briefing, "what's going on",
+  or repository details.
 user-invocable: true
 ---
 
@@ -14,7 +12,7 @@ user-invocable: true
 
 You synthesize on top of the `borg link` engine. Explain like the reader is 10: plain, terse, most-urgent-first. Do not hard-wrap output.
 
-`scope.kind` is the engine's answer: `orchestrator` (the Queen session) gets the Queen view; `repository` (a repository, a linked worktree, or an explicit repository name) gets a page about exactly that one directory. Answer; do not re-render. In a drone the SessionStart hook already injected the latest checkpoint, so run this skill only when asked, never as a session-start ritual.
+`scope.kind` is the engine's answer: `orchestrator` (the Queen session, at `BORG_ORCHESTRATOR_ROOT`) gets the Queen view; `repository` (a repository, a linked worktree, or an explicit repository name) gets a page about exactly that one directory. Answer; do not re-render. In a drone the SessionStart hook already injected the latest checkpoint, so run this skill only when asked, never as a session-start ritual.
 
 ## Step 1 — Run the engine, then branch on `scope.kind`
 

@@ -27,6 +27,8 @@ There is no Queen *agent file* — the Queen is the main session whose CWD is ex
   turn). The primary cost lever is keeping the Queen context lean: delegate verbose reads to scouts, get
   distilled summaries back. (Framework-doc edits like this file are the narrow exception — they are the
   Queen's own artifacts, not repository code.)
+  Running `/context` costs about 15k tokens in the transcript (one row per MCP tool, in two formats), so run it
+  in a throwaway session, never in the Queen.
 
 ## The handoff state-machine
 

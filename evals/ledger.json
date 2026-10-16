@@ -115,10 +115,6 @@
     "skills/pane": {
       "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
       "review_by": "2027-01-31"
-    },
-    "skills/simplify": {
-      "waiver": "Phase 4 long-tail review (evals-for-everything)",
-      "review_by": "2027-01-31"
     }
   }
 }

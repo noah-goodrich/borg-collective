@@ -59,7 +59,7 @@ This prevents corruption from concurrent hook executions.
 
 The repo has grown past a size where a full file listing stays accurate for long — run
 `ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
-writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/agent-routing.md`),
+writing: **17 hooks**, **~14 lib files**, **16 skills**, **6 agents** (+ `docs/agent-routing.md`),
 **4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
 `borg-vinculum-watch`, `borg-notifyd`, `run-in`).
 
@@ -110,7 +110,7 @@ writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/a
         borg-link-up/           Flush session state to a per-repository checkpoint file
         borg-recon/             Synthesize cross-source recon fan-out into an ELI10 briefing
         borg-next/, borg-resume/, borg-switch/, borg-verify/, break-glass/,
-        simplify/, fable-reviewer/, no-unnecessary-read-perms/   Remaining user-invocable skills
+        fable-reviewer/, no-unnecessary-read-perms/   Remaining user-invocable skills
     agents/
         borg-grunt.md            Haiku — fully-specified mechanical execution
         borg-scout.md            Haiku — read-only locate/search
@@ -351,9 +351,9 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | borg-recon | Manual | Synthesize `borg recon --json` output into a by-repository, urgency-ranked briefing |
 | borg-next / borg-resume / borg-switch / borg-verify | Manual | Skill-form CLI wrappers |
 | break-glass | Manual | Explicit, logged override for a normally-blocked action |
-| simplify / fable-reviewer / no-unnecessary-read-perms | Manual / auto | Code + permission hygiene guardrails |
+| fable-reviewer / no-unnecessary-read-perms | Manual / auto | Working-discipline + permission hygiene guardrails |
 
-The full, current roster (17 skills as of this writing) is always `ls skills/` — this table lists
+The full, current roster (16 skills as of this writing) is always `ls skills/` — this table lists
 role, not an exhaustive spec.
 
 ---

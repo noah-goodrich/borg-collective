@@ -1,11 +1,9 @@
 ---
 name: borg-link-up
 description: >
-  "Link up" to the collective — flush session state to a checkpoint.
-  Use when ending a session, before a break, or when switching repositories.
-  Produces a structured checkpoint that eliminates context-rebuild time on
-  the next /borg-link-down. Saves to <repository>/.borg/checkpoints/<timestamp>.md,
-  which is what the SessionStart hook (borg-link-down.sh) reads to restore context.
+  "Link up" to the collective: flush session state to a checkpoint at
+  <repository>/.borg/checkpoints/<timestamp>.md, which the next SessionStart restores. Use when ending a session,
+  before a break, or when switching repositories.
 allowed-tools: Bash(borg checkpoint-prepare *)
 ---
 

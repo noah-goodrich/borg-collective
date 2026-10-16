@@ -39,3 +39,47 @@ ROOT="${BATS_TEST_DIRNAME}/.."
     [[ "$step" == *"proceed to Step 1 without comment"* ]] || {
         echo "Step 0.75 does not say what happens on the clean path"; false; }
 }
+
+# The skill listing loads every description at session start, whether or not the skill runs, so a description is a
+# standing cost. 320 characters is about 80 tokens. The description is also what triggers the skill, so the cap
+# bounds detail and the trigger-phrase cases below pin what must survive the trimming.
+DESCRIPTION_CAP=320
+
+# The description as one line: the folded block (or single line) with its indentation collapsed.
+_description_of() {
+    awk '
+        NR == 1 { next }
+        /^---$/ { exit }
+        /^description:/ { sub(/^description:[ \t]*>?[ \t]*/, ""); d = $0; grab = 1; next }
+        grab && /^[ \t]/ { d = d " " $0; next }
+        { grab = 0 }
+        END { gsub(/[ \t]+/, " ", d); sub(/^ /, "", d); sub(/ $/, "", d); printf "%s", d }
+    ' "$1"
+}
+
+@test "skills: every description stays under the 320-character cap" {
+    local f d bad=0 n=0
+    for f in "$ROOT"/skills/*/SKILL.md; do
+        d=$(_description_of "$f")
+        n=$((n + 1))
+        if [ "${#d}" -gt "$DESCRIPTION_CAP" ]; then
+            echo "${f#"$ROOT"/}: description is ${#d} characters, over the ${DESCRIPTION_CAP} cap"
+            bad=1
+        fi
+    done
+    [ "$n" -ge 10 ] || { echo "only $n skills measured"; false; }
+    [ "$bad" -eq 0 ]
+}
+
+@test "skills: the trimmed descriptions keep the phrases users type" {
+    [[ "$(_description_of "$ROOT/skills/borg-recon/SKILL.md")" == *"morning link-up"*"catch me up"*"recon"* ]]
+    [[ "$(_description_of "$ROOT/skills/borg-link/SKILL.md")" == *"status"*"overview"*"briefing"* ]]
+    [[ "$(_description_of "$ROOT/skills/fable-reviewer/SKILL.md")" == *"/fable-reviewer"*"apply the gates"*"fable mode"* ]]
+    [[ "$(_description_of "$ROOT/skills/borg-resume/SKILL.md")" == *"session limit"*"usage limit"*"resume after reset"* ]]
+    [[ "$(_description_of "$ROOT/skills/borg-link-up/SKILL.md")" == *"Link up"*"ending a session"* ]]
+}
+
+@test "skills: no borg skill reuses the name of a built-in skill" {
+    # `borg-collective:simplify` duplicated the built-in `simplify`, so both loaded and both matched one request.
+    [ ! -e "$ROOT/skills/simplify" ]
+}

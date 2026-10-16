@@ -1,12 +1,9 @@
 ---
 name: borg-recon
 description: >
-  Morning link-up — the neural sweep across the collective. Fans out across pluggable source
-  adapters since a mark, reconciles what changed against each repository's local .borg checkpoints,
-  and synthesizes a prioritized, by-repository briefing with two action lists (Yours vs Mine) and a
-  recommended parallel kickoff batch. Source-agnostic: adapters are injected, never hardcoded — it
-  works on any machine, with or without an employer layer. Use when the user says "morning link-up",
-  "what changed", "catch me up", "recon", or starts a session and wants the lay of the land.
+  Morning link-up: sweep every repository since a mark and brief what changed, with Yours vs Mine
+  action lists and a parallel kickoff batch. Use when the user says "morning link-up", "what
+  changed", "catch me up", "recon", or starts a session wanting the lay of the land.
 user-invocable: true
 ---
 

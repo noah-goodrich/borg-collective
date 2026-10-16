@@ -66,7 +66,7 @@ drone toggle [repository]    Show/hide side pane (2 ↔ 3 panes)
 /borg-verify                 Independent pre-merge evaluator gate (PASS/FAIL)
 /borg-resume                 Auto-resume a workflow paused by a session/usage limit
 /adhd-guardrails             Cognitive load guardrails (always active, auto)
-/simplify                    Review changed code for reuse, quality, efficiency (borg-installed)
+/simplify                    Review changed code for reuse, quality, efficiency (Claude Code built-in)
 /fable-reviewer               Fable's 5-gate working discipline (scope, evidence, adversarial review)
 /break-glass                  Add a local permission exception to settings.local.json
 /no-unnecessary-read-perms     Suppress redundant read-permission prompts (always active)
