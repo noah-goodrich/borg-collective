@@ -21,7 +21,7 @@ A new SessionStart hook emits a top-level `systemMessage` carrying the brief. Ev
 4. **Optional `sessionTitle`.** Emitted in `hookSpecificOutput` only when the input's `session_title` is empty. The spike showed that a resume overwrites an existing border title.
 5. **Fail loud.** If the brief cannot be built (no checkpoint reader, bad JSON, missing `borg`), the hook still emits a `systemMessage` of one line that says so. Silence is never the fallback.
 6. **Hook language.** Per `hooks/CLAUDE.md`, a hook that needs a JSON parse plus string work is Python 3 stdlib behind `command -v python3 >/dev/null 2>&1 || exit 0`, with the render logic in `borg_core` and the hook as a thin wrapper.
-7. **Deploy.** Hooks are copied to `~/.claude/hooks/` and do not run from the source tree. After merge, run `borg setup` to redeploy, then confirm with `diff -q hooks/borg-arrival-brief.sh ~/.claude/hooks/borg-arrival-brief.sh`. The plugin owns hook registration; the build adds the SessionStart entry there.
+7. **Deploy.** Claude Code runs borg's hooks from the borg-collective plugin, not from the source tree or `~/.claude/hooks/`. `scripts/build-plugin.sh` writes a lib-inlined copy into the claude-plugins checkout and regenerates that plugin's `hooks/hooks.json` from the `HOOKS_JSON` literal in `build-plugin.sh`. The build adds this hook's SessionStart entry there: command `${CLAUDE_PLUGIN_ROOT}/hooks/borg-arrival-brief.sh`, matcher `startup|resume`. After merge, run the plugin build and `claude plugin update`, then start a new session. The copy `borg setup` places in `~/.claude/hooks/` is not the one Claude Code runs.
 8. **Supersession.** On merge, screen 4's "Channel:" line in the board-chooser directive is already marked superseded; the launcher-print work in build step 2 of the recommendation is not built.
 
 ## Non-Goals
@@ -45,15 +45,15 @@ A new SessionStart hook emits a top-level `systemMessage` carrying the brief. Ev
 - [ ] AC2 — A `resume` input with an existing title emits no `sessionTitle`; an empty title emits one.
   - Verify: the same file has two cases. With `session_title` set to `kept`, `jq -e '.hookSpecificOutput.sessionTitle // empty'` prints nothing and exits 4 on `-e`; with it empty, the same filter prints a non-empty string.
 - [ ] AC3 — `clear`, `compact` and `fork` sources print nothing.
-  - Verify: one case per source asserts stdout is empty and exit 0. The registered matcher is checked by `jq -e '.hooks.SessionStart[] | select(.hooks[].command | test("arrival-brief")) | .matcher == "startup|resume"'` on the built hooks file.
+  - Verify: one case per source asserts stdout is empty and exit 0. The registered matcher is checked by `jq -e '.hooks.SessionStart[] | select(.hooks[].command | test("arrival-brief")) | .matcher == "startup|resume"'` on the plugin's built `hooks/hooks.json` (see AC7).
 - [ ] AC4 — The brief comes from the `borg link --json` document, not a second read.
   - Verify: the test replaces `borg` with a mock that records its argv; the case asserts exactly one call whose args are `link <repo> --json`, and that no `git` process is spawned by the hook (mock `git` on PATH exits 99 and the case still passes).
 - [ ] AC5 — The Queen session gets one verdict line.
   - Verify: a case with input `cwd` equal to `$BORG_ORCHESTRATOR_ROOT` asserts the message has exactly one line and the registry file is byte-identical before and after.
 - [ ] AC6 — A failing brief is loud.
   - Verify: a case where the mock `borg` exits 1 asserts `.systemMessage` is a non-empty single line containing the word `unavailable`, exit 0.
-- [ ] AC7 — The deployed copy matches the source.
-  - Verify: after `borg setup`, `diff -q hooks/borg-arrival-brief.sh ~/.claude/hooks/borg-arrival-brief.sh` exits 0.
+- [ ] AC7 — The plugin build ships and registers the hook.
+  - Verify: after `scripts/build-plugin.sh`, `jq -e '[.hooks.SessionStart[] | select(.hooks[].command | test("borg-arrival-brief"))] | length == 1 and .[0].matcher == "startup|resume"'` on the claude-plugins checkout's `borg-collective/hooks/hooks.json` exits 0, and `test -x` accepts `borg-collective/hooks/borg-arrival-brief.sh` beside it.
 - [ ] AC8 — It renders live (manual, once, Noah).
   - Verify: start a new `claude` in a repository with a checkpoint and see "SessionStart:startup says:" with the four lines before typing; resume it and see "SessionStart:resume says:" with the title unchanged.
 - [ ] AC9 — Suite green.
