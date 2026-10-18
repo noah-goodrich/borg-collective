@@ -93,6 +93,8 @@ borg-collective ── 4 trains ────────────────
 
 Channel: `drone up` prints it to the new window's shell pane after the window opens and before Claude starts. It is a presentation of the same `borg link <project> --json` document, in the way `--brief` is, not a second read. Before the stamper it shows the project, not a train: "last time" and "since then" come from the latest checkpoint and git, which exist today. The train name appears in the header once the stamper exists.
 
+**Superseded 2026-10-18 by the Doorways spike:** the launcher print is hidden by the fullscreen renderer while Claude runs, so the channel is now a SessionStart `systemMessage` on the `startup` and `resume` matchers, built in `2026-10-18-arrival-brief-on-sessionstart.md`. The mock below stands.
+
 ```
 ▸ borg-collective ─────────────────────────────────────────
  last time   AC6 ticked (#264), 6/6 criteria met
