@@ -5,7 +5,7 @@
     {
       "lane": "_default",
       "order": "1",
-      "ref": "noah-goodrich/borg-collective#PR",
+      "ref": "noah-goodrich/borg-collective#437",
       "status": "open",
       "why": "Records the 2026-10-18 spike results and files the arrival-brief directive"
     }
