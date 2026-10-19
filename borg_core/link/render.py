@@ -202,10 +202,14 @@ STATUS_WORDS: tuple[str, ...] = (
     "killed",
 )
 
+# The options `/borg-next` offers (skills/borg-next/SKILL.md: "up to 4 options"). Board and chooser read the same
+# rows, so WAITING ON YOU shows as many as the chooser offers; a contract test pins this against the skill text.
+CHOOSER_OPTIONS = 4
+
 # The most WAITING ON YOU rows (decisions and due parked thoughts together) the compact page prints.
-_WAITING_CAP = 2
+_WAITING_CAP = CHOOSER_OPTIONS
 # The most SIGNALS lines (capacity, warnings, cycles, the width line) the compact page prints before the ladder's gap.
-_SIGNALS_CAP = 2
+_SIGNALS_CAP = 1
 # The widest repository name the compact board prints. A row's head is 50 columns beside the name, and the
 # destination state (`· at risk`) follows it, so a name of 28 leaves 22 columns for the state and a summary.
 _NAME_CAP = 28
@@ -1335,7 +1339,7 @@ def _next_section(doc: dict, compact: bool = False) -> tuple[str, list[str]]:
 
     if compact:
         owners = " · ".join(f"{group} {len(grouped[group])}" for group in _ROUTE_GROUPS if grouped[group])
-        return note, [f"  {owners}  {DIM}— list them:{NC} {CYAN}borg next{NC}\n"]
+        return f"{note} · {owners} · {CYAN}borg next{NC}{DIM}", []
     lines: list[str] = []
     for group in (_GROUP_YOURS, _GROUP_MINE, _GROUP_UNSURE):
         rows = grouped[group]

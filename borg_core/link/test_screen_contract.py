@@ -8,6 +8,7 @@ EVERY FIXTURE IS SYNTHETIC. The live board carries private-repository titles and
 """
 
 import copy
+from pathlib import Path
 import re
 import unicodedata
 
@@ -275,12 +276,12 @@ def test_the_compact_page_is_the_full_page_with_the_same_sections_in_the_same_or
     assert heads(render.document(document)) == heads(render.document(document, full=True))
 
 
-def test_waiting_on_you_prints_two_rows_and_counts_the_rest_on_one_line():
+def test_waiting_on_you_prints_four_rows_and_counts_the_rest_on_one_line():
     page = plain(render.document(_queen(stacks=1, waiting=40))).split("\n")
     start = next(i for i, line in enumerate(page) if line.startswith("▸ WAITING ON YOU"))
     body = [line for line in page[start + 1 :] if line.strip()]
-    assert sum("▶" in line for line in body) == 2
-    assert sum("parking:" in line for line in body) == 1, "a due parked thought keeps one of the two slots"
+    assert sum("▶" in line for line in body) == 4
+    assert sum("parking:" in line for line in body) == 1, "a due parked thought keeps one of the four slots"
     more = next(line for line in body if "more" in line)
     assert more.strip().startswith("+") and "borg next" in more
     assert "+5 more decisions" in more and "+9 agent tasks" in more, "the chooser's hidden counts share the line"
@@ -311,7 +312,7 @@ def test_signals_past_the_cap_are_counted_and_the_ladders_gap_stays_last():
     page = plain(render.document(_queen(stacks=1))).split("\n")
     start = next(i for i, line in enumerate(page) if line.startswith("▸ SIGNALS"))
     assert "signals · borg link --overview --full" in page[start]
-    body = [line for line in page[start + 1 :] if line.strip()][:3]
+    body = [line for line in page[start + 1 :] if line.strip()][:2]
     assert body[-1].strip() == "— 18 of 18 declared refs resolved." or "declared refs resolved" in body[-1]
 
 
@@ -368,3 +369,11 @@ class TestFitLine:
         text = "a" * 150 + "\n\nbb\n"
         fitted = render._fit_text(text, 50)  # pylint: disable=protected-access
         assert [picture.visible_len(line) for line in fitted.split("\n")] == [50, 0, 2, 0]
+
+
+def test_waiting_on_you_shows_as_many_rows_as_the_chooser_offers():
+    """The board and `/borg-next` read the same rows, so the cap is pinned to the skill's own option count."""
+    skill = (Path(__file__).resolve().parents[2] / "skills" / "borg-next" / "SKILL.md").read_text()
+    match = re.search(r"up to (\d+) options", skill)
+    assert match, "the chooser skill states its option count"
+    assert render.CHOOSER_OPTIONS == int(match.group(1)) == render._WAITING_CAP  # pylint: disable=protected-access

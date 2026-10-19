@@ -26,16 +26,16 @@
     [2m- [warehouse] Region cutover runbook (2026-08-18)[0m
     [2m- [ledger] Close-of-day parity harness (2026-08-17)[0m
 
-[1m▸ NEXT[0m  [2m5 ready of 13[0m
-  yours 1 · mine 3 · unsure 1  [2m— list them:[0m [0;36mborg next[0m
+[1m▸ NEXT[0m  [2m5 ready of 13 · yours 1 · mine 3 · unsure 1 · [0;36mborg next[0m[2m[0m
 
 [1m▸ SIGNALS[0m  [2m4 signals · borg link --overview --full[0m
   [1m4 sessions need attention[0m (limit: 3)
-  [2m— sweep: replayed from fixture <TMP>/sweep-acme.json -- no adapter ran[0m
   [2m— 1 of 13 declared refs unresolved — nobody looked[0m
 
 [1m▸ WAITING ON YOU[0m  [2m5 items[0m
-  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/420\#420]8;;\  platform  merge #420  Status: normalise…
-  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/431\#431]8;;\  platform  merge #431  enforce scopes on…
-  [2m+3 more · +2 more decisions[0m  [0;36mborg next[0m
+  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/420\#420]8;;\     platform   merge #420  Status: normalise…
+  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/431\#431]8;;\     platform   merge #431  enforce scopes on…
+  [1;33m▶[0m session  atlas      reply to session
+  [1;33m▶[0m session  warehouse  reply to session
+  [2m+1 more · +2 more decisions[0m  [0;36mborg next[0m
   [1mnext[0m  acme/platform#420 [2m(platform)[0m  [0;36mgh pr view 420 -R acme/platform[0m
