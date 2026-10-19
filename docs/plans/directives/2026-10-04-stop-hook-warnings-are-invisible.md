@@ -62,6 +62,7 @@ behaviour are unchanged.
 5. **It renders.** *Verify (manual, one time):* after `borg setup` redeploys the hook, end a Claude Code session in a
    dirty repo and see the `systemMessage` text in the terminal. If it does not render, this directive's premise about
    Stop is wrong and the fallback is re-filed here before anything else is built on it.
+   *Evidence 2026-10-18 (box not ticked; Noah ticks):* in a live Claude Code v2.1.300 session (fullscreen renderer), a Stop hook's top-level `systemMessage` rendered as "Stop says: ..." under the reply. borg's own Stop warning ("No checkpoint in the last hour for borg-collective") rendered the same way in the same turn. Source: "Spike results (2026-10-18)" in `docs/research/2026-10-03-cheat-sheet-design/recommendation.md`.
 6. **Suite green.** *Verify:* `make test && make test-bats && make lint`.
 
 ## Other hooks with the same shape

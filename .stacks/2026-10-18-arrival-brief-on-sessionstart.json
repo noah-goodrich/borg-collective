@@ -1,0 +1,13 @@
+{
+  "desc": "The Doorways spike results are recorded and the arrival brief is filed as a SessionStart systemMessage build",
+  "program": "2026-10-18-arrival-brief-on-sessionstart",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#437",
+      "status": "open",
+      "why": "Records the 2026-10-18 spike results and files the arrival-brief directive"
+    }
+  ]
+}
