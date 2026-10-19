@@ -402,7 +402,7 @@ JSON
     [ "$status" -eq 0 ]
     local link_rows
     link_rows=$(printf '%s' "$output" | jq -c '.waiting.rows')
-    next_rows=$(printf '%s' "$next_rows" | jq -c '[.rows[] | select(.owner == "YOU")]')
+    next_rows=$(printf '%s' "$next_rows" | jq -c '[.rows[] | select(.owner == "YOU") | del(.card)]')
     [ "$(printf '%s' "$link_rows" | jq 'length')" -ge 3 ]
     printf '%s' "$link_rows" | jq -e 'all(.[]; .next_step == "reply to session")'
     [ "$link_rows" = "$next_rows" ]
