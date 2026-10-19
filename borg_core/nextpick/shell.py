@@ -135,3 +135,24 @@ def read_log_rows() -> list[dict[str, Any]]:
             if isinstance(row, dict):
                 rows.append(row)
     return rows
+
+
+GLANCE_NAME = "next-glance"
+
+
+def glance_path() -> Path:
+    """`<state root>/next-glance`: one line, `<epoch>\\t<glance line>`, read by `borg next --line` (zsh, no Python)."""
+    return paths.state_root() / GLANCE_NAME
+
+
+def write_glance(line: str, now: int) -> bool:
+    """Replace the glance cache with `line` stamped `now`, atomically. True on success, False on any I/O failure."""
+    try:
+        target = glance_path()
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        tmp = Path(f"{target}.tmp.{os.getpid()}")
+        tmp.write_text(f"{now}\t{line}\n", encoding="utf-8")
+        os.replace(tmp, target)
+        return True
+    except OSError:
+        return False

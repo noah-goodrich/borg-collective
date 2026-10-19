@@ -1419,6 +1419,7 @@ def _chooser_item(row: dict) -> dict:
         "ref": ref or label,
         "label": label,
         "linkable": bool(ref),
+        "step": str(row.get("next_step") or detail or label),
         "repository": str(row.get("project") or ""),
         "text": text,
         "unblocks": 0,
@@ -1460,6 +1461,7 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
                     "ref": ref,
                     "label": ref,
                     "linkable": True,
+                    "step": f"decide {ref}",
                     "repository": repository,
                     "text": text,
                     "unblocks": len(node.get("children") or []),
@@ -1638,6 +1640,50 @@ def _waiting_section(doc: dict, cap: int | None = None) -> tuple[str, list[str]]
     if cap is None and more_parked:
         rows.append(f"  {DIM}+{more_parked} more parked items due{NC}\n")
     return note, [*rows, *tail, action]
+
+
+# THE GLANCE LINE (`borg next --line`, doorways S4), derived HERE from the very items `_waiting_section` renders, so the
+# line and the board's WAITING ON YOU cannot disagree: same first item, same count. `borg link` is its ONLY writer.
+# The cached body is cut to `GLANCE_BODY` so the reader can append ` · 99h old` and still fit `GLANCE_COLUMNS`.
+GLANCE_COLUMNS = 80
+GLANCE_BODY = 68
+_GLANCE_REPOSITORY_MAX = 24
+
+
+def _clip(text: str, room: int) -> str:
+    """`text` cut to `room` characters, ending a cut in `…`."""
+    room = max(room, 1)
+    return text if len(text) <= room else text[: room - 1] + "…"
+
+
+def glance_line(doc: dict, local: bool) -> str | None:
+    """The one-line answer to "what waits on me first", or None when this look must not be cached.
+
+    Same inputs as `_waiting_section`: `_waiting` (the chooser's YOU rows, then manifest decisions) and `_parking_due`.
+    `▶ <step> · <repository> · N waiting` names the first of them and counts all of them. THREE STATES: items, a full
+    look that found none (`nothing waits on you`), and a look that could not see everything (`unlooked` refs, a failed
+    sweep) which never says `nothing waits` and tags a count ` · partial`. A `--local` look has no PR rows, so with no
+    items it is None (the cache keeps the last real look) and with items it is tagged ` · local`. The page of
+    repository scope sees one directory, never the board, so it is None.
+    """
+    if _is_repository_scope(doc) or doc.get("waiting") is None:
+        return None
+    items, unlooked = _waiting(doc)
+    parking, more_parked = _parking_due(doc)
+    total = len(items) + len(parking) + more_parked
+    degraded = (doc.get("waiting") or {}).get("degraded")
+    if not total:
+        if unlooked or degraded:
+            return _clip("? could not check everything · run borg next", GLANCE_BODY)
+        return None if local else "· nothing waits on you"
+    tag = " · local" if local else (" · partial" if unlooked or degraded else "")
+    if items:
+        step, repository = items[0]["step"], items[0]["repository"]
+    else:
+        step, repository = "parking: " + _clean(parking[0].get("text")), ""
+    where = f" · {_clip(repository, _GLANCE_REPOSITORY_MAX)}" if repository else ""
+    tail = f"{where} · {total} waiting{tag}"
+    return _clip(f"▶ {_clip(step, GLANCE_BODY - len('▶ ') - len(tail))}{tail}", GLANCE_BODY)
 
 
 def _waiting_rows(kept: list[dict], parked: list[dict]) -> list[str]:

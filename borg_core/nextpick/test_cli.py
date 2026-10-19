@@ -379,3 +379,13 @@ def test_chooser_screen_and_json_agree_and_all_lists_everything(state, monkeypat
     assert len(full["rows"]) == 10 and full["hidden"] == {"agent": 0, "stale": 0, "overflow": 0}
     assert [r["n"] for r in full["rows"]] == list(range(1, 11))
     assert "o/r#2" in [r["ref"] for r in full["rows"]]
+
+
+
+def test_nextpick_never_writes_the_glance_cache(state: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`borg link` is the glance cache's only writer (it alone sees manifest decisions); `--rows` must not touch it."""
+    rows = [{"project": "a", "item": "", "next_step": "merge #9", "owner": "YOU", "ready": "", "ref": "o/a#9"}]
+    monkeypatch.setattr(cli, "item_rows", lambda *_a, **_k: (rows, [], None, {"agent": 0, "stale": 0, "overflow": 0}))
+    cli.rows_json(REGISTRY["repositories"], False)
+    assert not (state.parent / "next-glance").exists()
+    assert shell.write_glance("x", 1) is True

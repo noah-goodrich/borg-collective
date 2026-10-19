@@ -57,7 +57,7 @@ borg's doorways become one-screen terminal text, built the same way on every run
   - Where injection is not expanded (Cortex), the skill falls back to one Bash call.
   - The reversal is recorded in `skills/borg-link/references/rationale.md`.
   - Verify: a contract in `tests/skill_borg_link.bats`, plus one tmux capture of the TUI.
-- [ ] **AC4: One glance line.**
+- [x] **AC4: One glance line.** Shipped in #442: the line is cached by the code that computes the rows and read in zsh (about 21 ms p95); `borg setup --statusline` is opt-in; the tmux string is in `docs/agents/commands.md`.
   - `borg next --line` prints one line of at most 80 columns. It reads cached rows only, makes no network call, and takes at most 100 ms at p95.
   - It names the same item as the board's first WAITING ON YOU row.
   - A statusline script, installed only by `borg setup --statusline`, and a documented tmux format string both use it.

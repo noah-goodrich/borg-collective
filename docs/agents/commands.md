@@ -7,6 +7,16 @@ Reference moved verbatim from the top-level CLAUDE.md.
 ```
 borg init                Launch the Queen: morning briefing + Claude session
 borg / borg next         What needs attention? Switch to it.
+borg next --line         ONE line, at most 80 columns, e.g. `▶ merge #440 · borg-collective · 4 waiting`.
+                         Reads the cached glance line only (`<state root>/next-glance`): no Python, no
+                         network, about 25 ms. The cache is written ONLY by `borg link`
+                         (it alone sees chooser rows and manifest decisions), from the page's
+                         own WAITING ON YOU items (`render.glance_line`), so the line names the
+                         board's first WAITING ON YOU row.
+                         Refreshed by every `borg link` (the Queen page, also `--local`; `/borg-link`
+                         runs it). Missing cache: `borg: not looked yet`. Older than
+                         5 minutes: the line plus ` · 37m old`. Older than 12 hours: `borg: board 3d
+                         old`. Never `nothing waits` unless a full look found nothing.
 borg claude              Resume the Queen session (continue most recent)
 borg link [repository]   ONE renderer, TWO pages, chosen by scope.kind
                            Queen root: the cross-repository overview
@@ -57,6 +67,12 @@ borg nanoprobe-log <id>  Fetch the transcript/summary for a nanoprobe run
 borg spend               Summarize accurate token spend from ~/.claude/token-spend.jsonl
 borg doctor              Environment/dependency health check
 borg setup               Install/refresh hooks, skills, agents, tmux keybinding
+borg setup --statusline  OPT-IN, and the only thing that run does: copy bin/borg-statusline to
+                         ~/.claude/borg-statusline.sh and set `statusLine` in ~/.claude/settings.json
+                         to it (line 1 `borg next --line`, line 2 model and context). Other keys are
+                         kept; a second run changes nothing; a `statusLine` that is not borg's is
+                         refused unless `--force`. `--statusline=off` removes borg's key and script.
+                         Plain `borg setup` never writes `statusLine`.
                            NOT launchd — plists are installed by install.sh only, which calls
                            `borg setup` at the end. A new launchd job needs an install.sh run.
                            `borg setup` warns (one line, never installs) when a shipped agent is not loaded.
@@ -95,3 +111,14 @@ drone scaffold --supabase|--supabase-shared <dir>
 drone link                   Alias for borg link (this directory's page)
 ```
 
+### tmux status segment (for the dotfiles repo; serves Claude Code and Cortex alike)
+
+`borg next --line` is one cheap read, so tmux can poll it. Put this in `status-right` (dotfiles `tmux.conf`, not edited here):
+
+```
+set -g status-interval 15
+set -g status-right-length 120
+set -ag status-right '#(borg next --line) '
+```
+
+`#(...)` runs through `/bin/sh` with tmux's PATH, so use the absolute path to `borg` (`~/.local/bin/borg`) if it is not on it. The line is plain text with no colour codes.

@@ -121,7 +121,7 @@ def test_render_exposes_exactly_one_human_entry_point():
         if not name.startswith("_") and callable(value) and getattr(value, "__module__", "") == render.__name__
     }
     # route_kind is a routing seam for borg_core.nextpick, not a second way to render the page.
-    assert public == {"document", "porcelain", "route_kind"}
+    assert public == {"document", "porcelain", "route_kind", "glance_line"}  # glance_line: the board's own items, one line
 
 
 def test_the_human_arm_names_render_document_exactly_once():
@@ -2052,3 +2052,70 @@ def test_a_board_with_no_shared_repo_is_unchanged_by_grouping():
     # The legend names `└ worktree` on every Queen page, so the check reads the board alone.
     board = out.split("▸ REPOSITORIES")[1].split("▸ STACKS")[0]
     assert "worktree" not in board.split("\n", 1)[1] and "└" not in board
+
+
+# ── the glance line (doorways S4): derived from the board's own items ────────────────────────────────
+
+
+def _with_waiting(doc: dict, rows: list[dict], degraded=None) -> dict:
+    return {**doc, "waiting": {"rows": rows, "hidden": {}, "hidden_lines": [], "degraded": degraded}}
+
+
+def _you(project: str, step: str, ref: str) -> dict:
+    return {"project": project, "item": "", "next_step": step, "owner": "YOU", "ref": ref, "ready": ""}
+
+
+def _board_first_and_count(doc: dict) -> tuple[str, int]:
+    """(first WAITING ON YOU row, plain, and the item count) as the board prints them."""
+    note, rows = render._waiting_section(doc)  # pylint: disable=protected-access
+    first = next(line for line in plain("".join(rows)).split("\n") if "▶" in line)
+    return first, int(note.split()[0])
+
+
+def test_glance_line_parity_when_only_a_manifest_decision_waits():
+    """The case `borg next --rows` cannot see. MUTATION: derive the line from `waiting.rows` alone and it says nothing."""
+    doc = _with_waiting(
+        _ready_doc(["o/r#2"], gates=[_gate("o/r#2", "decision", "Dana signs off")], nodes={"o/r#2": {"title": "T"}}), []
+    )
+    line = render.glance_line(doc, False)
+    first, count = _board_first_and_count(doc)
+    assert line is not None and "o/r#2" in first
+    assert line.startswith("▶ decide o/r#2") and f"· {count} waiting" in line
+
+
+def test_glance_line_parity_with_a_you_row_and_a_manifest_decision():
+    doc = _with_waiting(
+        _ready_doc(["o/r#2"], gates=[_gate("o/r#2", "decision", "Dana signs off")]),
+        [_you("borg-collective", "merge #440", "o/borg-collective#440")],
+    )
+    line = render.glance_line(doc, False)
+    first, count = _board_first_and_count(doc)
+    assert count == 2
+    assert "#440" in first and "borg-collective" in first
+    assert line == "▶ merge #440 · borg-collective · 2 waiting"
+
+
+def test_glance_line_when_nothing_waits_is_three_state():
+    doc = _with_waiting(_ready_doc([]), [])
+    assert render.glance_line(doc, False) == "· nothing waits on you"
+    assert render.glance_line(doc, True) is None
+    failed = render.glance_line(_with_waiting(_ready_doc([]), [], degraded="sweep failed"), False)
+    assert failed is not None and failed.startswith("?") and "nothing waits" not in failed
+    unlooked = render.glance_line(_with_waiting(_ready_doc(["a/b#1"], state="unlooked"), []), False)
+    assert unlooked is not None and "nothing waits" not in unlooked
+
+
+def test_glance_line_tags_a_partial_look_and_fits_its_body():
+    rows = [_you("p" * 60, "a very long next step " * 10, "o/r#1")]
+    line = render.glance_line(_with_waiting(_ready_doc([]), rows, degraded="sweep failed"), False)
+    assert line is not None and line.endswith("1 waiting · partial")
+    assert len(line) <= render.GLANCE_BODY
+    assert render.GLANCE_BODY + len(" · 99h old") <= render.GLANCE_COLUMNS
+    assert render.glance_line(_with_waiting(_ready_doc([]), rows), True).endswith("1 waiting · local")
+
+
+def test_glance_line_is_never_written_for_a_directory_page_or_porcelain():
+    rows = [_you("a", "merge #1", "o/a#1")]
+    doc = _with_waiting(_ready_doc([]), rows)
+    assert render.glance_line({**doc, "scope": {"kind": "repository"}}, False) is None
+    assert render.glance_line({k: v for k, v in doc.items() if k != "waiting"}, False) is None
