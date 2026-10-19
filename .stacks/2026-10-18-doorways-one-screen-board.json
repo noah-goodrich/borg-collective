@@ -1,5 +1,12 @@
 {
   "desc": "borg's doorways become one-screen terminal text, painted verbatim inside Claude Code and Cortex",
   "program": "2026-10-18-doorways-one-screen-board",
-  "rows": []
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#438",
+      "why": "S1 of 5: the directive, its research record, and AC1 (the page stops contradicting itself)"
+    }
+  ]
 }
