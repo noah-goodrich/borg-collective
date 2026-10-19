@@ -1459,12 +1459,14 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
 
 def _waiting_line(item: dict, ref_w: int, repo_w: int) -> str:
     """One waiting item on one line: marker, ref, repository, the sentence, what it unblocks."""
-    text = item["text"] if len(item["text"]) <= _WAITING_TEXT else item["text"][: _WAITING_TEXT - 1] + "…"
-    text = text.rstrip()
     pad_ref = " " * (ref_w - len(item["label"]))
     shown_ref = picture.link_ref(item["ref"], item["label"]) if item["linkable"] else item["label"]
     unblocks = f"  {DIM}unblocks {item['unblocks']}{NC}" if item["unblocks"] else ""
-    return f"  {YELLOW}▶{NC} {shown_ref}{pad_ref}  {item['repository']:<{repo_w}}  {text}{unblocks}\n"
+    head = f"  {YELLOW}▶{NC} {shown_ref}{pad_ref}  {item['repository']:<{repo_w}}  "
+    # THE TITLE YIELDS, THE REF AND `unblocks` NEVER DO: the sentence is cut to what the page width leaves after them.
+    room = min(_WAITING_TEXT, PAGE_COLUMNS - picture.visible_len(head) - picture.visible_len(unblocks))
+    text = item["text"] if len(item["text"]) <= room else item["text"][: max(room, 1) - 1] + "…"
+    return f"{head}{text.rstrip()}{unblocks}\n"
 
 
 _GH_REF = re.compile(r"^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([0-9]+)$")
@@ -1518,8 +1520,25 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
                 return f"  {BOLD}next{NC}  {looked}  {CYAN}borg next{NC}\n"
             return f"  {BOLD}next{NC}  {DIM}nothing is ready{NC}  {CYAN}borg next{NC}\n"
         ref, repository = mine
+    command = _next_action_command(ref)
+    # THE COMMAND IS THE LINE: it is never cut. A GitHub ref shows as `#N` (the command and the repository name the
+    # rest); what still does not fit is cut in the MIDDLE with `…`, the repository name first and then the label, so
+    # both ends of each stay readable.
+    # JUSTIFICATION: str.partition on a plain string; the Demeter rule reads it as a chain on a stranger.
+    label = f"#{ref.partition('#')[2]}" if _GH_REF.match(ref) else ref  # pylint: disable=clean-arch-demeter
+    room = PAGE_COLUMNS - len("  next  ") - 2 - len(command)
+    repository = _middle(repository, max(room - len(label) - 3, 4)) if repository else ""
+    label = _middle(label, room - (len(repository) + 3 if repository else 0))
     where = f" {DIM}({repository}){NC}" if repository else ""
-    return f"  {BOLD}next{NC}  {ref}{where}  {CYAN}{_next_action_command(ref)}{NC}\n"
+    return f"  {BOLD}next{NC}  {label}{where}  {CYAN}{command}{NC}\n"
+
+
+def _middle(text: str, room: int) -> str:
+    """`text` cut to `room` characters with `…` in the middle when it is longer (room is at least 2)."""
+    if len(text) <= room:
+        return text
+    keep = max(room, 2) - 1
+    return text[: keep - keep // 2] + "…" + text[len(text) - keep // 2 :]
 
 
 def _repository_you_count(doc: dict) -> tuple[str, int]:

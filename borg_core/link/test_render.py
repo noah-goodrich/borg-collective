@@ -1695,7 +1695,7 @@ def test_the_page_ends_on_one_next_action_with_a_runnable_command_for_a_yours_ro
     """
     doc = _ready_doc(["a/b#1", "o/r#2"], gates=[_gate("o/r#2", "decision", "Dana signs off")])
     tail = _page_tail(doc)
-    assert tail[-1].startswith("  next  o/r#2")
+    assert tail[-1].startswith("  next  #2")
     assert tail[-1].endswith("gh pr view 2 -R o/r")
     assert sum(1 for line in tail if line.startswith("  next  ")) == 1
 
@@ -1722,7 +1722,7 @@ def test_the_next_action_line_ends_both_pages_but_a_directory_sees_only_its_own_
     scope and the directory's page recommends a pull request that is not its own."""
     doc = _ready_doc(["o/r#2"], gates=[_gate("o/r#2", "decision", "Dana signs off")])
     repo = {**doc, "scope": {"kind": "repository"}}
-    assert _page_tail(doc)[-1].startswith("  next  o/r#2") and _page_tail(doc)[-1].endswith("gh pr view 2 -R o/r")
+    assert _page_tail(doc)[-1].startswith("  next  #2") and _page_tail(doc)[-1].endswith("gh pr view 2 -R o/r")
     last = _page_tail(repo)[-1]
     assert last.startswith("  next  ") and last.endswith("borg next")
     assert "o/r#2" not in last

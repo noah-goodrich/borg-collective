@@ -377,3 +377,25 @@ def test_waiting_on_you_shows_as_many_rows_as_the_chooser_offers():
     match = re.search(r"up to (\d+) options", skill)
     assert match, "the chooser skill states its option count"
     assert render.CHOOSER_OPTIONS == int(match.group(1)) == render._WAITING_CAP  # pylint: disable=protected-access
+
+
+def test_the_next_action_line_never_cuts_its_command_and_waiting_rows_never_cut_their_ref():
+    """The action line holds the literal, runnable command. A long owner/repo makes the full ref too wide for the
+    page, so the label is `#N` (and is cut in its middle when even that does not fit) and the command is whole."""
+    owner = "an-organisation-name/a-repository-name-quite-long"
+    ref = f"{owner}#12345"
+    row = {"project": "p" * 30, "item": "t" * 200, "next_step": "merge", "owner": "YOU", "ref": ref}
+    document = _queen(stacks=1, waiting=0)
+    document["waiting"] = {"rows": [row], "hidden": {}, "hidden_lines": [], "degraded": None}
+    page = plain(render.document(document)).split("\n")
+    last = [line for line in page if line.strip()][-1]
+    command = render._next_action_command(ref)  # pylint: disable=protected-access
+    assert command == f"gh pr view 12345 -R {owner}"
+    assert last.endswith(command) and picture.visible_len(last) <= 100
+    assert last.startswith("  next  #12345")
+    waiting = next(line for line in page if "▶" in line and "#12345" in line)
+    assert "#12345" in waiting and picture.visible_len(waiting) <= 100 and waiting.rstrip().endswith("…")
+    # A non-GitHub label too long for the line is cut in the middle, never the command.
+    document["waiting"]["rows"] = [{**row, "ref": "", "item": "s" * 150}]
+    tail = [line for line in plain(render.document(document)).split("\n") if line.strip()][-1]
+    assert tail.endswith("borg next") and picture.visible_len(tail) <= 100
