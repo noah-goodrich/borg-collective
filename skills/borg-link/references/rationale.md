@@ -4,6 +4,22 @@ This file is never read at runtime. `SKILL.md` does not send the model here, so 
 
 Why the split exists: `SKILL.md` loads in full on every `/borg-link` call in every scope, so a repository page paid for the Queen view and the fallback it never used. `SKILL.md` is now the router plus the repository page, `references/queen-view.md` is read only when `scope.kind == "orchestrator"`, and `references/fallback.md` only when the Step 1 command fails.
 
+## Doorways S3: the board is painted, not re-rendered (2026-10-19)
+
+**Two rules are reversed, for the board only:** "Answer; do not re-render" (the old SKILL.md opening) and "never re-render the CLI's table" (its Guardrails). Until now `/borg-link` piped a jq projection of `borg link --json` to the model and the model wrote new prose each run, so the CLI's layout never reached the screen and a prose page could not be contract-tested (directive `docs/plans/directives/2026-10-18-doorways-one-screen-board.md`, AC3, tracking issue #439). Now the skill injects the CLI's own page and the model reproduces it in ONE fenced block with at most 2 plain lines below. Questions about the board ("why is X blocked?") still get prose answers from the `--json` projection, which moved to `references/questions.md` unchanged. The painted page is only worth showing because S2 (AC2) made it one screen: 50 lines live and at most 100 columns.
+
+**Evidence.**
+- Experiment X1 (`docs/research/2026-10-18-terminal-output/evaluation.md`, section 4): a fenced block keeps exact alignment at 80 and 100 columns in the fullscreen TUI, and skill `!` injection is hidden from the user while the model can reproduce it. So injecting the page and having the model paste it shows the user the CLI's text.
+- Cost: the paint path makes no Bash call, which is one full-context re-read fewer per run (the link-up-prepare directive measured those turns at a median 350k-token context). The page is about 50 lines, against a jq projection of about 30 KB.
+
+**Why the injected line is shaped as it is.**
+- `NO_COLOR=1` turns off colour AND the OSC-8 links (`cli._page` strips both with `picture.plain`), so the injected text has zero escape bytes; `borg_core/link/test_screen_contract.py` pins that for both scopes, with the 100-column bound.
+- A non-zero exit inside injection aborts the whole skill in Claude Code, and Claude never sees the skill. The command ends in `|| echo BORG-LINK-UNAVAILABLE`, so it always exits 0 and a failure prints a marker line that the skill's Fallback section handles. `2>&1` is explicit although Claude Code merges stderr for the default shell, so the Bash fallback and Cortex see the same text.
+- `$ARGUMENTS` is substituted into the injected command (a repository name, `--overview`, `--full`). Injected commands are permission-checked like any Bash call, so an argument that smuggles in another command fails closed instead of running; `allowed-tools` pre-approves only `borg link` and `echo`.
+- Cortex Code expands no dynamic injection (`docs/plans/directives/2026-10-15-borg-in-cortex.md`, AC4). The model there sees the unexpanded injection line between the page markers, and the Fallback says what to do: ONE Bash call that prints the same page.
+- No other line of SKILL.md may contain the injection syntax, because Claude Code would run it: the prose names it without writing it, and `tests/skill_borg_link.bats` counts the lines.
+- The router shrank from 8,143 to under 3 KB because the whole `--json` path (Step 1, the version gate, the compass rules, the repository page recipe) moved to `references/questions.md`, read only when the user asks a question. The painted page needs none of it.
+
 ## The marker is not the mode decision, and the jq whitelist
 
 **The `.borg-project` marker is NOT the mode decision.** It never was a reliable one: linked worktrees never get a marker, so a marker walk sent them into the overview. The engine resolves scope from the cwd (or from an explicit repository name, which wins), and you believe it. The marker is read only in the `## Fallback`, where the engine cannot run. Do not write an ad hoc find/ls to detect the repository.

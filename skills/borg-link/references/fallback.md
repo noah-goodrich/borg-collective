@@ -3,6 +3,8 @@
 **Trigger — this is the whole condition. Do not paraphrase it, and do not fall back for any other
 reason.**
 
+Two doors lead here: SKILL.md's paint Fallback (its one Bash call failed) and `references/questions.md`'s Step 1. "Step 1" below means the failing `borg link` call from either, and the probe below is the same call as `--json`.
+
 The probe must re-run the SAME command Step 1 used, including the repository argument if there was
 one. `RepositoryNotFound` is only raised when a repository name is passed (in `_focus`,
 `borg_core/link/cli.py`); an argument-less overview call can never hit the `not in registry` row, so

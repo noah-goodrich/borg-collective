@@ -19,12 +19,13 @@ SKILL_CAP=8192
     }
 }
 
-@test "budget: the three references files exist and SKILL.md routes to the two it reads" {
+@test "budget: the references files exist and SKILL.md routes to the two it reads" {
+    [ -s "${SKILL_DIR}/references/questions.md" ]
     [ -s "${SKILL_DIR}/references/queen-view.md" ]
     [ -s "${SKILL_DIR}/references/fallback.md" ]
     [ -s "${SKILL_DIR}/references/rationale.md" ]
     run cat "${SKILL_DIR}/SKILL.md"
-    [[ "$output" == *'references/queen-view.md'* ]] || false
+    [[ "$output" == *'references/questions.md'* ]] || false
     [[ "$output" == *'references/fallback.md'* ]] || false
 }
 
