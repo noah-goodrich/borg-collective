@@ -20,7 +20,6 @@ import json as jsonlib
 import os
 import sys
 from collections.abc import Mapping
-from datetime import UTC, datetime
 from typing import NoReturn
 
 from borg_core.compass import shell as compass_shell
@@ -274,8 +273,10 @@ def _record_glance(doc: dict, local: bool) -> None:
     AND the manifest decisions, so the line is derived from the page's own items (`render.glance_line`). Fail-open."""
     try:
         line = render.glance_line(doc, local)
-        if line is not None:
-            nextpick_shell.write_glance(line, int(datetime.now(UTC).timestamp()))
+        # The document's own epoch (`generated_at`), not a second clock read: `_document` reads the clock exactly once.
+        moment = core.iso_to_epoch(doc.get("generated_at"))
+        if line is not None and moment is not None:
+            nextpick_shell.write_glance(line, moment)
     # JUSTIFICATION: a side-channel cache must never fail the page it is derived from.
     except Exception:  # pylint: disable=broad-exception-caught
         pass

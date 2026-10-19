@@ -118,3 +118,18 @@ setup() {
     run zsh "$BORG" setup --force
     [ "$status" -ne 0 ]
 }
+
+@test "statusline: a symlinked settings.json stays a symlink and its target carries the change" {
+    mkdir -p "$HOME/dotfiles"
+    printf '{"model":"opus"}\n' > "$HOME/dotfiles/settings.json"
+    ln -s "$HOME/dotfiles/settings.json" "$SETTINGS"
+    run zsh "$BORG" setup --statusline
+    [ "$status" -eq 0 ]
+    [ -L "$SETTINGS" ]
+    [ "$(jq -r '.statusLine.command' "$HOME/dotfiles/settings.json")" = "$SCRIPT" ]
+    [ "$(jq -r '.model' "$HOME/dotfiles/settings.json")" = "opus" ]
+    run zsh "$BORG" setup --statusline=off
+    [ "$status" -eq 0 ]
+    [ -L "$SETTINGS" ]
+    [ "$(jq -r 'has("statusLine")' "$HOME/dotfiles/settings.json")" = "false" ]
+}

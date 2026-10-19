@@ -86,7 +86,7 @@ from __future__ import annotations
 
 import re
 from functools import partial
-from typing import Callable
+from typing import Callable, NamedTuple
 
 from borg_core.link import core, grid, picture, worktree
 from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
@@ -203,12 +203,11 @@ STATUS_WORDS: tuple[str, ...] = (
     "killed",
 )
 
-# The options `/borg-next` offers (skills/borg-next/SKILL.md: "up to 4 options"). Board and chooser read the same
-# rows, so WAITING ON YOU shows as many as the chooser offers; a contract test pins this against the skill text.
+# The options `/borg-next` offers (skills/borg-next/SKILL.md: "up to 4 options"), and so the most WAITING ON YOU rows
+# (decisions and due parked thoughts together) the compact page prints: board and chooser read the same rows. A contract
+# test pins this against the skill text. It lives HERE, not in `nextpick.core`, because `nextpick.core` imports this
+# module and the reverse import would be a cycle.
 CHOOSER_OPTIONS = 4
-
-# The most WAITING ON YOU rows (decisions and due parked thoughts together) the compact page prints.
-_WAITING_CAP = CHOOSER_OPTIONS
 # The most SIGNALS lines (capacity, warnings, cycles, the width line) the compact page prints before the ladder's gap.
 _SIGNALS_CAP = 1
 # The widest repository name the compact board prints. A row's head is 50 columns beside the name, and the
@@ -245,7 +244,8 @@ def _fit_line(line: str, limit: int = PAGE_COLUMNS) -> str:
     already within `limit` comes back unchanged.
     """
     body, newline, _ = line.partition("\n")
-    if picture.visible_len(body) <= limit:
+    # Visible width never exceeds the raw length (escapes only add bytes), so a short raw line needs no measuring.
+    if len(body) <= limit or picture.visible_len(body) <= limit:
         return line
     out: list[str] = []
     shown = 0
@@ -874,7 +874,7 @@ def _capped(name: str, entry: dict, cap: int) -> dict:
     shortened. `--full` prints the name whole.
     """
     shown = _board_display(name, entry)
-    return entry if not cap or len(shown) <= cap else {**entry, "display_name": shown[: cap - 1] + "…"}
+    return entry if not cap or len(shown) <= cap else {**entry, "display_name": _clip(shown, cap)}
 
 
 _TIP = f"  {DIM}Tip: run 'borg scan' to discover repositories from session history{NC}\n"
@@ -1478,7 +1478,7 @@ def _waiting_line(item: dict, ref_w: int, repo_w: int) -> str:
     head = f"  {YELLOW}▶{NC} {shown_ref}{pad_ref}  {item['repository']:<{repo_w}}  "
     # THE TITLE YIELDS, THE REF AND `unblocks` NEVER DO: the sentence is cut to what the page width leaves after them.
     room = min(_WAITING_TEXT, PAGE_COLUMNS - picture.visible_len(head) - picture.visible_len(unblocks))
-    text = item["text"] if len(item["text"]) <= room else item["text"][: max(room, 1) - 1] + "…"
+    text = _clip(item["text"], room)
     return f"{head}{text.rstrip()}{unblocks}\n"
 
 
@@ -1604,6 +1604,27 @@ def _waiting_tail(doc: dict, leftover: int, capped: bool) -> list[str]:
     return [f"  {counted}{CYAN}borg next{NC}{reason}\n"]
 
 
+class _WaitingFacts(NamedTuple):
+    """What WAITING ON YOU and the glance line both derive from a document, derived ONCE so they cannot drift."""
+
+    items: list[dict]
+    unlooked: bool
+    # Parked thoughts whose look-again date has come ride AFTER the real items and are not offered by the next-action
+    # line: a parked thought is a reminder to look, not a decision with a command that answers it.
+    parking: list[dict]
+    more_parked: int
+    total: int
+    degraded: object
+
+
+def _waiting_facts(doc: dict) -> _WaitingFacts:
+    """`_waiting` and `_parking_due` with their total and the sweep's `degraded` reason, for both consumers."""
+    items, unlooked = _waiting(doc)
+    parking, more_parked = _parking_due(doc)
+    degraded = (doc.get("waiting") or {}).get("degraded")
+    return _WaitingFacts(items, unlooked, parking, more_parked, len(items) + len(parking) + more_parked, degraded)
+
+
 def _waiting_section(doc: dict, cap: int | None = None) -> tuple[str, list[str]]:
     """WAITING ON YOU: what only you can move, last on the page where the eye lands.
 
@@ -1619,33 +1640,33 @@ def _waiting_section(doc: dict, cap: int | None = None) -> tuple[str, list[str]]
     section is longer than its cap by that line and the next action, never by the length of the queue. `None` (the
     directory's page, and `--full`) prints it all, byte for byte as before.
     """
-    items, unlooked = _waiting(doc)
+    facts = _waiting_facts(doc)
+    items, parking, more_parked, unlooked = facts.items, facts.parking, facts.more_parked, facts.unlooked
     action = _next_action_line(doc, items, unlooked)
-    # Parked thoughts whose look-again date has come ride AFTER the real items and are not offered by the next-action
-    # line: a parked thought is a reminder to look, not a decision with a command that answers it.
-    parking, more_parked = _parking_due(doc)
-    total = len(items) + len(parking) + more_parked
-    shown = total if cap is None else min(cap, len(items) + len(parking))
-    # A due parked thought keeps at least ONE of the capped slots (and any the decisions leave empty): seven sessions
-    # waiting must not starve the reminder to look.
-    parked_n = len(parking) if cap is None else min(len(parking), max(1, shown - len(items)))
-    tail = _waiting_tail(doc, total - shown, cap is not None)
+    capped = cap is not None
+    if cap is None:
+        shown, parked_n = facts.total, len(parking)
+    else:
+        shown = min(cap, len(items) + len(parking))
+        # A due parked thought keeps at least ONE of the capped slots (and any the decisions leave empty): seven
+        # sessions waiting must not starve the reminder to look.
+        parked_n = min(len(parking), max(1, shown - len(items)))
+    tail = _waiting_tail(doc, facts.total - shown, capped)
     if not items and not parking:
         note, placeholder = _nothing_line(doc, unlooked)
         return note, [placeholder, *tail, action]
-    note = _plural(total, "item", "items")
+    note = _plural(facts.total, "item", "items")
     if unlooked:
         note += " — and some refs nobody looked up"
     rows = _waiting_rows(items[: shown - parked_n], parking[:parked_n])
-    if cap is None and more_parked:
+    if not capped and more_parked:
         rows.append(f"  {DIM}+{more_parked} more parked items due{NC}\n")
     return note, [*rows, *tail, action]
 
 
 # THE GLANCE LINE (`borg next --line`, doorways S4), derived HERE from the very items `_waiting_section` renders, so the
 # line and the board's WAITING ON YOU cannot disagree: same first item, same count. `borg link` is its ONLY writer.
-# The cached body is cut to `GLANCE_BODY` so the reader can append ` · 99h old` and still fit `GLANCE_COLUMNS`.
-GLANCE_COLUMNS = 80
+# The cached body is cut to `GLANCE_BODY` so the reader can append ` · 99h old` and still fit 80 columns.
 GLANCE_BODY = 68
 _GLANCE_REPOSITORY_MAX = 24
 
@@ -1668,10 +1689,7 @@ def glance_line(doc: dict, local: bool) -> str | None:
     """
     if _is_repository_scope(doc) or doc.get("waiting") is None:
         return None
-    items, unlooked = _waiting(doc)
-    parking, more_parked = _parking_due(doc)
-    total = len(items) + len(parking) + more_parked
-    degraded = (doc.get("waiting") or {}).get("degraded")
+    items, unlooked, parking, _, total, degraded = _waiting_facts(doc)
     if not total:
         if unlooked or degraded:
             return _clip("? could not check everything · run borg next", GLANCE_BODY)
@@ -1868,7 +1886,7 @@ def _queen_sections(*, compact: bool) -> tuple[tuple[str, Builder], ...]:
         ("SIGNALS", partial(_signals_section, compact=compact)),
         # LAST ON PURPOSE: link-unification L3 puts the answer in the final lines before the prompt, and
         # where the board mock and L3 disagree about position, L3 wins. Always present (board AC4).
-        ("WAITING ON YOU", partial(_waiting_section, cap=_WAITING_CAP if compact else None)),
+        ("WAITING ON YOU", partial(_waiting_section, cap=CHOOSER_OPTIONS if compact else None)),
     )
 
 
@@ -1923,17 +1941,23 @@ def _is_unregistered(doc: dict) -> bool:
     return bool((doc.get("scope") or {}).get("unregistered"))
 
 
-def _sections_for(doc: dict, full: bool = False) -> tuple[tuple[str, Builder], ...]:
-    """The section list for this document's scope: one directory's page, the hint, or the Queen's overview.
+# How `document` fits a page to the screen, decided with the section list so no caller re-derives it from the list.
+_FIT_NONE, _FIT_FOCUS, _FIT_PAGE = "none", "focus", "page"
 
-    A document with no `scope` (one built before S1) is the Queen's, as it always rendered. `full` picks the
-    Queen's unbudgeted list and means nothing to the other two pages, which have no budgeted section.
+
+def _sections_for(doc: dict, full: bool = False) -> tuple[tuple[tuple[str, Builder], ...], str]:
+    """`(sections, fit)` for this document's scope: one directory's page, the hint, or the Queen's overview.
+
+    A document with no `scope` (one built before S1) is the Queen's, as it always rendered. `full` picks the Queen's
+    unbudgeted list and means nothing to the other two pages, which have no budgeted section. `fit` is how `document`
+    cuts the page: the Queen's compact page whole (`_FIT_PAGE`), a directory's IN FOCUS only (`_FIT_FOCUS`), and the
+    hint and `--full` not at all.
     """
     if _is_unregistered(doc):
-        return UNREGISTERED_SECTIONS
+        return UNREGISTERED_SECTIONS, _FIT_NONE
     if _is_repository_scope(doc):
-        return REPOSITORY_SECTIONS
-    return FULL_SECTIONS if full else SECTIONS
+        return REPOSITORY_SECTIONS, _FIT_FOCUS
+    return (FULL_SECTIONS, _FIT_NONE) if full else (SECTIONS, _FIT_PAGE)
 
 
 def _repository_chunk(title: str, build: Builder, doc: dict) -> str:
@@ -1967,8 +1991,8 @@ def document(doc: dict, full: bool = False) -> str:
     the screen that held nothing, and link-unification L3 wants the next action to be the last thing the eye lands
     on. One line is the difference between 51 and 50 on the live registry.
     """
-    sections = _sections_for(doc, full)
-    if sections is REPOSITORY_SECTIONS:
+    sections, fit = _sections_for(doc, full)
+    if fit == _FIT_FOCUS:
         return "".join(_repository_chunk(title, build, doc) for title, build in sections)
     text = "".join(line for title, build in sections for line in _section(title, *build(doc)))
-    return _fit_text(text).rstrip("\n") + "\n" if sections is SECTIONS else text
+    return _fit_text(text).rstrip("\n") + "\n" if fit == _FIT_PAGE else text

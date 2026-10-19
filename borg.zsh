@@ -40,6 +40,50 @@ warn()  { echo -e "${YELLOW}▸${NC} $*"; }
 die()   { echo -e "${RED}▸ ERROR:${NC} $*" >&2; exit 1; }
 dbg()   { [[ -n "${BORG_DEBUG:-}" ]] && echo -e "${CYAN}  [dbg]${NC} $*" >&2 || true; }
 
+# `borg next --line` IS DISPATCHED HERE, BEFORE THE LIB LOOP BELOW, because the statusline runs it on every UI event and
+# zsh would otherwise parse every lib/*.zsh first. The state root is inlined (the contract of lib/state-root.zsh's
+# `_borg_state_root`, which is not loaded yet) so no subshell is forked either.
+# `borg next --line`: ONE line, at most 80 columns, read from the cache the rows-computing code wrote
+# (borg_core.nextpick: `<state root>/next-glance`, `<epoch>\t<line>`). NO PYTHON, NO NETWORK, NO REGISTRY: the file is
+# read with the shell's own `read`, so the cost is zsh startup and does not depend on Python's. Dispatched BEFORE the
+# registry guard for the same reason. THE LINE NEVER ANSWERS CONFIDENTLY FROM AN OLD LOOK:
+#   missing/unreadable cache  -> `borg: not looked yet`   (nobody looked; never `nothing waits`)
+#   up to 5 minutes old       -> the cached line as written
+#   up to 12 hours old        -> the cached line + ` · <age> old`   (the writer left room: GLANCE_BODY is 68)
+#   older, or a clock in the future -> `borg: board <age> old`, the cached answer is dropped
+_borg_next_line() {
+    zmodload -F zsh/datetime p:EPOCHSECONDS 2>/dev/null || true
+    local file epoch="" line="" age unit
+    file="${XDG_STATE_HOME:-$HOME/.local/state}/borg/next-glance"
+    [[ -r "$file" ]] && IFS=$'\t' read -r epoch line < "$file" 2>/dev/null
+    if [[ ! "$epoch" =~ ^[0-9]+$ || -z "$line" ]]; then
+        print -r -- "borg: not looked yet · run borg next"
+        return 0
+    fi
+    age=$(( EPOCHSECONDS - epoch ))
+    if (( age < 0 )); then
+        print -r -- "borg: board time is in the future · run borg next"
+        return 0
+    fi
+    if (( age < 3600 )); then unit="$(( age / 60 ))m"
+    elif (( age < 172800 )); then unit="$(( age / 3600 ))h"
+    else unit="$(( age / 86400 ))d"
+    fi
+    if (( age <= 300 )); then
+        print -r -- "$line"
+    elif (( age <= 43200 )); then
+        print -r -- "$line · $unit old"
+    else
+        print -r -- "borg: board $unit old · run borg next"
+    fi
+}
+
+if [[ "${1:-}" == next && "${2:-}" == --line ]]; then
+    (( $# == 2 )) || die "next --line takes no other arguments"
+    _borg_next_line
+    exit 0
+fi
+
 # Source library modules
 for _lib in "$BORG_HOME/lib"/*.zsh; do
     source "$_lib"
@@ -894,41 +938,6 @@ _borg_next_surface() {
             _borg_next_log "$registry" 0 "" "${base[@]}"
             ;;
     esac
-}
-
-# `borg next --line`: ONE line, at most 80 columns, read from the cache the rows-computing code wrote
-# (borg_core.nextpick: `<state root>/next-glance`, `<epoch>\t<line>`). NO PYTHON, NO NETWORK, NO REGISTRY: the file is
-# read with the shell's own `read`, so the cost is zsh startup and does not depend on Python's. Dispatched BEFORE the
-# registry guard for the same reason. THE LINE NEVER ANSWERS CONFIDENTLY FROM AN OLD LOOK:
-#   missing/unreadable cache  -> `borg: not looked yet`   (nobody looked; never `nothing waits`)
-#   up to 5 minutes old       -> the cached line as written
-#   up to 12 hours old        -> the cached line + ` · <age> old`   (the writer left room: GLANCE_BODY is 68)
-#   older, or a clock in the future -> `borg: board <age> old`, the cached answer is dropped
-_borg_next_line() {
-    zmodload -F zsh/datetime p:EPOCHSECONDS 2>/dev/null || true
-    local file epoch="" line="" age unit
-    file="$(_borg_state_root)/next-glance"
-    [[ -r "$file" ]] && IFS=$'\t' read -r epoch line < "$file" 2>/dev/null
-    if [[ ! "$epoch" =~ ^[0-9]+$ || -z "$line" ]]; then
-        print -r -- "borg: not looked yet · run borg next"
-        return 0
-    fi
-    age=$(( EPOCHSECONDS - epoch ))
-    if (( age < 0 )); then
-        print -r -- "borg: board time is in the future · run borg next"
-        return 0
-    fi
-    if (( age < 3600 )); then unit="$(( age / 60 ))m"
-    elif (( age < 172800 )); then unit="$(( age / 3600 ))h"
-    else unit="$(( age / 86400 ))d"
-    fi
-    if (( age <= 300 )); then
-        print -r -- "$line"
-    elif (( age <= 43200 )); then
-        print -r -- "$line · $unit old"
-    else
-        print -r -- "borg: board $unit old · run borg next"
-    fi
 }
 
 cmd_next() {
@@ -2163,6 +2172,15 @@ _borg_migrate_registry_key() {
     return 0
 }
 
+# Rewrite <file> with a jq program, atomically: jq's output goes to a sibling tmp file that replaces <file>, and a failed
+# jq leaves no tmp behind. <file> is the already-resolved target, never a symlink, so the link itself survives.
+# Usage: _borg_jq_rewrite <file> <jq args...> (the last argument is the program)
+_borg_jq_rewrite() {
+    local file="$1" tmp="$1.tmp.$$"
+    shift
+    jq "$@" "$file" > "$tmp" && mv "$tmp" "$file" || { rm -f "$tmp"; return 1; }
+}
+
 # `borg setup --statusline[=off] [--force]`: the OPT-IN statusline. NOTHING ELSE runs (not the wizard, not the hooks), and
 # plain `borg setup` never touches `statusLine`. Copies bin/borg-statusline to $HOME/.claude/borg-statusline.sh and sets
 # `statusLine` in $HOME/.claude/settings.json to it, keeping every other key (jq rewrites the file once, on the first
@@ -2171,7 +2189,11 @@ _borg_migrate_registry_key() {
 # when it is borg's) and the script. Both read $HOME, so a test points HOME at a scratch directory.
 _borg_setup_statusline() {
     local mode="$1" force="$2"
-    local dir="$HOME/.claude" settings="$HOME/.claude/settings.json" script="$HOME/.claude/borg-statusline.sh"
+    source "$BORG_HOME/lib/resume-install.sh"
+    # settings.json is often a symlink into the dotfiles repo: resolve it and write through the target, the way
+    # borg_merge_settings_allow does, so the link is not replaced by a plain file.
+    local dir="$HOME/.claude" settings script="$HOME/.claude/borg-statusline.sh"
+    settings="$(_ri_resolve_link "$HOME/.claude/settings.json")"
     local source_script="$BORG_HOME/bin/borg-statusline" current=""
     command -v jq &>/dev/null || die "setup --statusline needs jq"
     if [[ -f "$settings" ]]; then
@@ -2181,14 +2203,13 @@ _borg_setup_statusline() {
     local is_borg=0 has_key=0
     [[ "$current" == */borg-statusline.sh ]] && is_borg=1
     [[ -f "$settings" ]] && jq -e 'has("statusLine")' "$settings" &>/dev/null && has_key=1
-    local tmp="$settings.tmp.$$"
     if [[ "$mode" == off ]]; then
         if (( has_key && ! is_borg )); then
             warn "statusLine in $settings is not borg's; left alone"
             return 0
         fi
         if (( has_key )); then
-            jq 'del(.statusLine)' "$settings" > "$tmp" && mv "$tmp" "$settings"
+            _borg_jq_rewrite "$settings" 'del(.statusLine)'
         fi
         [[ -f "$script" ]] && rm -f "$script"
         info "statusline removed"
@@ -2210,7 +2231,7 @@ _borg_setup_statusline() {
         return 0
     fi
     [[ -f "$settings" ]] || printf '{}\n' > "$settings"
-    jq --arg cmd "$script" '.statusLine = {type: "command", command: $cmd}' "$settings" > "$tmp" && mv "$tmp" "$settings"
+    _borg_jq_rewrite "$settings" --arg cmd "$script" '.statusLine = {type: "command", command: $cmd}'
     info "statusline installed: $script"
 }
 
@@ -4194,12 +4215,6 @@ _borg_link_dispatch() {
     (( _link_full )) && _link_py_args+=(--full)
     _borg_py borg_core.link.cli "${_link_py_args[@]}"
 }
-
-if [[ "${1:-}" == next && "${2:-}" == --line ]]; then
-    (( $# == 2 )) || die "next --line takes no other arguments"
-    _borg_next_line
-    exit 0
-fi
 
 # A registry that still has only the retired `projects` key must fail loudly, not read as empty.
 # `setup` migrates it and `doctor` reports it, so both run; so do the verbs that never read the registry.

@@ -12,6 +12,7 @@ from borg_core import paths, retention
 from borg_core.link import core as link_core
 from borg_core.link import shell as link_shell
 from borg_core.nextpick import core
+from borg_core.planstate import shell as planstate_shell
 from borg_core.recon import core as recon_core
 
 LOG_NAME = "next-recs.jsonl"
@@ -150,9 +151,7 @@ def write_glance(line: str, now: int) -> bool:
     try:
         target = glance_path()
         os.makedirs(os.path.dirname(target), exist_ok=True)
-        tmp = Path(f"{target}.tmp.{os.getpid()}")
-        tmp.write_text(f"{now}\t{line}\n", encoding="utf-8")
-        os.replace(tmp, target)
+        planstate_shell.write_atomic(target, f"{now}\t{line}\n")
         return True
     except OSError:
         return False

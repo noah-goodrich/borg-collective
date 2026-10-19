@@ -5,7 +5,7 @@
 # glance line: no network, no Python). Line 2 is the model and context use, from the same JSON, when jq is there.
 # Fail-quiet: a statusline that errors paints garbage on every prompt, so every failure prints a plain line.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-input="$(cat)"
+input="$(</dev/stdin)"
 line="$(borg next --line 2>/dev/null)"
 printf '%s\n' "${line:-borg: not available}"
 if command -v jq >/dev/null 2>&1; then
