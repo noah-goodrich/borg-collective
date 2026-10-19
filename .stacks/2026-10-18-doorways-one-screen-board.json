@@ -31,6 +31,13 @@
       "order": "5",
       "ref": "noah-goodrich/borg-collective#443",
       "why": "S5 of 5: AC5, chooser cards (6 lines by 42 columns, next_step, exact command) as AskUserQuestion previews; Cortex keeps descriptions"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#444",
+      "status": "open",
+      "why": "Step 0: the /simplify findings applied, statusline symlink fix, next --line hot path"
     }
   ]
 }
