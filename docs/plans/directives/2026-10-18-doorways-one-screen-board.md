@@ -51,7 +51,7 @@ borg's doorways become one-screen terminal text, built the same way on every run
   - Status words come from one closed set defined once in code, and the legend and the contract test both read it.
   - All repositories stay on the board, because L4 idle-collapse was rejected.
   - Verify: a screen-contract test over fixtures with 1 and 40 stacks. Then `borg link --overview | wc -l` is at most 50 on the live registry.
-- [ ] **AC3: `/borg-link` paints the page verbatim.**
+- [x] **AC3: `/borg-link` paints the page verbatim.** Shipped in #441: the page is injected by one line, the `--json` path moved to `skills/borg-link/references/questions.md`, and the repository page is fitted to 100 columns in IN FOCUS. A line of exactly 100 columns wraps in a 100-column TUI (code-block gutter); it aligns at 104.
   - The skill injects the CLI page with `!` preprocessing, with color off. The model reproduces it in one fenced block and adds at most 2 lines below it.
   - The paint path makes no Bash call. Questions about the board still get prose.
   - Where injection is not expanded (Cortex), the skill falls back to one Bash call.
