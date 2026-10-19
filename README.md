@@ -47,7 +47,7 @@ borg init   # launch the Queen: morning briefing + Claude session
 | `borg init` | Launch the Queen: morning briefing + Claude session |
 | `borg` / `borg next` | What needs attention? Switch to it. |
 | `borg claude` | Resume the Queen session (continue most recent) |
-| `borg link [repository]` | **Front door.** At the Queen's root (the workspace root) it is the cross-repository overview; anywhere else, or with a repository, it is a page about that one directory (identity, session, its own checkpoints, what waits on it). `--overview` forces the overview from any directory |
+| `borg link [repository]` | **Front door.** At the Queen's root (the workspace root) it is the cross-repository overview; anywhere else, or with a repository, it is a page about that one directory (identity, session, its own checkpoints, what waits on it). `--overview` forces the overview from any directory, and `--overview --full` prints it with no page budget (the default page fits one screen: STACKS and QUEUED are counts) |
 | `borg switch [query]` | fzf picker → jump to repository tmux window |
 | `borg recon --json` | Machine surface only: the reconciled sweep document. Human digest retired — use `borg link` |
 | `borg nanoprobes` (`np`) | List recent nanoprobe runs (subagents) |

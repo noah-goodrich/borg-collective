@@ -467,7 +467,13 @@ def _page(text: str, color: bool) -> str:
 
 # pylint: disable-next=too-many-arguments,too-many-positional-arguments
 def _run(
-    repository: str, show_all: bool, mode: str, local: bool = False, overview: bool = False, color: bool = True
+    repository: str,
+    show_all: bool,
+    mode: str,
+    local: bool = False,
+    overview: bool = False,
+    color: bool = True,
+    full: bool = False,
 ) -> int:
     """Dispatch one `borg link` invocation; returns the process exit code.
 
@@ -488,7 +494,7 @@ def _run(
         return _emit(jsonlib.dumps(doc) + "\n")
     if mode == "porcelain":
         return _emit(render.porcelain(doc))
-    return _emit(_page(render.document(doc), color))
+    return _emit(_page(render.document(doc, full), color))
 
 
 def _render_document_from_stdin(stream, color: bool = True) -> int:
@@ -591,6 +597,12 @@ def _build_parser() -> argparse.ArgumentParser:
     # --all --overview`), which wants every repository's name from whatever cwd the session is in. It sets
     # scope.kind to orchestrator and ignores a positional; no JSON key is added or narrowed.
     parser.add_argument("--overview", dest="overview", action="store_true")
+    # THE QUEEN'S PAGE WITH NO BUDGET (doorways S2). The compact page holds STACKS and QUEUED to a count and one
+    # command, and that command is `borg link --overview --full`: every stack drawn, every directive listed, every
+    # signal and waiting row. Presentation only -- `--json` carries the same document with or without it, and the
+    # directory's page has no budgeted section, so it means nothing there. `--all` was checked first and is not
+    # this: it only un-hides archived repositories on the board.
+    parser.add_argument("--full", dest="full", action="store_true")
     # NOT A MODE. Reads a document off stdin and renders it; builds nothing, sweeps nothing, reads no
     # clock. Its one caller is `_borg_print_briefing`'s fallback (borg.zsh), and `_render_document_from_stdin`
     # carries the reasoning. It is gated in `main()` ABOVE `_run` rather than inside `_mode` so the
@@ -656,7 +668,7 @@ def main(argv: list[str] | None = None) -> None:
         if args.render_document:
             exit_code = _render_document_from_stdin(sys.stdin, color)
         else:
-            exit_code = _run(args.repository, args.show_all, mode, args.local, args.overview, color)
+            exit_code = _run(args.repository, args.show_all, mode, args.local, args.overview, color, args.full)
     except RepositoryNotFound as exc:
         die(_not_found_message(exc))
     # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.

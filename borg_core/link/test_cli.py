@@ -1081,7 +1081,8 @@ def test_a_manifest_only_under_a_retired_root_renders_nowhere_and_borg_link_name
     named = [w for w in grid_block["warnings"] if "borg stack migrate" in w]
     assert len(named) == 1 and directory in named[0] and f".borg/{directory_name}" in named[0]
 
-    assert cli._run("", False, "human", local=True) == 0  # pylint: disable=protected-access
+    # `full`: the compact page cuts a signal wider than 100 columns, and this sentence is wider (the cure is at its end).
+    assert cli._run("", False, "human", local=True, full=True) == 0  # pylint: disable=protected-access
     page = capsys.readouterr().out
     assert "manifests in 1 repository are still under .borg/chains and are no longer read" in page
     assert "in the registry yet" not in page and "to scaffold one" not in page
@@ -1149,7 +1150,7 @@ def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(
     grid_block = json.loads(capsys.readouterr().out)["grid"]
     assert grid_block["manifests"] == [] and grid_block["refused"] == 1
 
-    assert cli._run("", False, "human", local=True) == 0  # pylint: disable=protected-access
+    assert cli._run("", False, "human", local=True, full=True) == 0  # pylint: disable=protected-access
     page = capsys.readouterr().out
     signals = page[page.index("SIGNALS") :]
     assert str(refused_file) in signals, "SIGNALS names the refused file path"
@@ -1189,7 +1190,7 @@ def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
     assert waiting["hidden"] == hidden and hidden["overflow"] == 2 and hidden["agent"] == 2
     assert waiting["hidden_lines"] == ["+2 more decisions", "+2 agent tasks"]
 
-    page = cli.render.document({"projects": repositories, "grid": {"manifests": []}, "waiting": waiting})
+    page = cli.render.document({"projects": repositories, "grid": {"manifests": []}, "waiting": waiting}, full=True)
     body = [line for line in page.split("\x1b[1m▸ WAITING ON YOU")[1].split("\n")[1:] if line.strip()]
     assert len(body) == 5 + 2 + 1
     assert "+2 more decisions" in body[-3] and "+2 agent tasks" in body[-2]
@@ -1382,7 +1383,8 @@ def test_no_color_strips_every_escape_from_the_human_page_and_empty_keeps_colour
     coloured page minus its escapes, so a column that shifted (padding computed on the wrong length) fails.
     """
     _page_with_a_picture(isolated_env, monkeypatch)
-    argv = ["--local", "--overview"]
+    # `--full`: the compact page counts its stacks, so only the unbudgeted page carries a picture's OSC-8 links.
+    argv = ["--local", "--overview", "--full"]
 
     coloured = _main_stdout(argv, capsys)
     assert "\033[" in coloured and "\033]8;;" in coloured, "the control page carries no colour to remove"
@@ -1395,6 +1397,13 @@ def test_no_color_strips_every_escape_from_the_human_page_and_empty_keeps_colour
     assert "\033" not in plain
     assert plain == picture.plain(coloured)
     assert "warehouse" in plain and "REPOSITORIES" in plain, "stripping must not eat the page"
+
+    # The compact page is fitted to 100 columns by cutting through text that may carry escapes: its stripped form
+    # must still be exactly its coloured form minus the escapes, or the cut moved a column under NO_COLOR.
+    monkeypatch.delenv("NO_COLOR")
+    compact = _main_stdout(["--local", "--overview"], capsys)
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert _main_stdout(["--local", "--overview"], capsys) == picture.plain(compact)
 
 
 def test_no_color_leaves_json_and_porcelain_byte_identical(isolated_env, capsys, monkeypatch):

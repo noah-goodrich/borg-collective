@@ -55,7 +55,7 @@ Scope is the engine's `scope.kind`, never the `.borg-project` marker or your gue
 
 **Version gate — read `.version` first.** `== 2` → proceed silently. `> 2` → proceed, and say in one line this skill targets v2 and newer fields may go unreported. `< 2` or absent → STOP: tell the user their borg install is older than this skill; do NOT fall back on a version mismatch.
 
-**Host-only flags.** `--refresh` and `--brief` need the host: if asked, tell the user to run `borg link --brief` / `--refresh` there.
+**Host-only flags.** `--refresh` and `--brief` need the host: if asked, tell the user to run `borg link --brief` / `--refresh` there. `--full` changes only the CLI's own page (`borg link --overview --full` prints every stack and directive); the JSON read here is identical with or without it.
 
 **`.compass`** (additive; absent on an older engine: say nothing): `found` false → one line "no map at `<map_dir>`"; never invent a leg, destination or date. `leg.text` is today's leg (null: none). A destination's `state` is `on-track`, `at-risk`, `late` or `undated` if active, else its status. **Off route**: with a leg, a repository whose `repositories[<name>]` (`{destination, on_leg}`) is off the leg reads "off route: `<repository>` is not on today's leg"; no destination is unmapped, never off route. A non-empty `warnings` is a skipped map file: say so once.
 

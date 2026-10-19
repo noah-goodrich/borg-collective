@@ -69,6 +69,12 @@ def _doc(**overrides) -> dict:
     return base
 
 
+def _full(doc: dict) -> str:
+    """The Queen's page with no budget (`--full`): what the tests that pin a section's UNBUDGETED form read. The
+    budgeted page is pinned by `test_screen_contract.py`; a directory's page ignores the flag."""
+    return render.document(doc, full=True)
+
+
 def _focus(**overrides) -> dict:
     base: dict = {
         "name": "p",
@@ -316,12 +322,12 @@ def test_queued_is_the_queens_aggregate_and_a_directory_page_has_none():
     aggregate = [{"project": "other", "title": "Someone else's directive"}]
     scoped = [{"title": "My directive"}]
 
-    repository = render.document(_repository_doc(directives=aggregate, focus=_focus(directives=scoped)))
+    repository = _full(_repository_doc(directives=aggregate, focus=_focus(directives=scoped)))
     assert "My directive" not in repository
     assert "Someone else's directive" not in repository
     assert "QUEUED" not in repository
 
-    orchestrator = render.document(_doc(directives=aggregate))
+    orchestrator = _full(_doc(directives=aggregate))
     assert "[other] Someone else's directive" in orchestrator
 
 
@@ -375,7 +381,7 @@ def test_status_line_appears_exactly_once_on_the_whole_page_and_ends_in_the_stat
             },
         }
     ]
-    out = render.document(doc)
+    out = _full(doc)
     body_text = plain(out)
     status_lines = [line for line in body_text.split("\n") if "Status:" in line]
     assert len(status_lines) == 1  # the card's own line; the poisoned PR title is not on this page
@@ -383,7 +389,7 @@ def test_status_line_appears_exactly_once_on_the_whole_page_and_ends_in_the_stat
     assert status_lines[0].endswith("active")
 
     # On the Queen's page the poisoned title IS rendered, and it is the only `Status:` there: the Queen has no card.
-    queen = plain(render.document({**doc, "focus": None, "scope": {"kind": "orchestrator"}})).split("\n")
+    queen = plain(_full({**doc, "focus": None, "scope": {"kind": "orchestrator"}})).split("\n")
     assert [line for line in queen if "Status:" in line] == [line for line in queen if "normalise the rollout" in line]
     assert len([line for line in queen if "Status:" in line]) == 1
 
@@ -460,7 +466,7 @@ def test_board_summary_truncation_boundary_and_ellipsis(length, expect_ellipsis)
         order=["a"],
         projects={"a": {"source": "cli", "status": "idle", "relative_activity": "never", "summary": summary}},
     )
-    out = render.document(doc)
+    out = _full(doc)
     if expect_ellipsis:
         assert "x" * 50 + "..." in out
     else:
@@ -520,7 +526,7 @@ def test_board_row_variants_capacity_and_cortex_all_render():
         cortex_pending=[{"project": "a", "reset_at": "x", "countdown": "1h 0m"}],
         capacity={"active": 5, "limit": 3, "over_limit": True},
     )
-    out = render.document(doc)
+    out = _full(doc)
     assert "[D]" in out
     assert "[X]" in out
     assert "waiting <<<" in out
@@ -714,7 +720,7 @@ def test_chains_renders_a_manifest_heading_its_description_and_its_repositories(
     if the renderer stops reading them."""
     doc = _doc()
     doc["grid"]["manifests"] = [_fork_block()]
-    body_text = plain(render.document(doc))
+    body_text = plain(_full(doc))
 
     assert "  auth-hardening" in body_text
     assert "  Rotate every service onto scoped keypair auth" in body_text
@@ -735,7 +741,7 @@ def test_a_manifest_with_no_description_or_repositories_renders_neither_line():
     block["repos"] = []
     doc = _doc()
     doc["grid"]["manifests"] = [block]
-    body_text = plain(render.document(doc))
+    body_text = plain(_full(doc))
 
     # Drop the header LINE (which carries the section note) before reading the body.
     body = body_text.split("▸ STACKS")[1].split("\n", 1)[1].split("▸ QUEUED")[0]
@@ -1255,7 +1261,7 @@ def _ready_doc(refs, *, gates=(), nodes=None, state="known", declared=None) -> d
 def _next_body(doc: dict) -> list[str]:
     """The plain-text `▸ NEXT` block, header included, up to the next section."""
     out, inside = [], False
-    for line in plain(render.document(doc)).split("\n"):
+    for line in plain(_full(doc)).split("\n"):
         if line.startswith(f"{render.SECTION_MARK}NEXT"):
             inside = True
         elif line.startswith(render.SECTION_MARK):
@@ -2026,9 +2032,9 @@ def test_the_board_header_still_describes_its_rows_with_a_worktree_prefix():
     widen the header, not push the SRC column out from under it."""
     doc = _grouped_board_doc()
     doc["projects"]["door"]["display_name"] = "d" * 20
-    lines = plain(render.document(doc)).split("\n")
+    lines = plain(_full(doc)).split("\n")
     header = next(line for line in lines if " SRC " in line and "STATUS" in line)
-    row = next(line for line in lines if "└ " in line)
+    row = next(line for line in lines if "└ " in line and "[C]" in line)
     assert header.index("SRC") == row.index("[C]")
 
 
@@ -2041,6 +2047,8 @@ def test_a_board_with_no_shared_repo_is_unchanged_by_grouping():
             "b": {"source": "cli", "status": "idle", "relative_activity": "2h ago", "summary": "B."},
         },
     )
-    out = plain(render.document(doc))
+    out = plain(_full(doc))
     assert "▸ REPOSITORIES  the collective · 2 repositories · 0 need attention" in out
-    assert "worktree" not in out and "└" not in out
+    # The legend names `└ worktree` on every Queen page, so the check reads the board alone.
+    board = out.split("▸ REPOSITORIES")[1].split("▸ STACKS")[0]
+    assert "worktree" not in board.split("\n", 1)[1] and "└" not in board
