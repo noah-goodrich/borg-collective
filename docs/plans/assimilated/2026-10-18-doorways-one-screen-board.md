@@ -1,8 +1,9 @@
 # Directive: Doorways, a one-screen board painted verbatim
 *Filed: 2026-10-18*
+*Shipped: 2026-10-19 — PRs #438, #440, #441, #442, #443 and #444 merged to main*
 
 - Plan-slug: `2026-10-18-doorways-one-screen-board`
-- Status: Approved (Noah, 2026-10-18, via /borg-plan)
+- Status: Assimilated (Noah approved assimilation 2026-10-19)
 - Tracking issue: https://github.com/noah-goodrich/borg-collective/issues/439
 - Research: `docs/research/2026-10-18-terminal-output/evaluation.md`
 
@@ -120,3 +121,14 @@ Estimated effort: about 3 sessions.
 - **Goldens.** Shrinking the page regenerates `test_render` goldens, and a blind regeneration would hide a regression.
 - **Public repository.** The real board carries private-repository PR titles, so fixtures and captures must be synthetic or scrubbed.
 - **Injection failure.** A non-zero exit inside skill `!` injection aborts the skill in Claude Code, and Cortex does not expand injection at all. The fallback needs its own test.
+
+## Additional Work Shipped
+
+- The `--full` flag expands the page past its one-screen default.
+- The page cap was lowered to 98 columns to leave room for the TUI code-block gutter.
+- WAITING ON YOU shows 4 rows, matching `/borg-next`.
+- The `next-glance` cache is written only by `borg link`.
+- Rows gained an additive `card` field.
+- `borg setup --statusline` no longer breaks a symlinked settings.json (#444).
+- The statusline exits early, cutting p95 from about 21 ms to about 8 ms (#444).
+- A wordmark replaced the cube masthead (Noah accepted, 2026-10-19).
