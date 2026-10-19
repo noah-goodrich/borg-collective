@@ -9,9 +9,12 @@ borg init                Launch the Queen: morning briefing + Claude session
 borg / borg next         What needs attention? Switch to it.
 borg next --line         ONE line, at most 80 columns, e.g. `▶ merge #440 · borg-collective · 4 waiting`.
                          Reads the cached glance line only (`<state root>/next-glance`): no Python, no
-                         network, about 25 ms. The cache is written by whoever computes the rows
-                         (`borg next --rows`, the Queen's `borg link`), so the line names the board's
-                         first WAITING ON YOU row. Missing cache: `borg: not looked yet`. Older than
+                         network, about 25 ms. The cache is written ONLY by `borg link`
+                         (it alone sees chooser rows and manifest decisions), from the page's
+                         own WAITING ON YOU items (`render.glance_line`), so the line names the
+                         board's first WAITING ON YOU row.
+                         Refreshed by every `borg link` (the Queen page, also `--local`; `/borg-link`
+                         runs it). Missing cache: `borg: not looked yet`. Older than
                          5 minutes: the line plus ` · 37m old`. Older than 12 hours: `borg: board 3d
                          old`. Never `nothing waits` unless a full look found nothing.
 borg claude              Resume the Queen session (continue most recent)

@@ -122,35 +122,23 @@ JSON
     chmod +x "$MOCK_BIN/tmux"
 }
 
-@test "parity: --rows writes a cache whose line names the board's first WAITING ON YOU row" {
+@test "parity: borg link writes a line naming the board's first WAITING ON YOU row and its count" {
     _two_waiting
-    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
-    [ "$status" -eq 0 ]
-    local first
-    first=$(printf '%s' "$output" | jq -r '[.rows[] | select(.owner == "YOU")][0].project')
-    [ -n "$first" ]
-    [ "$first" != "null" ]
-    run zsh "$BORG" next --line
-    [ "$status" -eq 0 ]
-    [ "$output" = "▶ reply to session · $first · 2 waiting · local" ]
     run bash -c "NO_COLOR=1 zsh \"$BORG\" link --overview --local 2>/dev/null"
     [ "$status" -eq 0 ]
     local board_first
     board_first=$(printf '%s\n' "$output" | sed -n '/WAITING ON YOU/,$p' | grep '▶' | head -1)
-    [[ "$board_first" == *"$first"* ]]
+    run zsh "$BORG" next --line
+    [ "$status" -eq 0 ]
+    [ "$output" = "▶ reply to session · alpha · 2 waiting · local" ]
+    [[ "$board_first" == *"alpha"* ]]
 }
 
-@test "parity: borg link writes the same line as borg next --rows" {
+@test "line: borg next --rows is not a writer (it cannot see manifest decisions)" {
     _two_waiting
     run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
     [ "$status" -eq 0 ]
-    local from_next
-    from_next=$(cut -f2 "$CACHE")
-    [ -n "$from_next" ]
-    rm -f "$CACHE"
-    run bash -c "NO_COLOR=1 zsh \"$BORG\" link --overview --local 2>/dev/null"
-    [ "$status" -eq 0 ]
-    [ "$(cut -f2 "$CACHE")" = "$from_next" ]
+    [ ! -e "$CACHE" ]
 }
 
 @test "line: a repository page does not write the cache (it looked at one directory, not the board)" {

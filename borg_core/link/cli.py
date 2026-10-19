@@ -20,12 +20,14 @@ import json as jsonlib
 import os
 import sys
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import NoReturn
 
 from borg_core.compass import shell as compass_shell
 from borg_core.link import core, grid, overlay, picture, render, shell, worktree
 from borg_core.nextpick import cli as nextpick_cli
 from borg_core.nextpick import core as nextpick_core
+from borg_core.nextpick import shell as nextpick_shell
 from borg_core.recon import core as recon_core
 
 
@@ -245,9 +247,6 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict], c
         rows, _quiet, degraded, hidden = nextpick_cli.item_rows(
             scoped, local, False, swept=(by_repository, None), compass=compass
         )
-        if scoped is repositories:
-            # The Queen's page looked at every repository, so its rows are a whole look: the glance line reads them.
-            nextpick_cli.record_glance(rows, hidden, degraded, local)
     # JUSTIFICATION: a side block must never take the page down; degrade and say why.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         rows, degraded, hidden = [], f"waiting rows failed: {exc}", {"agent": 0, "stale": 0, "overflow": 0}
@@ -268,6 +267,18 @@ def _grid_and_waiting(
     tracks: list[dict] = []
     block = _grid(overlaid, scope, local, moment, tracks)
     return block, (None if mode == "porcelain" else _waiting(repositories, scope, local, tracks, compass))
+
+
+def _record_glance(doc: dict, local: bool) -> None:
+    """Cache the glance line `borg next --line` reads. `borg link` is its ONLY writer: it alone sees the chooser rows
+    AND the manifest decisions, so the line is derived from the page's own items (`render.glance_line`). Fail-open."""
+    try:
+        line = render.glance_line(doc, local)
+        if line is not None:
+            nextpick_shell.write_glance(line, int(datetime.now(UTC).timestamp()))
+    # JUSTIFICATION: a side-channel cache must never fail the page it is derived from.
+    except Exception:  # pylint: disable=broad-exception-caught
+        pass
 
 
 def _aggregates(wanted: bool) -> tuple[list[dict], list[dict]]:
@@ -493,6 +504,7 @@ def _run(
     back into two modes of one command answering the same question with different data.
     """
     doc = _document(repository, show_all, mode, local, overview)
+    _record_glance(doc, local)
     if mode == "json":
         return _emit(jsonlib.dumps(doc) + "\n")
     if mode == "porcelain":
