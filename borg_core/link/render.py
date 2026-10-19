@@ -342,9 +342,7 @@ def _route_cells(counts: dict[str, int] | None) -> str:
     A repository with no routed `▸ NEXT` rows has `counts` of None, and a bucket of zero prints the same
     dash, so "nothing in this bucket" has one spelling.
     """
-    return " ".join(
-        f"{(counts or {}).get(group) or '–':>{width}}" for group, width in zip(_ROUTE_GROUPS, _COL_ROUTE)
-    )
+    return " ".join(f"{(counts or {}).get(group) or '–':>{width}}" for group, width in zip(_ROUTE_GROUPS, _COL_ROUTE))
 
 
 def _row_tail(head: str, suffix: str, summary: str, mark: str, budget: int) -> str:
@@ -1098,6 +1096,22 @@ def _ready_rows(manifest: dict) -> list[tuple[str, dict, str]]:
     return [(ref, gates.get(ref) or {}, _route((gates.get(ref) or {}).get("kind") or "")) for ref in refs]
 
 
+def _is_unlooked(manifest: dict) -> bool:
+    """Whether this manifest's READY set is one nobody could resolve, as opposed to one with nothing to resolve.
+
+    THE ONE DEFINITION OF "NOBODY LOOKED" FOR A MANIFEST, shared by NEXT (`_next_tally`) and WAITING ON YOU
+    (`_waiting`) so the two sections cannot disagree about it. `grid.ready_refs` reports `unlooked` whenever no node
+    carries a resolved state, and a manifest that declares NO refs has no nodes at all, so it reports `unlooked`
+    too -- there is nothing for anyone to have looked up. Live 2026-10-18: three empty manifests did exactly that,
+    NEXT said `nobody looked` above a filled WAITING ON YOU, and STACKS said `0 unresolved` on the same page.
+    `_waiting` carried the guard and `_next_tally` did not; this function is the guard, moved to where both read it.
+    The wire is untouched: `ready.state` stays `unlooked` for such a manifest, because a JSON consumer may rely on it.
+    """
+    if (manifest.get("ready") or {}).get("state") != grid.STATE_READY_UNLOOKED:
+        return False
+    return bool(manifest.get("nodes"))
+
+
 def _next_tally(manifests: list[dict]) -> tuple[dict[str, list[str]], list[str], int, bool]:
     """One walk over every manifest: `(grouped rows, unrecognized kinds, ready count, unlooked)`.
 
@@ -1122,7 +1136,7 @@ def _next_tally(manifests: list[dict]) -> tuple[dict[str, list[str]], list[str],
 
     for manifest in manifests:
         if (manifest.get("ready") or {}).get("state") == grid.STATE_READY_UNLOOKED:
-            unlooked = True
+            unlooked = unlooked or _is_unlooked(manifest)
             continue
         nodes = manifest.get("nodes") or {}
         for ref, gate, group in _ready_rows(manifest):
@@ -1232,8 +1246,14 @@ def _chooser_item(row: dict) -> dict:
     label = hash_mark + number if hash_mark else str(row.get("item") or "session")
     detail = str(row.get("item") or "")
     text = f"{row.get('next_step') or ''}  {detail}".strip() if ref else str(row.get("next_step") or "")
-    return {"ref": ref or label, "label": label, "linkable": bool(ref), "repository": str(row.get("project") or ""),
-            "text": text, "unblocks": 0}
+    return {
+        "ref": ref or label,
+        "label": label,
+        "linkable": bool(ref),
+        "repository": str(row.get("project") or ""),
+        "text": text,
+        "unblocks": 0,
+    }
 
 
 def _waiting(doc: dict) -> tuple[list[dict], bool]:
@@ -1256,9 +1276,8 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
     unlooked = False
     for manifest in (doc.get("grid") or {}).get("manifests") or []:
         if (manifest.get("ready") or {}).get("state") == grid.STATE_READY_UNLOOKED:
-            # A manifest declaring NO refs has nothing for anyone to have looked up, so it cannot make
-            # the page unsure whether something waits (live: three empty manifests did exactly that).
-            unlooked = unlooked or bool(manifest.get("nodes"))
+            # `_is_unlooked` is why a manifest declaring NO refs cannot make the page unsure whether something waits.
+            unlooked = unlooked or _is_unlooked(manifest)
             continue
         nodes = manifest.get("nodes") or {}
         repository = _manifest_repository(manifest, repositories)
@@ -1268,8 +1287,14 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
             node = nodes.get(ref) or {}
             text = gate.get("blocked_by") or node.get("title") or node.get("why") or ref
             items.append(
-                {"ref": ref, "label": ref, "linkable": True, "repository": repository, "text": text,
-                 "unblocks": len(node.get("children") or [])}
+                {
+                    "ref": ref,
+                    "label": ref,
+                    "linkable": True,
+                    "repository": repository,
+                    "text": text,
+                    "unblocks": len(node.get("children") or []),
+                }
             )
     return items, unlooked
 
@@ -1339,6 +1364,30 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
     return f"  {BOLD}next{NC}  {ref}{where}  {CYAN}{_next_action_command(ref)}{NC}\n"
 
 
+def _repository_you_count(doc: dict) -> tuple[str, int]:
+    """`(repository, n)`: how many of `borg next`'s YOU rows belong to this directory's repository but not to it.
+
+    ONLY ON THE PAGE OF REPOSITORY SCOPE, and only a COUNT. That page is strictly one directory (see
+    `_waiting`), so the repository's pull requests stay off it, but printing `nothing waits on you` above rows that
+    `borg next --rows --json` holds for the same repository was a false statement (live 2026-10-18: two). The count
+    keeps the page about its own directory and stops it lying, and `borg next` is the one place the rows are listed.
+
+    These are exactly the rows `_waiting` drops in repository scope: everything but the directory's own session
+    row. The repository is the one a worktree is `worktree_of`, else the directory's own registry name; a row for
+    any other project is not counted. Returns `("", 0)` on the Queen's page, which lists every row itself.
+    """
+    if not _is_repository_scope(doc):
+        return "", 0
+    focus = doc.get("focus") or {}
+    repository = str((focus.get("identity") or {}).get("worktree_of") or focus.get("name") or "")
+    owned = {repository, str(focus.get("name") or "")} - {""}
+    rows = (doc.get("waiting") or {}).get("rows") or []
+    count = sum(
+        1 for row in rows if row.get("project") in owned and not (row.get("item") == "session" and not row.get("ref"))
+    )
+    return repository, count
+
+
 def _waiting_section(doc: dict) -> tuple[str, list[str]]:
     """WAITING ON YOU: what only you can move, last on the page where the eye lands.
 
@@ -1371,6 +1420,9 @@ def _waiting_section(doc: dict) -> tuple[str, list[str]]:
                 *tail,
                 action,
             ]
+        repository, count = _repository_you_count(doc)
+        if count:
+            return "", [_placeholder(f"nothing here waits on you · {count} for {repository}: borg next"), *tail, action]
         return "", [_placeholder("nothing waits on you"), *tail, action]
     note = _plural(len(items) + len(parking) + more_parked, "item", "items")
     if unlooked:
