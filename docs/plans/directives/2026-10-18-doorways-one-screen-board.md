@@ -3,7 +3,7 @@
 
 - Plan-slug: `2026-10-18-doorways-one-screen-board`
 - Status: Approved (Noah, 2026-10-18, via /borg-plan)
-- Tracking issue: TBD
+- Tracking issue: https://github.com/noah-goodrich/borg-collective/issues/439
 - Research: `docs/research/2026-10-18-terminal-output/evaluation.md`
 
 ## Problem
