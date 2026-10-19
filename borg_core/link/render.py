@@ -218,8 +218,9 @@ _ESCAPES = re.compile(r"\033\[[0-9;]*m|\033\]8;;[^\033]*\033\\")
 _OSC8_CLOSE = "\033]8;;\033\\"
 
 
-# The IN FOCUS label lines whose value is a path, which is a ref: never cut, even past `PAGE_COLUMNS`.
-_UNCUT_LABELS = ("Path:", "Worktree of:")
+# The IN FOCUS lines whose value is a path (the directory, its parent, the map directory), which is a ref: never cut,
+# even past `PAGE_COLUMNS`.
+_UNCUT_LABELS = ("Path:", "Worktree of:", "Compass: no map at")
 
 
 def _fit_text(text: str, limit: int = PAGE_COLUMNS, keep: tuple[str, ...] = ()) -> str:
@@ -1893,8 +1894,8 @@ def _repository_chunk(title: str, build: Builder, doc: dict) -> str:
 
     ONLY IN FOCUS IS CUT: its checkpoint body, summary and leg are free text the renderer does not control (302
     columns live on 2026-10-19). The pointer and WAITING ON YOU hold the page's own commands and refs (`borg link
-    --overview`, `borg next`, a PR ref), which are never cut, and `Path:` / `Worktree of:` are refs too. The
-    section content rules are the same as before: this only bounds a line's width.
+    --overview`, `borg next`, a PR ref), which are never cut, and `Path:`, `Worktree of:` and `Compass: no map at`
+    are refs too. The section content rules are the same as before: this only bounds a line's width.
     """
     chunk = "".join(_section(title, *build(doc)))
     return _fit_text(chunk, keep=_UNCUT_LABELS) if title == "IN FOCUS" else chunk

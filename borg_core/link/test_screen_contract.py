@@ -458,3 +458,12 @@ def test_the_repository_page_never_cuts_a_command_or_a_ref():
     assert long_path in page, "a path is a ref, never cut"
     assert "borg link --overview" in page
     assert f"gh pr view -R {ref}" in page
+
+
+def test_the_repository_page_never_cuts_the_map_directory_in_its_no_map_line():
+    document = _painted_repository_doc()
+    map_dir = "/ws/" + "a-deeply-nested-map-directory/" * 5 + "map"
+    document["compass"] = {"found": False, "map_dir": map_dir}
+    page = plain(render.document(document))
+    line = next(line for line in page.split("\n") if "Compass: no map at" in line)
+    assert line.strip().endswith(map_dir) and picture.visible_len(line) > 100
