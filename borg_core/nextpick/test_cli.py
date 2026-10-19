@@ -172,7 +172,10 @@ def test_rows_json_payload_has_you_and_agent_quiet_rows(state, monkeypatch, caps
         "age",
         "status",
         "waiting_reason",
+        "card",
     }
+    assert session["card"][0] == ("a · " + session["item"] if session["item"] else "a")
+    assert session["card"][-1] == "borg next --open a --chosen"
     assert (session["next_step"], session["waiting_reason"], session["status"]) == (
         "reply to session",
         "needs a call",

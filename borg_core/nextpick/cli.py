@@ -142,11 +142,13 @@ def rows_json(
     """The `--rows --json` payload: item rows, the first row's repository, the earned suggestion's row number or None.
 
     `hidden` is `{agent, stale, overflow}`: how many rows the cap left out (all zero under `--all`).
+
+    Each row also carries `card`, the preview lines `/borg-next` passes verbatim (`core.chooser_card`); additive.
     """
     rows, quiet, degraded, hidden = item_rows(repositories, local, show_all, compass=compass)
     earned = core.suggestion_for(rows, shell.read_log_rows()) is not None
     return {
-        "rows": rows,
+        "rows": [{**row, "card": core.chooser_card(row, shown=earned)} for row in rows],
         "rec": rows[0]["project"] if rows else None,
         "suggestion": rows[0]["n"] if rows and earned else None,
         "quiet": quiet,
