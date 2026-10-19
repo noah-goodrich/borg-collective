@@ -1,6 +1,6 @@
 # Questions about the board (read only when SKILL.md sends you here)
 
-SKILL.md sent you here because the user asked a question about the board ("why is X blocked?", "what is waiting on me?", "which repositories are idle?") instead of asking to see it. You answer in prose from the engine's `--json` document. Explain like the reader is 10: plain, terse, most-urgent-first. Do not hard-wrap output. Do not paste the page: showing the page is the paint path's job.
+SKILL.md sent you here because the user asked a question about the board ("why is X blocked?", "what is waiting on me?", "which repositories are idle?") instead of asking to see it. You answer in prose from the engine's `--json` document. Explain like the reader is 10: plain, terse, most-urgent-first. Output rules and the host-only flags (`--refresh`, `--brief`, `--full`) are in SKILL.md. Do not paste the page: showing the page is the paint path's job.
 
 `scope.kind` is the engine's answer: `orchestrator` (the Queen session, at `BORG_ORCHESTRATOR_ROOT`) gets the Queen view; `repository` (a repository, a linked worktree, or an explicit repository name) gets a page about exactly that one directory. Answer the question; the Queen view and the repository page below say which facts exist in each scope.
 
@@ -44,8 +44,6 @@ If the Step 1 command fails, Read `references/fallback.md` (relative to this ski
 Scope is the engine's `scope.kind`, never the `.borg-project` marker or your guess from the cwd; run no ad hoc find/ls. If `jq` is missing, drop the pipe and render only what the scope allows.
 
 **Version gate — read `.version` first.** `== 2` → proceed silently. `> 2` → proceed, and say in one line this skill targets v2 and newer fields may go unreported. `< 2` or absent → STOP: tell the user their borg install is older than this skill; do NOT fall back on a version mismatch.
-
-**Host-only flags.** `--refresh` and `--brief` need the host: if asked, tell the user to run `borg link --brief` / `--refresh` there. `--full` changes only the CLI's own page (`borg link --overview --full` prints every stack and directive); the JSON read here is identical with or without it.
 
 **`.compass`** (additive; absent on an older engine: say nothing): `found` false → one line "no map at `<map_dir>`"; never invent a leg, destination or date. `leg.text` is today's leg (null: none). A destination's `state` is `on-track`, `at-risk`, `late` or `undated` if active, else its status. **Off route**: with a leg, a repository whose `repositories[<name>]` (`{destination, on_leg}`) is off the leg reads "off route: `<repository>` is not on today's leg"; no destination is unmapped, never off route. A non-empty `warnings` is a skipped map file: say so once.
 
