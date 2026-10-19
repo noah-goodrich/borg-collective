@@ -25,6 +25,12 @@
       "order": "4",
       "ref": "noah-goodrich/borg-collective#442",
       "why": "S4 of 5: AC4, borg next --line glance line from a cache, opt-in borg setup --statusline, tmux format string"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#443",
+      "why": "S5 of 5: AC5, chooser cards (6 lines by 42 columns, next_step, exact command) as AskUserQuestion previews; Cortex keeps descriptions"
     }
   ]
 }

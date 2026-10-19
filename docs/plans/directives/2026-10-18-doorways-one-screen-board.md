@@ -62,12 +62,12 @@ borg's doorways become one-screen terminal text, built the same way on every run
   - It names the same item as the board's first WAITING ON YOU row.
   - A statusline script, installed only by `borg setup --statusline`, and a documented tmux format string both use it.
   - Verify: bats with a timing bound, plus a parity test of `--line` against the board on the same fixture.
-- [ ] **AC5: Chooser cards fit the preview box.**
+- [x] **AC5: Chooser cards fit the preview box.** Shipped in #443: `borg next --rows --json` rows carry an additive `card` (rendered by `core.chooser_card`), which Claude Code passes verbatim as the preview; Cortex keeps descriptions. The TUI capture showed the card inside the box.
   - In `/borg-next`, each AskUserQuestion option carries a preview card of at most 6 lines by 42 columns, ending in the exact command.
   - The card carries `next_step`, because option descriptions are hidden while previews show (X1).
   - Cortex has no previews, so it keeps descriptions.
   - Verify: a skill contract in bats, plus one tmux capture.
-- [ ] **AC6: Nothing breaks.** This applies to every slice.
+- [x] **AC6: Nothing breaks.** This applies to every slice. Held by green CI on #438, #440, #441, #442 and #443; `--json` stayed at version 2 with no key removed and the goldens were untouched.
   - Full pytest and bats pass.
   - `--json` stays at `DOCUMENT_VERSION` 2 with no key removed.
   - `picture-fork.expected`, `picture-crossing.expected` and the `--porcelain` golden are unchanged.
