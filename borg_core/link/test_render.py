@@ -2110,7 +2110,7 @@ def test_glance_line_tags_a_partial_look_and_fits_its_body():
     line = render.glance_line(_with_waiting(_ready_doc([]), rows, degraded="sweep failed"), False)
     assert line is not None and line.endswith("1 waiting · partial")
     assert len(line) <= render.GLANCE_BODY
-    assert render.GLANCE_BODY + len(" · 99h old") <= render.GLANCE_COLUMNS
+    assert render.GLANCE_BODY + len(" · 99h old") <= 80
     assert render.glance_line(_with_waiting(_ready_doc([]), rows), True).endswith("1 waiting · local")
 
 

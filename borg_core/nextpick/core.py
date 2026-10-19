@@ -549,8 +549,7 @@ CARD_LINES = 6
 
 def _cut(text: str, width: int) -> str:
     """`text` as one line of at most `width` columns, a cut ending in an ellipsis."""
-    text = " ".join(text.split())
-    return text if len(text) <= width else text[: width - 1] + "…"
+    return _truncate(" ".join(text.split()), width)
 
 
 def _wrap(text: str, width: int, max_lines: int, indent: str = "") -> list[str]:

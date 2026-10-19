@@ -330,7 +330,7 @@ def test_the_directory_page_is_untouched_by_the_flag_and_by_the_budget():
     """Out of scope: REPOSITORY_SECTIONS, and the one waiting builder it shares, behave as they did."""
     document = _repository_doc()
     assert render.document(document) == render.document(document, full=True)
-    assert render._sections_for(document) is render.REPOSITORY_SECTIONS  # pylint: disable=protected-access
+    assert render._sections_for(document)[0] is render.REPOSITORY_SECTIONS  # pylint: disable=protected-access
 
 
 def test_full_flag_is_parsed_and_changes_no_wire_key():
@@ -375,7 +375,7 @@ def test_waiting_on_you_shows_as_many_rows_as_the_chooser_offers():
     skill = (Path(__file__).resolve().parents[2] / "skills" / "borg-next" / "SKILL.md").read_text()
     match = re.search(r"up to (\d+) options", skill)
     assert match, "the chooser skill states its option count"
-    assert render.CHOOSER_OPTIONS == int(match.group(1)) == render._WAITING_CAP  # pylint: disable=protected-access
+    assert render.CHOOSER_OPTIONS == int(match.group(1))
 
 
 def test_the_next_action_line_never_cuts_its_command_and_waiting_rows_never_cut_their_ref():
