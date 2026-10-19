@@ -46,7 +46,7 @@ borg's doorways become one-screen terminal text, built the same way on every run
   - Verify: new cases in `borg_core/link/test_render.py`, failing before the fix. Then `borg link borg-collective` while a borg-collective PR waits on you.
 - [x] **AC2: The page fits one screen.** Shipped in #440: the expand command is `borg link --overview --full`; live `borg link --overview` is 50 lines, widest line 100.
   - Outside REPOSITORIES, the Queen page is at most 30 lines however many stacks and directives exist. STACKS and QUEUED render as counts plus the command that expands them.
-  - Every line is at most 100 visible columns.
+  - Every line is at most 100 visible columns. The cap in code is 98 because of the 2-column code-block gutter in the TUI, measured in S3.
   - A one-line legend names each glyph.
   - Status words come from one closed set defined once in code, and the legend and the contract test both read it.
   - All repositories stay on the board, because L4 idle-collapse was rejected.

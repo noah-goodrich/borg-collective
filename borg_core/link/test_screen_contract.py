@@ -1,8 +1,7 @@
 """The screen contract for the Queen's page (doorways S2, AC2): it fits one screen however much exists.
 
 These read the limits and the words from `render` (`PAGE_LINES`, `PAGE_COLUMNS`, `GLYPH_LEGEND`, `STATUS_WORDS`), so
-the contract and the page cannot drift apart. The two limits are ALSO asserted as the literals the directive approved
-(30 and 100): a constant edited to make the page pass would otherwise take the test with it.
+the contract and the page cannot drift apart. The two limits are ALSO asserted as literals (30, and 98 columns, within the directive's approved 100): a constant edited to make the page pass would otherwise take the test with it.
 
 EVERY FIXTURE IS SYNTHETIC. The live board carries private-repository titles and this repository is public.
 """
@@ -142,10 +141,10 @@ def test_the_page_does_not_grow_with_its_input(stacks, directives):
 def test_every_line_is_at_most_a_hundred_visible_columns(stacks, directives, waiting):
     """AC2, measured with `visible_len` and never `len`: the raw rows carry SGR and OSC-8 bytes."""
     page = render.document(_queen(stacks=stacks, directives=directives, waiting=waiting))
-    assert render.PAGE_COLUMNS == 100
+    assert render.PAGE_COLUMNS == 98
     lines = page.split("\n")
-    assert all(picture.visible_len(line) <= 100 for line in lines), [
-        (picture.visible_len(line), plain(line)) for line in lines if picture.visible_len(line) > 100
+    assert all(picture.visible_len(line) <= 98 for line in lines), [
+        (picture.visible_len(line), plain(line)) for line in lines if picture.visible_len(line) > 98
     ]
     assert any(len(line) > picture.visible_len(line) for line in lines), (
         "the fixture exercises escapes, so len would lie"
@@ -180,7 +179,7 @@ def test_a_long_repository_name_is_cut_so_its_destination_state_still_fits():
     page = plain(render.document(doc)).split("\n")
     row = next(line for line in page if line.lstrip(" *").startswith("w"))
     assert " · late" in row and "…" in row.split(" · late")[0], row
-    assert picture.visible_len(row) <= 100
+    assert picture.visible_len(row) <= 98
     assert long_name in plain(render.document(doc, full=True)), "--full prints the name whole"
 
 
@@ -190,7 +189,7 @@ def test_the_legend_is_one_line_and_names_every_glyph_in_the_closed_set():
     assert len(legend) == 1
     for glyph, word in render.GLYPH_LEGEND:
         assert f"{glyph} {word}" in legend[0]
-    assert picture.visible_len(legend[0]) <= 100
+    assert picture.visible_len(legend[0]) <= 98
 
 
 def test_the_state_glyph_words_are_in_the_closed_status_vocabulary():
@@ -391,14 +390,14 @@ def test_the_next_action_line_never_cuts_its_command_and_waiting_rows_never_cut_
     last = [line for line in page if line.strip()][-1]
     command = render._next_action_command(ref)  # pylint: disable=protected-access
     assert command == f"gh pr view 12345 -R {owner}"
-    assert last.endswith(command) and picture.visible_len(last) <= 100
+    assert last.endswith(command) and picture.visible_len(last) <= 98
     assert last.startswith("  next  #12345")
     waiting = next(line for line in page if "▶" in line and "#12345" in line)
-    assert "#12345" in waiting and picture.visible_len(waiting) <= 100 and waiting.rstrip().endswith("…")
+    assert "#12345" in waiting and picture.visible_len(waiting) <= 98 and waiting.rstrip().endswith("…")
     # A non-GitHub label too long for the line is cut in the middle, never the command.
     document["waiting"]["rows"] = [{**row, "ref": "", "item": "s" * 150}]
     tail = [line for line in plain(render.document(document)).split("\n") if line.strip()][-1]
-    assert tail.endswith("borg next") and picture.visible_len(tail) <= 100
+    assert tail.endswith("borg next") and picture.visible_len(tail) <= 98
 
 
 # ── Doorways S3 (AC3): the page is painted verbatim, so both scopes must fit the paint ───────────────────────────
@@ -430,14 +429,14 @@ def test_the_painted_page_has_no_escape_byte_and_no_line_over_a_hundred_columns(
     assert "\033" in coloured, "the fixture must carry escapes, or the assertion below proves nothing"
     painted = cli._page(coloured, False)  # pylint: disable=protected-access
     assert "\033" not in painted
-    assert max(picture.visible_len(line) for line in painted.split("\n")) <= 100
+    assert max(picture.visible_len(line) for line in painted.split("\n")) <= 98
 
 
 def test_the_repository_page_cuts_free_text_with_an_ellipsis_and_keeps_every_other_line_whole():
     page = plain(render.document(_painted_repository_doc()))
     cut = [line for line in page.split("\n") if line.endswith("…")]
     assert any("tl;dr" in line for line in cut), "the 302-column checkpoint line is cut"
-    assert all(picture.visible_len(line) <= 100 for line in page.split("\n"))
+    assert all(picture.visible_len(line) <= 98 for line in page.split("\n"))
     assert "short" in page and "borg link --overview" in page
 
 

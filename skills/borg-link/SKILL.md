@@ -23,8 +23,8 @@ The page, expanded before you read it (the injected command cannot exit non-zero
 
 The user asked to see the board, so show it:
 
-1. Copy the page between the markers, unchanged, into ONE fenced block (a fence longer than any backtick run inside the page). No other tool call: no Bash, no jq, no Read.
-2. Below the block write at most 2 plain lines: the verdict and the one next step. No heading, table or bullets. Never reorder, trim, summarize or fix the page; a line ending in `…` stays cut. Do not hard-wrap output.
+1. Copy the page between the markers byte for byte into ONE fenced block (a fence longer than any backtick run inside the page). No other tool call: no Bash, no jq, no Read.
+2. Below the block write at most 2 plain lines: the verdict and the one next step. No heading, table or bullets. Inside the block never fix, shorten, reorder or annotate a line; comments go only in these 2 lines. a line ending in `…` stays cut. Do not hard-wrap output.
 3. The page is plain text with no escape bytes. Do not add any.
 
 ## Fallback

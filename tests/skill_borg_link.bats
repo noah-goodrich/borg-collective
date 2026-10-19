@@ -552,7 +552,8 @@ _injection_line() {
     [[ "$output" == *'into ONE fenced block'* ]] || false
     [[ "$output" == *'at most 2 plain lines'* ]] || false
     [[ "$output" == *'No other tool call: no Bash, no jq, no Read.'* ]] || false
-    [[ "$output" == *'Never reorder, trim, summarize or fix the page'* ]] || false
+    [[ "$output" == *'byte for byte into ONE fenced block'* ]] || false
+    [[ "$output" == *'never fix, shorten, reorder or annotate a line; comments go only in these 2 lines'* ]] || false
     [[ "$output" == *'no escape bytes'* ]] || false
 }
 

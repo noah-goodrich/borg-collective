@@ -144,7 +144,7 @@ SECTION_MARK = "▸ "
 # These are the numbers and the words the Queen's page is held to, and `test_screen_contract.py` reads every one
 # of them from HERE: the tests assert the page against this module, so a number changed in one place cannot be
 # changed to match a test that restates it. (The two limits are ALSO asserted as the literals the directive
-# approved, 30 and 100, so a quiet edit of the constants alone cannot go green.)
+# approved (30, and 98 within its 100), so a quiet edit of the constants alone cannot go green.)
 #
 # `PAGE_LINES` counts every line of the compact Queen page OUTSIDE `▸ REPOSITORIES` -- blank separators included,
 # because a blank line occupies a row of the screen as surely as text does. REPOSITORIES is excluded because every
@@ -152,7 +152,8 @@ SECTION_MARK = "▸ "
 # length is the registry's and not the page's. `PAGE_COLUMNS` bounds EVERY line, board rows included, in VISIBLE
 # columns (`picture.visible_len`, never `len`: the rows carry SGR and OSC-8 bytes).
 PAGE_LINES = 30
-PAGE_COLUMNS = 100
+# 98, not 100: the TUI's code block has a 2-column gutter, so a painted page must be 2 columns narrower than the pane.
+PAGE_COLUMNS = 98
 
 # The command that prints the Queen's page with no budget: every stack drawn, every directive listed, every
 # signal and waiting row. `--all` was checked and does not mean this: it only un-hides archived repositories.
