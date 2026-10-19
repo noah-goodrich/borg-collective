@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# borg-managed statusline: installed ONLY by `borg setup --statusline`, removed by `borg setup --statusline=off`.
+#
+# Claude Code runs this on every update and sends session JSON on stdin. Line 1 is `borg next --line` (the cached
+# glance line: no network, no Python). Line 2 is the model and context use, from the same JSON, when jq is there.
+# Fail-quiet: a statusline that errors paints garbage on every prompt, so every failure prints a plain line.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+input="$(cat)"
+line="$(borg next --line 2>/dev/null)"
+printf '%s\n' "${line:-borg: not available}"
+if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$input" | jq -r '
+        "[\(.model.display_name // "?")] ctx \(.context_window.used_percentage // 0 | floor)%"' 2>/dev/null
+fi
+exit 0

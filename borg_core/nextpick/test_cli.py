@@ -379,3 +379,28 @@ def test_chooser_screen_and_json_agree_and_all_lists_everything(state, monkeypat
     assert len(full["rows"]) == 10 and full["hidden"] == {"agent": 0, "stale": 0, "overflow": 0}
     assert [r["n"] for r in full["rows"]] == list(range(1, 11))
     assert "o/r#2" in [r["ref"] for r in full["rows"]]
+
+
+# ── the glance cache (doorways S4) ────────────────────────────────────────────────────────────────────────────────
+def test_rows_json_writes_the_glance_cache(state: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"project": "a", "item": "", "next_step": "merge #9", "owner": "YOU", "ready": "", "ref": "o/a#9"}]
+    monkeypatch.setattr(cli, "item_rows", lambda *_a, **_k: (rows, [], None, {"agent": 0, "stale": 0, "overflow": 0}))
+    cli.rows_json(REGISTRY["repositories"], False)
+    epoch, line = (state.parent / "next-glance").read_text(encoding="utf-8").rstrip("\n").split("\t")
+    assert int(epoch) > 0
+    assert line == "▶ merge #9 · a · 1 waiting"
+
+
+def test_a_local_look_with_no_rows_keeps_the_last_real_look(state: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    assert shell.write_glance("▶ merge #1 · a · 1 waiting", 100)
+    monkeypatch.setattr(cli, "item_rows", lambda *_a, **_k: ([], [], None, {"agent": 0, "stale": 0, "overflow": 0}))
+    cli.rows_json(REGISTRY["repositories"], True)
+    assert (state.parent / "next-glance").read_text(encoding="utf-8") == "100\t▶ merge #1 · a · 1 waiting\n"
+
+
+def test_an_unwritable_glance_cache_never_fails_the_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    blocker = tmp_path / "file"
+    blocker.write_text("x", encoding="utf-8")
+    monkeypatch.setenv("XDG_STATE_HOME", str(blocker))
+    assert shell.write_glance("x", 1) is False
+    cli.record_glance([], {}, None, False)

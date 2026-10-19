@@ -19,6 +19,12 @@
       "order": "3",
       "ref": "noah-goodrich/borg-collective#441",
       "why": "S3 of 5: AC3, /borg-link paints the CLI page verbatim (injection, one fenced block, Bash fallback, repository page fit to 100 columns)"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#442",
+      "why": "S4 of 5: AC4, borg next --line glance line from a cache, opt-in borg setup --statusline, tmux format string"
     }
   ]
 }

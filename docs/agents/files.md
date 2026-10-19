@@ -75,6 +75,10 @@ agents/ (6, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
     borg-reviewer.md        Independent review/verdict subagent
     borg-scout.md           Lightweight recon/discovery subagent
     borg-verifier.md        Read-only pre-merge evaluator (PASS/FAIL)
+bin/borg-statusline         Statusline script `borg setup --statusline` installs (opt-in): `borg next --line` + model/context
+state root next-glance      `<state root>/next-glance`: `<epoch>\t<glance line>`, ONE cache file. Written (atomic) by
+                            borg_core.nextpick (`record_glance`, from `borg next --rows` and the Queen's `borg link`),
+                            read by `borg next --line` in zsh. Not a `.borg/` store, so the reader census does not list it.
 install.sh                  Installer: deps, symlinks, hooks, skills, launchd agents, tmux keybinding
 lib/launchd-label.zsh       THE launchd label resolver (see "launchd labels" under Key Patterns)
 lib/launchd-agents.zsh      borg setup warning for shipped launchd agents that are not loaded

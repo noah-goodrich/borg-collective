@@ -245,6 +245,9 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict], c
         rows, _quiet, degraded, hidden = nextpick_cli.item_rows(
             scoped, local, False, swept=(by_repository, None), compass=compass
         )
+        if scoped is repositories:
+            # The Queen's page looked at every repository, so its rows are a whole look: the glance line reads them.
+            nextpick_cli.record_glance(rows, hidden, degraded, local)
     # JUSTIFICATION: a side block must never take the page down; degrade and say why.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         rows, degraded, hidden = [], f"waiting rows failed: {exc}", {"agent": 0, "stale": 0, "overflow": 0}

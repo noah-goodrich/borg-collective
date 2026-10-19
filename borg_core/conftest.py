@@ -70,3 +70,14 @@ def _sandbox_state_home(monkeypatch, tmp_path_factory):
     an operational file. Tests that exercise the state root set or delete the variable themselves.
     """
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("xdg-state")))
+
+
+@pytest.fixture(autouse=True)
+def _state_root_sandbox(monkeypatch, tmp_path_factory):
+    """Point the state root at a scratch directory so no test writes the developer's real `~/.local/state/borg`.
+
+    `borg next --rows` and the Queen's `borg link` write the glance cache (`next-glance`) as a side effect; without
+    this a pytest run on a dev machine would put fixture rows in the line the real statusline shows. A test that
+    needs its own state root sets `XDG_STATE_HOME` itself, after this runs.
+    """
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("state")))

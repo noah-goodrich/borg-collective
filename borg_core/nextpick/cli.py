@@ -126,11 +126,27 @@ def item_rows(
     return core.numbered_rows(shown, ranked), quiet, degraded, hidden
 
 
+def record_glance(rows: list[dict[str, Any]], hidden: dict[str, int], degraded: str | None, local: bool) -> None:
+    """Write the glance line for this look at the rows (`core.glance_text`) to the cache `borg next --line` reads.
+
+    Called by every caller that has the rows in hand and a whole registry behind them: `borg next --rows` (both
+    forms) and the Queen's `borg link`. Fail-open: a cache that cannot be written must never fail the command.
+    """
+    try:
+        line = core.glance_text(rows, hidden, degraded, local)
+        if line is not None:
+            shell.write_glance(line, int(datetime.now(UTC).timestamp()))
+    # JUSTIFICATION: a side-channel cache must never fail the command that fills it.
+    except Exception:  # pylint: disable=broad-exception-caught
+        pass
+
+
 def rows_output(
     repositories: dict[str, Any], local: bool, show_all: bool = False, compass: dict[str, Any] | None = None
 ) -> list[str]:
     """The chooser screen plus the trailing names line (one repository per ROW, so a key selects a row)."""
-    rows, quiet, _degraded, hidden = item_rows(repositories, local, show_all, compass=compass)
+    rows, quiet, degraded, hidden = item_rows(repositories, local, show_all, compass=compass)
+    record_glance(rows, hidden, degraded, local)
     suggestion = core.suggestion_for(rows, shell.read_log_rows())
     lines = core.render_chooser(rows, suggestion=suggestion, quiet=quiet, hidden=hidden)
     return [*lines, NAMES_PREFIX + "\t".join(row["project"] for row in rows)]
@@ -144,6 +160,7 @@ def rows_json(
     `hidden` is `{agent, stale, overflow}`: how many rows the cap left out (all zero under `--all`).
     """
     rows, quiet, degraded, hidden = item_rows(repositories, local, show_all, compass=compass)
+    record_glance(rows, hidden, degraded, local)
     earned = core.suggestion_for(rows, shell.read_log_rows()) is not None
     return {
         "rows": rows,
