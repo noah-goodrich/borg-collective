@@ -13,6 +13,12 @@
       "order": "2",
       "ref": "noah-goodrich/borg-collective#440",
       "why": "S2 of 5: AC2, the Queen page fits one screen (30 lines outside REPOSITORIES, 100 columns, STACKS and QUEUED as counts)"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#441",
+      "why": "S3 of 5: AC3, /borg-link paints the CLI page verbatim (injection, one fenced block, Bash fallback, repository page fit to 100 columns)"
     }
   ]
 }

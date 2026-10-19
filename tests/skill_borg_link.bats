@@ -15,6 +15,7 @@
 load test_helper/setup
 
 SKILL="${BORG_HOME}/skills/borg-link/SKILL.md"
+QUESTIONS="${BORG_HOME}/skills/borg-link/references/questions.md"
 QUEEN="${BORG_HOME}/skills/borg-link/references/queen-view.md"
 FALLBACK="${BORG_HOME}/skills/borg-link/references/fallback.md"
 RATIONALE="${BORG_HOME}/skills/borg-link/references/rationale.md"
@@ -22,9 +23,14 @@ RATIONALE="${BORG_HOME}/skills/borg-link/references/rationale.md"
 # SKILL.md is a router plus the repository page (context-diet S4b, #383). The Queen view, the Fallback
 # and the design history moved to references/, so each assertion below reads the file its text lives in.
 
-@test "references: SKILL.md names each references file with its read condition, and rationale.md is never read at runtime" {
-    [ -f "$QUEEN" ] && [ -f "$FALLBACK" ] && [ -f "$RATIONALE" ]
+@test "references: the router names each references file with its read condition, and rationale.md is never read at runtime" {
+    [ -f "$QUESTIONS" ] && [ -f "$QUEEN" ] && [ -f "$FALLBACK" ] && [ -f "$RATIONALE" ]
     run cat "$SKILL"
+    [[ "$output" == *'Read `references/questions.md`'*'answer in prose'* ]] || false
+    [[ "$output" == *'Read `references/fallback.md`'*'Read it only then.'* ]] || false
+    [[ "$output" != *'references/queen-view.md'* ]] || false
+    [[ "$output" != *'references/rationale.md'* ]] || false
+    run cat "$QUESTIONS"
     [[ "$output" == *'Read `references/queen-view.md`'*'Read it ONLY in this scope.'* ]] || false
     [[ "$output" == *'Read `references/fallback.md`'*'Read it only then.'* ]] || false
     [[ "$output" == *'the **repository page**'*'Read no references file.'* ]] || false
@@ -41,11 +47,12 @@ RATIONALE="${BORG_HOME}/skills/borg-link/references/rationale.md"
     [[ "$output" == *'never as a session-start ritual'* ]] || false
 }
 
-@test "A6 primary path: SKILL.md runs the engine and no longer forbids shelling out" {
-    run cat "$SKILL"
+@test "A6 primary path: the questions path runs the engine and no longer forbids shelling out" {
+    run cat "$QUESTIONS"
     [ "$status" -eq 0 ]
     [[ "$output" == *"borg link --json"* ]] || false
     [[ "$output" != *"Do **not** shell out to"* ]] || false
+    run cat "$SKILL"
     [[ "$output" == *"--brief"* ]] || false
     [[ "$output" == *"--refresh"* ]] || false
 }
@@ -65,7 +72,7 @@ RATIONALE="${BORG_HOME}/skills/borg-link/references/rationale.md"
 }
 
 @test "A6 retired couplings stay retired" {
-    run cat "$SKILL" "$QUEEN" "$FALLBACK"
+    run cat "$SKILL" "$QUESTIONS" "$QUEEN" "$FALLBACK"
     [ "$status" -eq 0 ]
     [[ "$output" != *"lib/reaper.sh"* ]] || false
     [[ "$output" != *"docs/plans/severed"* ]] || false
@@ -91,7 +98,7 @@ _section() {
         index($0, from) == 1 { want=1 }
         want && to != "" && index($0, to) == 1 && index($0, from) != 1 { exit }
         want { print }
-    ' "$SKILL"
+    ' "${3:-$QUESTIONS}"
 }
 
 _step1_command() {
@@ -100,7 +107,7 @@ _step1_command() {
         s && /^```bash/ { f=1; next }
         s && f && /^```/ { exit }
         s && f { print }
-    ' "$SKILL"
+    ' "$QUESTIONS"
 }
 
 _stub_borg() {
@@ -110,7 +117,7 @@ _stub_borg() {
 }
 
 @test "scope: the mode is chosen from scope.kind, not from the .borg-project marker" {
-    run cat "$SKILL"
+    run cat "$QUESTIONS"
     [ "$status" -eq 0 ]
     [[ "$output" == *'## Step 1 — Run the engine, then branch on `scope.kind`'* ]] || false
     [[ "$output" == *'`.scope.kind == "orchestrator"` → the **Queen view**'* ]] || false
@@ -130,11 +137,12 @@ _stub_borg() {
     [ "$walk_line" -gt "$fb_line" ]
     [ "$(grep -c 'MARKER-WALK-BEGIN' "$FALLBACK")" -eq 1 ]
     [ "$(grep -c 'MARKER-WALK-BEGIN' "$SKILL")" -eq 0 ]
+    [ "$(grep -c 'MARKER-WALK-BEGIN' "$QUESTIONS")" -eq 0 ]
     [ "$(grep -c 'MARKER-WALK-BEGIN' "$QUEEN")" -eq 0 ]
 }
 
 @test "scope: user-facing text says Queen, contract names are unchanged" {
-    run cat "$SKILL" "$QUEEN"
+    run cat "$SKILL" "$QUESTIONS" "$QUEEN"
     [ "$status" -eq 0 ]
     [[ "$output" == *'## Queen view'* ]] || false
     [[ "$output" == *'Queen session'* ]] || false
@@ -180,7 +188,7 @@ _stub_borg() {
 # line (link-unification L3). It used to end on the pointer, which made the skill's page differ from `borg link`'s.
 @test "scope: the repository page puts the Queen pointer before WAITING and ends on the next action" {
     local line='For the overview of every repository, run /borg-link in the Queen session.'
-    [ "$(grep -cxF "$line" "$SKILL")" -eq 1 ]
+    [ "$(grep -cxF "$line" "$QUESTIONS")" -eq 1 ]
     run _section '## Repository scope' '## Guardrails'
     [[ "$output" == *'the page ENDS on `Next:`'* ]] || false
     [[ "$output" != *'That last line is ALWAYS the final line'* ]] || false
@@ -190,7 +198,7 @@ _stub_borg() {
     block="$(awk -v want="$line" '
         /^```/ { if (inblock) { if (hit) { printf "%s", buf; exit } buf=""; inblock=0 } else { inblock=1; buf="" } next }
         inblock { buf = buf $0 "\n"; if ($0 == want) hit=1 }
-    ' "$SKILL")"
+    ' "$QUESTIONS")"
     [ -n "$block" ]
     local pointer_at waiting_at next_at last
     pointer_at="$(grep -nxF "$line" <<<"$block" | head -1 | cut -d: -f1)"
@@ -204,10 +212,10 @@ _stub_borg() {
 }
 
 @test "scope: Guardrails and Fallback also end the repository page on the next action, not the pointer" {
-    ! grep -n -A1 'ends with the$' "$SKILL" "$FALLBACK" | grep -q 'Queen pointer line'
-    ! grep -q 'the next action, the Queen pointer line' "$SKILL" "$FALLBACK"
+    ! grep -n -A1 'ends with the$' "$QUESTIONS" "$FALLBACK" | grep -q 'Queen pointer line'
+    ! grep -q 'the next action, the Queen pointer line' "$QUESTIONS" "$FALLBACK"
     grep -q 'the Queen pointer line, the next action last' "$FALLBACK"
-    grep -q 'the page ENDS on `Next:`' "$SKILL"
+    grep -q 'the page ENDS on `Next:`' "$QUESTIONS"
     grep -q 'ends on the$' "$RATIONALE"
 }
 
@@ -218,7 +226,7 @@ _stub_borg() {
 }
 
 @test "scope: an unregistered directory gets the hint page, never the Queen view" {
-    run cat "$SKILL"
+    run cat "$QUESTIONS"
     [[ "$output" == *'`.scope.unregistered == true` → the **hint page**'* ]] || false
     [[ "$output" == *'`borg add`'* ]] || false
     [[ "$output" == *'Render no board or overview'* ]] || false
@@ -352,7 +360,7 @@ JSON
 }
 
 @test "compass: the skill says how to read it, and the version gate is untouched" {
-    run cat "$SKILL"
+    run cat "$QUESTIONS"
     [ "$status" -eq 0 ]
     [[ "$output" == *'**`.compass`**'* ]] || false
     [[ "$output" == *'no map at `<map_dir>`'* ]] || false
@@ -492,4 +500,93 @@ JSON
             fi
         done
     done
+}
+
+# --- Doorways S3 (AC3): /borg-link paints the CLI's page verbatim --------------------------------------------------
+# The skill injects `borg link` with `!` preprocessing; the model reproduces it in one fenced block. These cases pin the
+# injected line, RUN it against a stub borg (it must never exit non-zero, and a failure must print the marker), and pin
+# the paint, fallback and question rules. Wording is pinned like the rest of this file: change SKILL.md and this together.
+
+_injection_line() {
+    grep -E '^!`' "$SKILL" | sed -e 's/^!`//' -e 's/`$//'
+}
+
+@test "paint: SKILL.md has exactly one injection, with colour off and the failure marker" {
+    [ "$(grep -c '!`' "$SKILL")" -eq 1 ]
+    [ "$(grep -cE '^!`' "$SKILL")" -eq 1 ]
+    local cmd
+    cmd="$(_injection_line)"
+    [ "$cmd" = 'NO_COLOR=1 borg link $ARGUMENTS 2>&1 || echo BORG-LINK-UNAVAILABLE' ]
+    run cat "$SKILL"
+    [[ "$output" == *'<<< PAGE'*'!`NO_COLOR=1 borg link'*'>>> PAGE'* ]] || false
+    [[ "$output" == *'allowed-tools: Bash(borg link *) Bash(echo *)'* ]] || false
+}
+
+@test "paint: the injected command never exits non-zero and prints the marker when borg fails or is missing" {
+    local cmd
+    cmd="$(_injection_line)"
+    cmd="${cmd//\$ARGUMENTS/}"
+    mkdir -p "${BATS_TEST_TMPDIR}/ok" "${BATS_TEST_TMPDIR}/bad" "${BATS_TEST_TMPDIR}/none"
+    printf '#!/bin/sh\nif [ -n "$NO_COLOR" ]; then echo "PAGE-PLAIN"; else printf "PAGE-\\033[1mCOLOUR\\n"; fi\n' > "${BATS_TEST_TMPDIR}/ok/borg"
+    printf '#!/bin/sh\necho "borg: boom" >&2\nexit 1\n' > "${BATS_TEST_TMPDIR}/bad/borg"
+    chmod +x "${BATS_TEST_TMPDIR}/ok/borg" "${BATS_TEST_TMPDIR}/bad/borg"
+
+    PATH="${BATS_TEST_TMPDIR}/ok:$PATH" run bash -c "$cmd"
+    [ "$status" -eq 0 ]
+    [ "$output" = "PAGE-PLAIN" ]
+    [[ "$output" != *$'\033'* ]] || false
+
+    PATH="${BATS_TEST_TMPDIR}/bad:$PATH" run bash -c "$cmd"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'borg: boom'* ]] || false
+    [ "${lines[${#lines[@]}-1]}" = 'BORG-LINK-UNAVAILABLE' ]
+
+    PATH="${BATS_TEST_TMPDIR}/none:/usr/bin:/bin" run bash -c "$cmd"
+    [ "$status" -eq 0 ]
+    [ "${lines[${#lines[@]}-1]}" = 'BORG-LINK-UNAVAILABLE' ]
+}
+
+@test "paint: the model reproduces the page in one fenced block with at most 2 plain lines and no tool call" {
+    run _section '## Paint' '## Fallback' "$SKILL"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'into ONE fenced block'* ]] || false
+    [[ "$output" == *'at most 2 plain lines'* ]] || false
+    [[ "$output" == *'No other tool call: no Bash, no jq, no Read.'* ]] || false
+    [[ "$output" == *'byte for byte into ONE fenced block'* ]] || false
+    [[ "$output" == *'never fix, shorten, reorder or annotate a line; comments go only in these 2 lines'* ]] || false
+    [[ "$output" == *'no escape bytes'* ]] || false
+}
+
+@test "paint: the Fallback handles Cortex (no injection) and the failure marker with ONE Bash call" {
+    run _section '## Fallback' '## Questions' "$SKILL"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'unexpanded injection line'* ]] || false
+    [[ "$output" == *'Cortex Code expands no dynamic injection'* ]] || false
+    [[ "$output" == *'`BORG-LINK-UNAVAILABLE`'* ]] || false
+    [[ "$output" == *'Make ONE Bash call, `NO_COLOR=1 borg link [<repository>]`'* ]] || false
+    [[ "$output" == *'Read `references/fallback.md`'*'Read it only then.'* ]] || false
+}
+
+@test "paint: questions about the board still get prose answers from the --json path" {
+    run _section '## Questions' '' "$SKILL"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'asks about the board instead of asking to see it'* ]] || false
+    [[ "$output" == *'Read `references/questions.md`'*'answer in prose'* ]] || false
+    run cat "$QUESTIONS"
+    [[ "$output" == *'borg link --json'* ]] || false
+    [[ "$output" == *"Do not paste the page"* ]] || false
+}
+
+@test "paint: SKILL.md no longer says to answer without re-rendering, and rationale.md records the reversal and its evidence" {
+    run cat "$SKILL"
+    [[ "$output" != *'do not re-render'* ]] || false
+    [[ "$output" != *"re-render the CLI's table"* ]] || false
+    run cat "$RATIONALE"
+    [[ "$output" == *'## Doorways S3: the board is painted, not re-rendered'* ]] || false
+    [[ "$output" == *'"Answer; do not re-render"'* ]] || false
+    [[ "$output" == *"\"never re-render the CLI's table\""* ]] || false
+    [[ "$output" == *'Experiment X1'* ]] || false
+    [[ "$output" == *'exact alignment at 80 and 100 columns'* ]] || false
+    [[ "$output" == *'one full-context re-read fewer per run'* ]] || false
+    [[ "$output" == *'about 30 KB'* ]] || false
 }

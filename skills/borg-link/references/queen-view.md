@@ -1,6 +1,6 @@
 ## Queen view (`scope.kind == "orchestrator"` only)
 
-This file is the cross-repository overview. SKILL.md sent you here because `scope.kind == "orchestrator"`; its Step 1 pipe, version gate, host-only flags, `.compass` rules and guardrails still apply. It is for the Queen session and for nothing else: never use it to render a repository or a worktree.
+This file is the cross-repository overview. `references/questions.md` sent you here because `scope.kind == "orchestrator"`; its Step 1 pipe, version gate, host-only flags, `.compass` rules and guardrails still apply. It is for the Queen session and for nothing else: never use it to render a repository or a worktree.
 
 **Compass, Queen view only:**
 - In the Queen view give the tally of the active ones and lead with `late`.

@@ -7,14 +7,14 @@
 [1m▸ REPOSITORIES[0m  [2mthe collective · 7 repositories · 1 worktree · 3 need attention[0m
 [1m REPOSITORY           SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
 ──────────────────────────────────────────────────────────────────────────────────────────
-*platform             [C]  [0;32mactive      [0m 2h ago           –    3      – Scoped keypair auth rollout.
- └ platform-feat      [C]  [1;33mwaiting <<< [0m 10m ago          –    –      – Scope rotation lives on the…[0m
- atlas                [C]  [1;33mwaiting <<< [0m 5d ago           –    –      – Waiting on a schema decision.
- warehouse            [D]  [1;33mwaiting <<< [0m yesterday        1    –      1 Key cutover blocked on the r…[0m
+*platform             [C]  [0;32mactive      [0m 2h ago           –    3      – Scoped keypair auth rollou…[0m
+ └ platform-feat      [C]  [1;33mwaiting <<< [0m 10m ago          –    –      – Scope rotation lives on th…[0m
+ atlas                [C]  [1;33mwaiting <<< [0m 5d ago           –    –      – Waiting on a schema decisi…[0m
+ warehouse            [D]  [1;33mwaiting <<< [0m yesterday        1    –      1 Key cutover blocked on the…[0m
  infra                [X]  [0;32mactive      [0m 3h ago           –    –      –
- archive-tools        [C]  [2midle        [0m never            –    –      – Nothing here since the fork.
+ archive-tools        [C]  [2midle        [0m never            –    –      – Nothing here since the for…[0m
  relay                [C]  [2midle        [0m 2d ago           –    –      – Relay has no summary yet.
- ledger               [C]  [2midle        [0m 30m ago          –    –      – Nightly close reconciliation.
+ ledger               [C]  [2midle        [0m 30m ago          –    –      – Nightly close reconciliati…[0m
 
 [1m▸ STACKS[0m  [2m2 stacks · 13 refs · 1 unresolved · swept back to 2026-05-28[0m
   [2m— every stack, drawn:[0m [0;36mborg link --overview --full[0m

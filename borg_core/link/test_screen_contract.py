@@ -1,8 +1,7 @@
 """The screen contract for the Queen's page (doorways S2, AC2): it fits one screen however much exists.
 
 These read the limits and the words from `render` (`PAGE_LINES`, `PAGE_COLUMNS`, `GLYPH_LEGEND`, `STATUS_WORDS`), so
-the contract and the page cannot drift apart. The two limits are ALSO asserted as the literals the directive approved
-(30 and 100): a constant edited to make the page pass would otherwise take the test with it.
+the contract and the page cannot drift apart. The two limits are ALSO asserted as literals (30, and 98 columns, within the directive's approved 100): a constant edited to make the page pass would otherwise take the test with it.
 
 EVERY FIXTURE IS SYNTHETIC. The live board carries private-repository titles and this repository is public.
 """
@@ -142,10 +141,10 @@ def test_the_page_does_not_grow_with_its_input(stacks, directives):
 def test_every_line_is_at_most_a_hundred_visible_columns(stacks, directives, waiting):
     """AC2, measured with `visible_len` and never `len`: the raw rows carry SGR and OSC-8 bytes."""
     page = render.document(_queen(stacks=stacks, directives=directives, waiting=waiting))
-    assert render.PAGE_COLUMNS == 100
+    assert render.PAGE_COLUMNS == 98
     lines = page.split("\n")
-    assert all(picture.visible_len(line) <= 100 for line in lines), [
-        (picture.visible_len(line), plain(line)) for line in lines if picture.visible_len(line) > 100
+    assert all(picture.visible_len(line) <= 98 for line in lines), [
+        (picture.visible_len(line), plain(line)) for line in lines if picture.visible_len(line) > 98
     ]
     assert any(len(line) > picture.visible_len(line) for line in lines), (
         "the fixture exercises escapes, so len would lie"
@@ -180,7 +179,7 @@ def test_a_long_repository_name_is_cut_so_its_destination_state_still_fits():
     page = plain(render.document(doc)).split("\n")
     row = next(line for line in page if line.lstrip(" *").startswith("w"))
     assert " · late" in row and "…" in row.split(" · late")[0], row
-    assert picture.visible_len(row) <= 100
+    assert picture.visible_len(row) <= 98
     assert long_name in plain(render.document(doc, full=True)), "--full prints the name whole"
 
 
@@ -190,7 +189,7 @@ def test_the_legend_is_one_line_and_names_every_glyph_in_the_closed_set():
     assert len(legend) == 1
     for glyph, word in render.GLYPH_LEGEND:
         assert f"{glyph} {word}" in legend[0]
-    assert picture.visible_len(legend[0]) <= 100
+    assert picture.visible_len(legend[0]) <= 98
 
 
 def test_the_state_glyph_words_are_in_the_closed_status_vocabulary():
@@ -391,11 +390,79 @@ def test_the_next_action_line_never_cuts_its_command_and_waiting_rows_never_cut_
     last = [line for line in page if line.strip()][-1]
     command = render._next_action_command(ref)  # pylint: disable=protected-access
     assert command == f"gh pr view 12345 -R {owner}"
-    assert last.endswith(command) and picture.visible_len(last) <= 100
+    assert last.endswith(command) and picture.visible_len(last) <= 98
     assert last.startswith("  next  #12345")
     waiting = next(line for line in page if "▶" in line and "#12345" in line)
-    assert "#12345" in waiting and picture.visible_len(waiting) <= 100 and waiting.rstrip().endswith("…")
+    assert "#12345" in waiting and picture.visible_len(waiting) <= 98 and waiting.rstrip().endswith("…")
     # A non-GitHub label too long for the line is cut in the middle, never the command.
     document["waiting"]["rows"] = [{**row, "ref": "", "item": "s" * 150}]
     tail = [line for line in plain(render.document(document)).split("\n") if line.strip()][-1]
-    assert tail.endswith("borg next") and picture.visible_len(tail) <= 100
+    assert tail.endswith("borg next") and picture.visible_len(tail) <= 98
+
+
+# ── Doorways S3 (AC3): the page is painted verbatim, so both scopes must fit the paint ───────────────────────────
+
+
+def _painted_repository_doc(**overrides) -> dict:
+    """A directory's document whose free text is far wider than the page: a 302-column checkpoint line, a long
+    summary, a long leg and a long scope label, the shapes the live repository page held on 2026-10-19."""
+    head = "tl;dr: " + "a checkpoint line that runs on and on " * 8 + "\n" + "- " + "y" * 150 + "\nshort"
+    focus = {
+        "name": "p",
+        "entry": {"path": "/ws/p", "status": "idle", "summary": "s" * 400, "claude_session_id": "abc"},
+        "identity": {"kind": "main", "branch": "main"},
+        "plan": None,
+        "checkpoints": ["2026-10-19-101627-0e958b.md"],
+        "checkpoint_head": head,
+        "directives": [],
+        "assimilated": [],
+    }
+    return _repository_doc(focus=focus, **overrides)
+
+
+@pytest.mark.parametrize("scope", ["queen", "repository"])
+def test_the_painted_page_has_no_escape_byte_and_no_line_over_a_hundred_columns(scope):
+    """AC3: the skill injects `NO_COLOR=1 borg link`, and the model reproduces it in a fenced block. An ESC byte
+    there is mojibake on the user's screen, and a line past 100 columns wraps and breaks the fence's alignment."""
+    document = _queen(stacks=3, waiting=2) if scope == "queen" else _painted_repository_doc()
+    coloured = render.document(document)
+    assert "\033" in coloured, "the fixture must carry escapes, or the assertion below proves nothing"
+    painted = cli._page(coloured, False)  # pylint: disable=protected-access
+    assert "\033" not in painted
+    assert max(picture.visible_len(line) for line in painted.split("\n")) <= 98
+
+
+def test_the_repository_page_cuts_free_text_with_an_ellipsis_and_keeps_every_other_line_whole():
+    page = plain(render.document(_painted_repository_doc()))
+    cut = [line for line in page.split("\n") if line.endswith("…")]
+    assert any("tl;dr" in line for line in cut), "the 302-column checkpoint line is cut"
+    assert all(picture.visible_len(line) <= 98 for line in page.split("\n"))
+    assert "short" in page and "borg link --overview" in page
+
+
+def test_the_repository_page_never_cuts_a_command_or_a_ref():
+    """The pointer line and the waiting row hold literal commands and refs. They are not free text, so the fit
+    does not touch them, even where they are wider than the page (here a path past 100 columns)."""
+    ref = "an-organisation-name/a-repository-name-quite-long#12345"
+    long_path = "/ws/" + "deeply-nested-directory/" * 6 + "p"
+    document = _painted_repository_doc()
+    document["focus"]["entry"]["path"] = long_path
+    document["waiting"] = {
+        "rows": [{"project": "p", "item": "session", "next_step": f"gh pr view -R {ref}", "owner": "YOU", "ref": None}],
+        "hidden": {},
+        "hidden_lines": [],
+        "degraded": None,
+    }
+    page = plain(render.document(document))
+    assert long_path in page, "a path is a ref, never cut"
+    assert "borg link --overview" in page
+    assert f"gh pr view -R {ref}" in page
+
+
+def test_the_repository_page_never_cuts_the_map_directory_in_its_no_map_line():
+    document = _painted_repository_doc()
+    map_dir = "/ws/" + "a-deeply-nested-map-directory/" * 5 + "map"
+    document["compass"] = {"found": False, "map_dir": map_dir}
+    page = plain(render.document(document))
+    line = next(line for line in page.split("\n") if "Compass: no map at" in line)
+    assert line.strip().endswith(map_dir) and picture.visible_len(line) > 100
