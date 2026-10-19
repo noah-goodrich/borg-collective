@@ -1542,13 +1542,17 @@ def _repository_you_count(doc: dict) -> tuple[str, int]:
     return repository, count
 
 
-def _waiting_tail(waiting: dict, hidden: list[str], leftover: int, capped: bool) -> list[str]:
+def _waiting_tail(doc: dict, leftover: int, capped: bool) -> list[str]:
     """What follows the rows: the chooser's hidden counts and a degraded block, one line each, or ONE line when capped.
 
     Capped, `+N more` (rows the cap left off) and the hidden counts share a single line that ends in the chooser, and
     the degraded sentence rides at the END of that line: it is the one part of the line with no fixed width, so it is
     the part the page-width cut may take, and the command is never it.
     """
+    waiting = doc.get("waiting") or {}
+    # The hidden counts (`+N agent tasks`, ...) describe repository-level rows, none of which a directory's
+    # page shows, so they are not printed there either.
+    hidden = [] if _is_repository_scope(doc) else waiting.get("hidden_lines") or []
     degraded = waiting.get("degraded")
     if not capped:
         tail = [f"  {DIM}{line}{NC}\n" for line in hidden]
@@ -1580,36 +1584,33 @@ def _waiting_section(doc: dict, cap: int | None = None) -> tuple[str, list[str]]
     directory's page, and `--full`) prints it all, byte for byte as before.
     """
     items, unlooked = _waiting(doc)
-    waiting = doc.get("waiting") or {}
-    # The hidden counts (`+N agent tasks`, ...) describe repository-level rows, none of which a directory's
-    # page shows, so they are not printed there either.
-    hidden = [] if _is_repository_scope(doc) else waiting.get("hidden_lines") or []
     action = _next_action_line(doc, items, unlooked)
     # Parked thoughts whose look-again date has come ride AFTER the real items and are not offered by the next-action
     # line: a parked thought is a reminder to look, not a decision with a command that answers it.
     parking, more_parked = _parking_due(doc)
     total = len(items) + len(parking) + more_parked
     shown = total if cap is None else min(cap, len(items) + len(parking))
-    tail = _waiting_tail(waiting, hidden, total - shown, cap is not None)
+    # A due parked thought keeps at least ONE of the capped slots (and any the decisions leave empty): seven sessions
+    # waiting must not starve the reminder to look.
+    parked_n = len(parking) if cap is None else min(len(parking), max(1, shown - len(items)))
+    tail = _waiting_tail(doc, total - shown, cap is not None)
     if not items and not parking:
         note, placeholder = _nothing_line(doc, unlooked)
         return note, [placeholder, *tail, action]
     note = _plural(total, "item", "items")
     if unlooked:
         note += " — and some refs nobody looked up"
-    return note, [*_waiting_rows(items, parking, more_parked, shown, cap is not None), *tail, action]
+    rows = _waiting_rows(items[: shown - parked_n], parking[:parked_n])
+    if cap is None and more_parked:
+        rows.append(f"  {DIM}+{more_parked} more parked items due{NC}\n")
+    return note, [*rows, *tail, action]
 
 
-def _waiting_rows(items: list[dict], parking: list[dict], more_parked: int, shown: int, capped: bool) -> list[str]:
-    """The first `shown` rows of WAITING ON YOU: decisions, then due parked thoughts, aligned to what is shown."""
-    kept = items[:shown]
+def _waiting_rows(kept: list[dict], parked: list[dict]) -> list[str]:
+    """WAITING ON YOU's rows: the decisions in `kept`, aligned to each other, then the due parked thoughts."""
     ref_w = max((len(item["label"]) for item in kept), default=0)
     repo_w = max((len(item["repository"]) for item in kept), default=0)
-    rows = [_waiting_line(item, ref_w, repo_w) for item in kept]
-    rows.extend(_parking_line(item) for item in parking[: max(shown - len(kept), 0)])
-    if not capped and more_parked:
-        rows.append(f"  {DIM}+{more_parked} more parked items due{NC}\n")
-    return rows
+    return [*(_waiting_line(item, ref_w, repo_w) for item in kept), *(_parking_line(item) for item in parked)]
 
 
 def _nothing_line(doc: dict, unlooked: bool) -> tuple[str, str]:

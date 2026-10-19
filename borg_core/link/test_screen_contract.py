@@ -280,6 +280,7 @@ def test_waiting_on_you_prints_two_rows_and_counts_the_rest_on_one_line():
     start = next(i for i, line in enumerate(page) if line.startswith("▸ WAITING ON YOU"))
     body = [line for line in page[start + 1 :] if line.strip()]
     assert sum("▶" in line for line in body) == 2
+    assert sum("parking:" in line for line in body) == 1, "a due parked thought keeps one of the two slots"
     more = next(line for line in body if "more" in line)
     assert more.strip().startswith("+") and "borg next" in more
     assert "+5 more decisions" in more and "+9 agent tasks" in more, "the chooser's hidden counts share the line"
