@@ -422,6 +422,49 @@ def test_work_items_review_required_is_waiting_not_a_merge_you_can_do():
     assert row["next_step"] == "fix #9 CI"
 
 
+def _stack(*prs):
+    rows, _ = core.work_items([_rank("p")], {"p": list(prs)}, {}, {})
+    return {r["ref"]: r for r in rows}
+
+
+def test_work_items_stacked_child_waits_on_its_open_parent_never_merge_now():
+    rows = _stack(
+        _pr(1, head_ref="feat/a", base_ref="main"),
+        _pr(2, head_ref="feat/b", base_ref="feat/a"),
+    )
+    child = rows["o/r#2"]
+    assert (child["next_step"], child["owner"], child["ready"]) == ("await #1", "—", "… wait")
+    parent = rows["o/r#1"]
+    assert (parent["next_step"], parent["owner"], parent["ready"]) == ("merge #1", "YOU", "✔ now")
+
+
+def test_work_items_stacked_child_keeps_its_own_work_rules_above_the_wait():
+    base = {"base_ref": "feat/a"}
+    parent = _pr(1, head_ref="feat/a", base_ref="main")
+    assert _stack(parent, _pr(2, draft=True, **base))["o/r#2"]["next_step"] == "finish #2"
+    assert _stack(parent, _pr(2, mergeable="CONFLICTING", **base))["o/r#2"]["next_step"] == "resolve conflicts #2"
+    assert _stack(parent, _pr(2, checks="fail", **base))["o/r#2"]["next_step"] == "fix #2 CI"
+    assert _stack(parent, _pr(2, review_decision="CHANGES_REQUESTED", **base))["o/r#2"]["next_step"] == (
+        "address review #2"
+    )
+    row = _stack(parent, _pr(2, review_decision="REVIEW_REQUIRED", **base))["o/r#2"]
+    assert row["next_step"] == "await #1"
+
+
+def test_work_items_base_without_an_open_parent_behaves_as_before():
+    parent = _pr(1, head_ref="feat/a", base_ref="main")
+    for extra in ({"base_ref": "main"}, {"base_ref": "feat/gone"}, {"base_ref": ""}, {}):
+        row = _stack(parent, _pr(2, head_ref="feat/b", **extra))["o/r#2"]
+        assert (row["next_step"], row["owner"], row["ready"]) == ("merge #2", "YOU", "✔ now")
+    merged = _pr(1, state="merged", head_ref="feat/a", base_ref="main")
+    assert _stack(merged, _pr(2, base_ref="feat/a"))["o/r#2"]["next_step"] == "merge #2"
+
+
+def test_work_items_stack_parent_must_be_in_the_same_repository():
+    other = _pr(1, head_ref="feat/a", base_ref="main", ref="o/other#1")
+    assert _stack(other, _pr(2, base_ref="feat/a"))["o/r#2"]["next_step"] == "merge #2"
+
+
 def test_work_items_review_required_rows_do_not_fill_the_cap():
     prs = [_pr(n, review_decision="REVIEW_REQUIRED") for n in range(1, 8)] + [_pr(20), _pr(21)]
     rows, _ = core.work_items([_rank("p")], {"p": prs}, {}, {})
