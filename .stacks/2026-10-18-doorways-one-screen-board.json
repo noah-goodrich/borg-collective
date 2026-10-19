@@ -6,37 +6,42 @@
       "lane": "_default",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#438",
+      "status": "merged",
       "why": "S1 of 5: the directive, its research record, and AC1 (the page stops contradicting itself)"
     },
     {
       "lane": "_default",
       "order": "2",
       "ref": "noah-goodrich/borg-collective#440",
+      "status": "merged",
       "why": "S2 of 5: AC2, the Queen page fits one screen (30 lines outside REPOSITORIES, 100 columns, STACKS and QUEUED as counts)"
     },
     {
       "lane": "_default",
       "order": "3",
       "ref": "noah-goodrich/borg-collective#441",
+      "status": "merged",
       "why": "S3 of 5: AC3, /borg-link paints the CLI page verbatim (injection, one fenced block, Bash fallback, repository page fit to 100 columns)"
     },
     {
       "lane": "_default",
       "order": "4",
       "ref": "noah-goodrich/borg-collective#442",
+      "status": "merged",
       "why": "S4 of 5: AC4, borg next --line glance line from a cache, opt-in borg setup --statusline, tmux format string"
     },
     {
       "lane": "_default",
       "order": "5",
       "ref": "noah-goodrich/borg-collective#443",
+      "status": "merged",
       "why": "S5 of 5: AC5, chooser cards (6 lines by 42 columns, next_step, exact command) as AskUserQuestion previews; Cortex keeps descriptions"
     },
     {
       "lane": "_default",
       "order": "6",
       "ref": "noah-goodrich/borg-collective#444",
-      "status": "open",
+      "status": "merged",
       "why": "Step 0: the /simplify findings applied, statusline symlink fix, next --line hot path"
     }
   ]
