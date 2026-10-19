@@ -399,3 +399,62 @@ def test_the_next_action_line_never_cuts_its_command_and_waiting_rows_never_cut_
     document["waiting"]["rows"] = [{**row, "ref": "", "item": "s" * 150}]
     tail = [line for line in plain(render.document(document)).split("\n") if line.strip()][-1]
     assert tail.endswith("borg next") and picture.visible_len(tail) <= 100
+
+
+# ── Doorways S3 (AC3): the page is painted verbatim, so both scopes must fit the paint ───────────────────────────
+
+
+def _painted_repository_doc(**overrides) -> dict:
+    """A directory's document whose free text is far wider than the page: a 302-column checkpoint line, a long
+    summary, a long leg and a long scope label, the shapes the live repository page held on 2026-10-19."""
+    head = "tl;dr: " + "a checkpoint line that runs on and on " * 8 + "\n" + "- " + "y" * 150 + "\nshort"
+    focus = {
+        "name": "p",
+        "entry": {"path": "/ws/p", "status": "idle", "summary": "s" * 400, "claude_session_id": "abc"},
+        "identity": {"kind": "main", "branch": "main"},
+        "plan": None,
+        "checkpoints": ["2026-10-19-101627-0e958b.md"],
+        "checkpoint_head": head,
+        "directives": [],
+        "assimilated": [],
+    }
+    return _repository_doc(focus=focus, **overrides)
+
+
+@pytest.mark.parametrize("scope", ["queen", "repository"])
+def test_the_painted_page_has_no_escape_byte_and_no_line_over_a_hundred_columns(scope):
+    """AC3: the skill injects `NO_COLOR=1 borg link`, and the model reproduces it in a fenced block. An ESC byte
+    there is mojibake on the user's screen, and a line past 100 columns wraps and breaks the fence's alignment."""
+    document = _queen(stacks=3, waiting=2) if scope == "queen" else _painted_repository_doc()
+    coloured = render.document(document)
+    assert "\033" in coloured, "the fixture must carry escapes, or the assertion below proves nothing"
+    painted = cli._page(coloured, False)  # pylint: disable=protected-access
+    assert "\033" not in painted
+    assert max(picture.visible_len(line) for line in painted.split("\n")) <= 100
+
+
+def test_the_repository_page_cuts_free_text_with_an_ellipsis_and_keeps_every_other_line_whole():
+    page = plain(render.document(_painted_repository_doc()))
+    cut = [line for line in page.split("\n") if line.endswith("…")]
+    assert any("tl;dr" in line for line in cut), "the 302-column checkpoint line is cut"
+    assert all(picture.visible_len(line) <= 100 for line in page.split("\n"))
+    assert "short" in page and "borg link --overview" in page
+
+
+def test_the_repository_page_never_cuts_a_command_or_a_ref():
+    """The pointer line and the waiting row hold literal commands and refs. They are not free text, so the fit
+    does not touch them, even where they are wider than the page (here a path past 100 columns)."""
+    ref = "an-organisation-name/a-repository-name-quite-long#12345"
+    long_path = "/ws/" + "deeply-nested-directory/" * 6 + "p"
+    document = _painted_repository_doc()
+    document["focus"]["entry"]["path"] = long_path
+    document["waiting"] = {
+        "rows": [{"project": "p", "item": "session", "next_step": f"gh pr view -R {ref}", "owner": "YOU", "ref": None}],
+        "hidden": {},
+        "hidden_lines": [],
+        "degraded": None,
+    }
+    page = plain(render.document(document))
+    assert long_path in page, "a path is a ref, never cut"
+    assert "borg link --overview" in page
+    assert f"gh pr view -R {ref}" in page

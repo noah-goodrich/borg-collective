@@ -218,10 +218,19 @@ _ESCAPES = re.compile(r"\033\[[0-9;]*m|\033\]8;;[^\033]*\033\\")
 _OSC8_CLOSE = "\033]8;;\033\\"
 
 
-def _fit_text(text: str, limit: int = PAGE_COLUMNS) -> str:
+# The IN FOCUS label lines whose value is a path, which is a ref: never cut, even past `PAGE_COLUMNS`.
+_UNCUT_LABELS = ("Path:", "Worktree of:")
+
+
+def _fit_text(text: str, limit: int = PAGE_COLUMNS, keep: tuple[str, ...] = ()) -> str:
     """`_fit_line` over every line of `text`. A section builder may hand back one string holding several lines (a
-    board row with its cortex continuation does), so the page is cut by line and never by list entry."""
-    return "".join(_fit_line(line, limit) for line in re.findall(r"[^\n]*\n|[^\n]+", text))
+    board row with its cortex continuation does), so the page is cut by line and never by list entry. A line whose
+    visible text starts with one of `keep` (after its indent) is returned whole."""
+
+    def fit(line: str) -> str:
+        return line if keep and picture.plain(line).lstrip().startswith(keep) else _fit_line(line, limit)
+
+    return "".join(fit(line) for line in re.findall(r"[^\n]*\n|[^\n]+", text))
 
 
 def _fit_line(line: str, limit: int = PAGE_COLUMNS) -> str:
@@ -1879,6 +1888,18 @@ def _sections_for(doc: dict, full: bool = False) -> tuple[tuple[str, Builder], .
     return FULL_SECTIONS if full else SECTIONS
 
 
+def _repository_chunk(title: str, build: Builder, doc: dict) -> str:
+    """One section of a directory's page, painted verbatim by `/borg-link` (doorways S3), so IN FOCUS is fitted.
+
+    ONLY IN FOCUS IS CUT: its checkpoint body, summary and leg are free text the renderer does not control (302
+    columns live on 2026-10-19). The pointer and WAITING ON YOU hold the page's own commands and refs (`borg link
+    --overview`, `borg next`, a PR ref), which are never cut, and `Path:` / `Worktree of:` are refs too. The
+    section content rules are the same as before: this only bounds a line's width.
+    """
+    chunk = "".join(_section(title, *build(doc)))
+    return _fit_text(chunk, keep=_UNCUT_LABELS) if title == "IN FOCUS" else chunk
+
+
 def document(doc: dict, full: bool = False) -> str:
     """THE ONE HUMAN ENTRY POINT. Prints the section list its scope names and joins; no branch inside a section.
 
@@ -1889,15 +1910,17 @@ def document(doc: dict, full: bool = False) -> str:
     its header plus one placeholder, so an empty section cannot silently disappear and take the invariant
     with it.
 
-    THE QUEEN'S COMPACT PAGE IS THE ONLY ONE FITTED TO `PAGE_COLUMNS`: each of its lines is cut to that many
-    visible columns (`_fit_line`), because free text the renderer does not control (a summary, a directive title, a
-    warning) must not be able to push the screen wider. `--full` and the directory's page are not fitted: a stack's
-    picture is its own width, and a directory's page is out of this contract.
+    THE QUEEN'S COMPACT PAGE IS FITTED TO `PAGE_COLUMNS` WHOLE: each of its lines is cut to that many visible columns
+    (`_fit_line`), because free text the renderer does not control (a summary, a directive title, a warning) must not
+    be able to push the screen wider. `--full` is not fitted: a stack's picture is its own width. A directory's page
+    is fitted in IN FOCUS only (`_repository_chunk`), because `/borg-link` paints it verbatim too.
 
     THE COMPACT PAGE ENDS ON ITS LAST LINE, NOT ON A BLANK: the section separator after WAITING ON YOU was a row of
     the screen that held nothing, and link-unification L3 wants the next action to be the last thing the eye lands
     on. One line is the difference between 51 and 50 on the live registry.
     """
     sections = _sections_for(doc, full)
+    if sections is REPOSITORY_SECTIONS:
+        return "".join(_repository_chunk(title, build, doc) for title, build in sections)
     text = "".join(line for title, build in sections for line in _section(title, *build(doc)))
     return _fit_text(text).rstrip("\n") + "\n" if sections is SECTIONS else text
