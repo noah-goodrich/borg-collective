@@ -7,6 +7,12 @@
       "order": "1",
       "ref": "noah-goodrich/borg-collective#438",
       "why": "S1 of 5: the directive, its research record, and AC1 (the page stops contradicting itself)"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#440",
+      "why": "S2 of 5: AC2, the Queen page fits one screen (30 lines outside REPOSITORIES, 100 columns, STACKS and QUEUED as counts)"
     }
   ]
 }

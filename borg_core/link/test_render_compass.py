@@ -10,7 +10,7 @@ import pytest
 from borg_core.compass import core as compass_core
 from borg_core.link import render, worktree
 from borg_core.link.test_picture import plain
-from borg_core.link.test_render import _doc, _focus, _repository_doc
+from borg_core.link.test_render import _doc, _focus, _full, _repository_doc
 
 TODAY = "2026-03-10"
 MAP_DIR = "/maps/synthetic"
@@ -250,8 +250,8 @@ def test_a_worktree_the_map_names_keeps_its_own_destination_on_the_board_whateve
 
 def test_every_mapped_row_keeps_its_suffix_when_every_summary_is_80_characters():
     repositories = {name: _entry("x" * 80) for name in NAMES}
-    with_map = render.document(_queen(_compass(), repositories))
-    without_map = render.document(_queen(None, repositories))
+    with_map = _full(_queen(_compass(), repositories))
+    without_map = _full(_queen(None, repositories))
     widest = max(len(row) for row in _board(without_map).values())
     rows = _board(with_map)
     for name, state in (("widgets", "late"), ("gadgets", "off leg"), ("gizmos", "off leg"), ("doodads", "frozen")):
@@ -287,7 +287,7 @@ def test_a_long_repository_name_grows_the_budget_so_every_mapped_row_carries_its
     repositories = {name: _entry(summary) for name in names}
 
     def board(compass):
-        page = plain(render.document(_queen(compass, repositories))).split("\n")
+        page = plain(_full(_queen(compass, repositories))).split("\n")
         return {name: next(line for line in page if line.strip(" *").startswith(name + " ")) for name in names}
 
     rows = board(block)
@@ -339,7 +339,7 @@ def test_parking_rows_are_the_queens_and_the_page_of_a_directory_has_none():
 
 def test_parking_rows_are_capped_and_the_rest_counted():
     many = "".join(f"- [ ] thought {n} | parked: 2026-01-01 | look: 2026-02-0{n} | seen: {n}\n" for n in range(1, 8))
-    lines = _section_lines(render.document(_queen(_compass(parking=many))), "WAITING ON YOU")
+    lines = _section_lines(_full(_queen(_compass(parking=many))), "WAITING ON YOU")
     assert sum("parking:" in line for line in lines) == 5
     assert any(line.strip() == "+2 more parked items due" for line in lines)
 

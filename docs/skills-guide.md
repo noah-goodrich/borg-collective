@@ -129,7 +129,7 @@ session is worth more than an auto-generated summary you don't read.
 
 **Activation**: Manual (`/borg-link`, or invoked from `borg link` / `drone link` on the CLI)
 
-Scope decides the page. In the Queen session (the workspace root) it gives the overview across all registered repositories (directives, recent ships, last checkpoint). Anywhere else, or with a repository name, it gives a page about exactly that one directory: identity, live session and status, its own checkpoints and the next action, and nothing from any other repository or worktree. `--overview` forces the Queen's overview from any directory. Works on the host and inside a drone container by reading the bind-mounted files directly.
+Scope decides the page. In the Queen session (the workspace root) it gives the overview across all registered repositories (directives, recent ships, last checkpoint). Anywhere else, or with a repository name, it gives a page about exactly that one directory: identity, live session and status, its own checkpoints and the next action, and nothing from any other repository or worktree. `--overview` forces the Queen's overview from any directory. The overview is held to one screen (at most 30 lines outside the repository board, 100 columns), with STACKS and QUEUED as counts; `borg link --overview --full` prints every stack and directive. Works on the host and inside a drone container by reading the bind-mounted files directly.
 
 **Why it exists**: You forget what every repository is doing. This skill rebuilds the picture without
 round-tripping through multiple commands.

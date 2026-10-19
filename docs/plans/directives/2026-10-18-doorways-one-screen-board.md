@@ -40,11 +40,11 @@ borg's doorways become one-screen terminal text, built the same way on every run
 
 ## Acceptance Criteria
 
-- [ ] **AC1: The page never contradicts itself.**
+- [x] **AC1: The page never contradicts itself.** Shipped in #438.
   - On a fixture where every manifest is swept and none is ready, `▸ NEXT` never says `nobody looked`. Find the cause on the live board first: why `render._next_tally` reports unlooked while the STACKS header says `0 unresolved`.
   - A repository page never prints `nothing waits on you` while `borg next --rows --json` holds a YOU row for that repository. It prints a count line pointing to `borg next` instead. The rule that the repository page is strictly about its own directory stays.
   - Verify: new cases in `borg_core/link/test_render.py`, failing before the fix. Then `borg link borg-collective` while a borg-collective PR waits on you.
-- [ ] **AC2: The page fits one screen.**
+- [x] **AC2: The page fits one screen.** Shipped in #440: the expand command is `borg link --overview --full`; live `borg link --overview` is 50 lines, widest line 100.
   - Outside REPOSITORIES, the Queen page is at most 30 lines however many stacks and directives exist. STACKS and QUEUED render as counts plus the command that expands them.
   - Every line is at most 100 visible columns.
   - A one-line legend names each glyph.

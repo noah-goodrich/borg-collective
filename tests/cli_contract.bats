@@ -2024,14 +2024,40 @@ _link_mock_tmux() {
 # its golden must keep pinning them byte for byte. See `_link_registry_deep` for why a fixed fixture
 # date stopped being the deterministic choice the moment one page carried both the raw form and the
 # board's relative one.
+# A CUT DEPENDS ON THE LENGTH OF WHAT IS CUT, AND A GOLDEN MAY NOT (doorways S2). The Queen's page is fitted to 100
+# columns, and the warnings under SIGNALS name a fixture or an adapter directory by ABSOLUTE path: a long path puts the
+# cut INSIDE it, after which no scrub can find it, and the cut lands somewhere else on a machine with a shorter
+# `$TMPDIR` or a checkout in a different place. So the golden runs read their seams from a scratch directory whose path
+# has the same length everywhere (`/tmp/bg.XXXXXX`, 14 characters on macOS and Linux alike), copied there with the
+# fixtures they need, and `<TMP>` is substituted for it AFTER the cut. A failing cut is then the same cut on every
+# machine, and the golden pins the page a reader sees, not the page a wide terminal would.
+_link_golden_alias() {
+    case " $* " in *" --full "*) return 0 ;; esac
+    [ -n "${LINK_ALIAS:-}" ] || LINK_ALIAS="$(mktemp -d /tmp/bg.XXXXXX)"
+    mkdir -p "${LINK_ALIAS}/no-adapters"
+    export BORG_RECON_ADAPTER_PATH="${LINK_ALIAS}/no-adapters"
+    local seam
+    for seam in BORG_LINK_FETCH_FIXTURE BORG_LINK_SWEEP_FIXTURE; do
+        [ -n "${!seam:-}" ] || continue
+        [[ "${!seam}" == "${LINK_ALIAS}/"* ]] || cp "${!seam}" "${LINK_ALIAS}/${!seam##*/}"
+        export "${seam}=${LINK_ALIAS}/${!seam##*/}"
+    done
+}
+
+teardown() {
+    [ -z "${LINK_ALIAS:-}" ] || rm -rf -- "${LINK_ALIAS}"
+}
+
 _assert_link_golden() {
     local name="$1"; shift
     local raw="${BATS_TEST_TMPDIR}/${name}.raw" actual="${BATS_TEST_TMPDIR}/${name}.actual"
+    _link_golden_alias "$@"
     # The map is pinned to a directory that does not exist, so IN FOCUS prints the one `no map at <TMP>/map` line:
     # the compass renders on every page, and the sandbox's default ($HOME/dev/map) would put a `/home/` path in
     # the golden, which the no-absolute-path check below rightly refuses.
-    BORG_MAP_DIR="${BATS_TEST_TMPDIR}/map" zsh "$BORG" "$@" > "$raw" 2>&1
-    sed -e "s|${BATS_TEST_TMPDIR}|<TMP>|g" \
+    BORG_MAP_DIR="${LINK_ALIAS:-${BATS_TEST_TMPDIR}}/map" zsh "$BORG" "$@" > "$raw" 2>&1
+    sed -e "s|${LINK_ALIAS:-@@none@@}|<TMP>|g" \
+        -e "s|${BATS_TEST_TMPDIR}|<TMP>|g" \
         -e "s|${BATS_TEST_DIRNAME}|<TESTS>|g" \
         -e '/Last active:/ s|[0-9-]\{10\}T[0-9:]\{8\}Z|<TS>|g' "$raw" > "$actual"
 
@@ -2495,7 +2521,7 @@ _link_grid_seams() {
 # `zsh borg <args...>` from `$1`, stdout+stderr merged into `$2`.
 _link_grid_run() {
     local dir="$1" out="$2"; shift 2
-    ( cd "$dir" && BORG_MAP_DIR="${BATS_TEST_TMPDIR}/map" zsh "$BORG" "$@" ) > "$out" 2>&1
+    ( cd "$dir" && BORG_MAP_DIR="${LINK_ALIAS:-${BATS_TEST_TMPDIR}}/map" zsh "$BORG" "$@" ) > "$out" 2>&1
 }
 
 # THE TRIPWIRE, AND IT RUNS BEFORE THE DIFF *AND* ON THE UPDATE PATH.
@@ -2553,6 +2579,7 @@ _link_grid_tripwire() {
 _assert_link_grid_golden() {
     local name="$1" dir="$2"; shift 2
     _link_grid_seams
+    _link_golden_alias "$@"
 
     local probe="${BATS_TEST_TMPDIR}/${name}.probe.json"
     _link_grid_run "$dir" "$probe" "$@" --json
@@ -2563,13 +2590,13 @@ _assert_link_grid_golden() {
     # only `auth-hardening`, whose rows all resolve. Kept beside the call rather than inside the
     # tripwire so the number is visibly a property of the fixtures, not of the assertion.
     local expect_unresolved=0
-    [ "$name" = "link-grid-orchestrator" ] && expect_unresolved=1
-    [ "$name" = "link-grid-queen-worktrees" ] && expect_unresolved=1
+    case "$name" in link-grid-orchestrator*|link-grid-queen-worktrees*) expect_unresolved=1 ;; esac
     _link_grid_tripwire "$probe" "$name" "$expect_unresolved"
 
     local raw="${BATS_TEST_TMPDIR}/${name}.raw" actual="${BATS_TEST_TMPDIR}/${name}.actual"
     _link_grid_run "$dir" "$raw" "$@"
-    sed -e "s|${BATS_TEST_TMPDIR}|<TMP>|g" \
+    sed -e "s|${LINK_ALIAS:-@@none@@}|<TMP>|g" \
+        -e "s|${BATS_TEST_TMPDIR}|<TMP>|g" \
         -e "s|${BATS_TEST_DIRNAME}|<TESTS>|g" \
         -e '/Last active:/ s|[0-9-]\{10\}T[0-9:]\{8\}Z|<TS>|g' "$raw" > "$actual"
 
@@ -3328,13 +3355,18 @@ EOF
 # must be the same bytes as the Queen's own render: one file, two invocation shapes.
 @test "contract: the Queen collapses a worktree under its repository, and --overview from the worktree is the same page" {
     _link_setup_grid_with_worktree
-    _assert_link_grid_golden link-grid-queen-worktrees "${BATS_TEST_TMPDIR}/ws" link
-    _assert_link_grid_golden link-grid-queen-worktrees "${BATS_TEST_TMPDIR}/ws/platform-feat" link --overview
+    # The unbudgeted page keeps the pictures under golden (`--full`); the page a reader gets by default is the compact
+    # one (doorways S2), pinned by its own golden. Both shapes of invocation must still be the same bytes.
+    _assert_link_grid_golden link-grid-queen-worktrees "${BATS_TEST_TMPDIR}/ws" link --full
+    _assert_link_grid_golden link-grid-queen-worktrees "${BATS_TEST_TMPDIR}/ws/platform-feat" link --overview --full
+    _assert_link_grid_golden link-grid-queen-worktrees-compact "${BATS_TEST_TMPDIR}/ws" link
+    _assert_link_grid_golden link-grid-queen-worktrees-compact "${BATS_TEST_TMPDIR}/ws/platform-feat" link --overview
 }
 
 @test "contract: link renders the orchestrator context byte-identically to its golden" {
     _link_setup_grid
-    _assert_link_grid_golden link-grid-orchestrator "${BATS_TEST_TMPDIR}/ws" link
+    _assert_link_grid_golden link-grid-orchestrator "${BATS_TEST_TMPDIR}/ws" link --full
+    _assert_link_grid_golden link-grid-orchestrator-compact "${BATS_TEST_TMPDIR}/ws" link
 }
 
 # B4. THE INVARIANT IS AGAINST THE CONSTANT, NEVER AGAINST THE OTHER GOLDEN. Comparing the two
@@ -3385,7 +3417,8 @@ _link_spine_matches() {
 
     # ...and the Queen's page has no card, while the poisoned title really is on it (otherwise the zero below
     # would prove nothing about the Queen).
-    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/orch.txt" link
+    # --full: the compact page counts STACKS, so the PR title only appears on the unbudgeted page (doorways S2).
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/orch.txt" link --full
     run grep -c 'Status: normalise the rollout report' "${BATS_TEST_TMPDIR}/orch.txt"
     [ "$output" -ge 1 ]
     run bash -c "grep -c '^  .Status:' '${BATS_TEST_TMPDIR}/orch.txt' || true"
@@ -3534,6 +3567,31 @@ _link_spine_matches() {
         run bash -c "grep -c '<TESTS>/fixtures/link/' '${LINK_GOLDEN_DIR}/${g}.golden' || true"
         [ "$output" = "$expected" ] || { echo "$g carries $output <TESTS> placeholders, wanted $expected" >&2; false; }
     done
+
+    # The compact goldens read their seams from a scratch directory of fixed length (`_link_golden_alias`), so they
+    # name no checkout path at all: no `<TESTS>`, and the fixtures show as `<TMP>/...`.
+    for g in link-grid-orchestrator-compact link-grid-queen-worktrees-compact; do
+        [ -f "${LINK_GOLDEN_DIR}/${g}.golden" ]
+        run bash -c "grep -c '/Users/\\|/home/\\|/private/tmp\\|/tmp/bg\\.\\|<TESTS>' '${LINK_GOLDEN_DIR}/${g}.golden' || true"
+        [ "$output" = "0" ] || { echo "$g leaks a path" >&2; false; }
+    done
+}
+
+# Doorways S2 (AC2): the compact Queen goldens ARE the one-screen page, so the screen contract is asserted on the
+# files themselves: at most 100 visible columns on every line and at most 30 lines outside `▸ REPOSITORIES`. The
+# pytest contract (borg_core/link/test_screen_contract.py) covers 1 and 40 stacks; this is the end-to-end witness
+# that the page the CLI prints, not only the renderer, holds the numbers. Escapes are stripped before measuring
+# (SGR and OSC-8 are zero-width), exactly as `picture.visible_len` does.
+@test "contract: the compact Queen goldens fit one screen" {
+    local g plain widest outside
+    for g in link-overview link-overview-all link-grid-orchestrator-compact link-grid-queen-worktrees-compact; do
+        plain="${BATS_TEST_TMPDIR}/${g}.plain"
+        perl -pe 's/\e\[[0-9;]*m//g; s/\e\]8;;[^\e]*\e\\//g' "${LINK_GOLDEN_DIR}/${g}.golden" > "$plain"
+        widest=$(perl -CSD -ne 'chomp; print length($_), "\n"' "$plain" | sort -n | tail -1)
+        [ "$widest" -le 100 ] || { echo "$g has a ${widest}-column line" >&2; false; }
+        outside=$(awk '/^▸ /{inside = ($0 ~ /^▸ REPOSITORIES/)} !inside{n++} END{print n}' "$plain")
+        [ "$outside" -le 30 ] || { echo "$g has ${outside} lines outside REPOSITORIES" >&2; false; }
+    done
 }
 
 # B14. Node ids are a JUMP TARGET: each appears exactly twice on the page — once in a picture cell,
@@ -3652,7 +3710,7 @@ _link_picture_budget() {
     _link_grid_seams
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/width.json" link --json
-    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/width.txt" link
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/width.txt" link --full
 
     local measured published
     measured=$(_link_widest_picture_row "${BATS_TEST_TMPDIR}/width.txt")
@@ -3707,7 +3765,7 @@ _link_picture_budget() {
     # page no longer prints it (2026-10-13). The Queen selects both manifests, so the count is every ref across
     # them that declared no state of its own (12 of the 13; `acme/warehouse#75` declares `merged`), not
     # `platform`'s seven.
-    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local --full
     run grep -c 'platform#400' "${BATS_TEST_TMPDIR}/local.txt"
     [ "$output" != "0" ]
     run bash -c "grep -ci 'unknown' '${BATS_TEST_TMPDIR}/local.txt' || true"
@@ -3726,7 +3784,7 @@ _link_picture_budget() {
     _link_setup_grid
     _link_grid_seams
 
-    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local --full
     run grep -c 'carry a word that is not a PR state' "${BATS_TEST_TMPDIR}/local.txt"
     [ "$output" = "1" ]
     run grep -c '"review" x1' "${BATS_TEST_TMPDIR}/local.txt"
@@ -4510,7 +4568,7 @@ _repo_norm() {
     run jq -r '.grid.warnings[]' <<<"$output"
     [[ "$output" == *"$BATS_TEST_TMPDIR/proj"* ]] || false
     [[ "$output" == *"borg stack migrate"* ]] || false
-    run zsh -c "'$BORG' link --local --overview"
+    run zsh -c "'$BORG' link --local --overview --full"
     [ "$status" -eq 0 ]
     [[ "$output" == *"STACKS"* ]] || false
     [[ "$output" == *"borg stack migrate"* ]] || false

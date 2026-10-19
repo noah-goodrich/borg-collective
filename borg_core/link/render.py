@@ -85,6 +85,7 @@ so it does not surprise anyone later.
 from __future__ import annotations
 
 import re
+from functools import partial
 from typing import Callable
 
 from borg_core.link import core, grid, picture, worktree
@@ -137,6 +138,121 @@ _JQ_ABSENT_STATUS = "unknown"
 # its `{YELLOW}▸{NC}`. Both sentences are otherwise verbatim; every assertion on them anywhere in
 # this tree is a substring test, which is why that change is free.
 SECTION_MARK = "▸ "
+
+# ── the screen contract (doorways S2, AC2): ONE SCREEN, DEFINED ONCE ──────────────────────────────────────────
+#
+# These are the numbers and the words the Queen's page is held to, and `test_screen_contract.py` reads every one
+# of them from HERE: the tests assert the page against this module, so a number changed in one place cannot be
+# changed to match a test that restates it. (The two limits are ALSO asserted as the literals the directive
+# approved, 30 and 100, so a quiet edit of the constants alone cannot go green.)
+#
+# `PAGE_LINES` counts every line of the compact Queen page OUTSIDE `▸ REPOSITORIES` -- blank separators included,
+# because a blank line occupies a row of the screen as surely as text does. REPOSITORIES is excluded because every
+# registered repository stays on the board (idle collapse, L4, was rejected), so it is the one section whose
+# length is the registry's and not the page's. `PAGE_COLUMNS` bounds EVERY line, board rows included, in VISIBLE
+# columns (`picture.visible_len`, never `len`: the rows carry SGR and OSC-8 bytes).
+PAGE_LINES = 30
+PAGE_COLUMNS = 100
+
+# The command that prints the Queen's page with no budget: every stack drawn, every directive listed, every
+# signal and waiting row. `--all` was checked and does not mean this: it only un-hides archived repositories.
+FULL_FLAG = "--full"
+EXPAND_COMMAND = f"borg link --overview {FULL_FLAG}"
+
+# The glyphs the page uses and the words that name them, in legend order. The five state glyphs are the
+# ratified set from `picture.py` (merged, ready, open, draft, closed); the rest are the page's own marks.
+GLYPH_WAITING = "▶"
+GLYPH_PAUSED = "⏸"
+STATE_GLYPHS: tuple[tuple[str, str], ...] = (
+    (picture.GLYPH_MERGED, "merged"),
+    (picture.GLYPH_READY, "ready"),
+    (picture.GLYPH_OPEN, "open"),
+    (picture.GLYPH_DRAFT, "draft"),
+    (picture.GLYPH_CLOSED, "closed"),
+)
+GLYPH_LEGEND: tuple[tuple[str, str], ...] = (
+    *STATE_GLYPHS,
+    (GLYPH_WAITING, "waits on you"),
+    ("└", "worktree"),
+    (GLYPH_PAUSED, "paused"),
+)
+
+# THE CLOSED SET OF STATUS WORDS: every word the page uses to say what state a thing is in. Three families, all here
+# and nowhere else. The five that sit beside a state glyph are read off `STATE_GLYPHS`, so the legend and this set
+# cannot name different words. The board's session statuses are `active`, `waiting`, `idle`, `archived` and the
+# registry fallback (`_JQ_ABSENT_STATUS`). The destination states the board's `· <state>` suffix prints are the
+# compass's (`_COMPASS_STATES`' words, then `off leg`, and the parked statuses `frozen`, `proposed`, `done`, `killed`
+# from the map's own `STATUSES`). The legend prints the glyph words, the contract test reads the whole set, and a status
+# word the page prints that is in none of these is a vocabulary leak.
+STATUS_WORDS: tuple[str, ...] = (
+    *(word for _, word in STATE_GLYPHS),
+    "active",
+    "waiting",
+    "idle",
+    "archived",
+    _JQ_ABSENT_STATUS,
+    "on track",
+    "at risk",
+    "late",
+    "undated",
+    "off leg",
+    "frozen",
+    "proposed",
+    "done",
+    "killed",
+)
+
+# The options `/borg-next` offers (skills/borg-next/SKILL.md: "up to 4 options"). Board and chooser read the same
+# rows, so WAITING ON YOU shows as many as the chooser offers; a contract test pins this against the skill text.
+CHOOSER_OPTIONS = 4
+
+# The most WAITING ON YOU rows (decisions and due parked thoughts together) the compact page prints.
+_WAITING_CAP = CHOOSER_OPTIONS
+# The most SIGNALS lines (capacity, warnings, cycles, the width line) the compact page prints before the ladder's gap.
+_SIGNALS_CAP = 1
+# The widest repository name the compact board prints. A row's head is 50 columns beside the name, and the
+# destination state (`· at risk`) follows it, so a name of 28 leaves 22 columns for the state and a summary.
+_NAME_CAP = 28
+
+_ESCAPES = re.compile(r"\033\[[0-9;]*m|\033\]8;;[^\033]*\033\\")
+_OSC8_CLOSE = "\033]8;;\033\\"
+
+
+def _fit_text(text: str, limit: int = PAGE_COLUMNS) -> str:
+    """`_fit_line` over every line of `text`. A section builder may hand back one string holding several lines (a
+    board row with its cortex continuation does), so the page is cut by line and never by list entry."""
+    return "".join(_fit_line(line, limit) for line in re.findall(r"[^\n]*\n|[^\n]+", text))
+
+
+def _fit_line(line: str, limit: int = PAGE_COLUMNS) -> str:
+    """`line` (one line, newline kept) cut to at most `limit` VISIBLE columns, ending `…` when it was cut.
+
+    ESCAPES ARE ZERO-WIDTH AND ARE NEVER CUT THROUGH: the walk copies every SGR and OSC-8 sequence whole and
+    counts only the text between them. A cut line ends with a reset, and with an OSC-8 close ONLY when a link was open
+    at the cut, so a colour or a link cannot bleed onto the next line and a line with no link gains no escape (the
+    NO_COLOR page is the coloured page minus its SGR, and an extra OSC-8 on a cut line would break that). A line
+    already within `limit` comes back unchanged.
+    """
+    body, newline, _ = line.partition("\n")
+    if picture.visible_len(body) <= limit:
+        return line
+    out: list[str] = []
+    shown = 0
+    link_open = False
+    for piece in re.split(f"({_ESCAPES.pattern})", body):
+        if not piece:
+            continue
+        if _ESCAPES.fullmatch(piece):
+            out.append(piece)
+            if piece.startswith("\033]8;;"):
+                link_open = piece != _OSC8_CLOSE
+            continue
+        take = piece[: max(limit - 1 - shown, 0)]
+        out.append(take)
+        shown += len(take)
+        if len(take) < len(piece):
+            break
+    return "".join(out).rstrip() + f"…{NC}{_OSC8_CLOSE if link_open else ''}{newline}"
 
 
 # `summary` ARRIVES ALREADY FLAT. `core.flatten_summary` is applied once at document assembly
@@ -426,24 +542,6 @@ def _overview_row(
     return line
 
 
-def _cube_lines() -> list[str]:
-    """The cube art, verbatim (borg.zsh:319-328). Ends with a bare newline, which is the blank line
-    separating the header section from `▸ IN FOCUS` -- see `_section`, which supplies that separator
-    for every OTHER section and therefore must not supply a second one here."""
-    return [
-        "\n",
-        f"  {DIM}_______________{NC}\n",
-        f"  {DIM}/|             /|{NC}      {BOLD}THE BORG COLLECTIVE{NC}\n",
-        f"  {DIM}/ |            / |{NC}      {DIM}resistance is futile{NC}\n",
-        f"  {DIM}  |___________|  |{NC}\n",
-        f"  {DIM}  |  |        |  |{NC}\n",
-        f"  {DIM}  |  |________|__|{NC}\n",
-        f"  {DIM}  | /         | /{NC}\n",
-        f"  {DIM}  |/          |/{NC}\n",
-        "\n",
-    ]
-
-
 def _ship_date_suffix(item: dict) -> str:
     """ " (date)" when a ship date is present, else "" -- omit the parens entirely rather than
     render an empty "()". A missing/empty ship date is TSV_EMPTY_SENTINEL-shaped upstream (see
@@ -494,8 +592,8 @@ def _plural(count: int, singular: str, plural: str) -> str:
 def _section(title: str, note: str, lines: list[str]) -> list[str]:
     """One section: its `▸` header (plus an optional dim note), its body, and ONE trailing blank.
 
-    The empty-titled first entry is the page header -- the cube, which gets no `▸` line and supplies
-    its own trailing blank through `_cube_lines`. That is the only special case, and it is keyed on
+    The empty-titled first entry is the page header -- the masthead, which gets no `▸` line and supplies
+    its own trailing blank. That is the only special case, and it is keyed on
     the SECTIONS constant rather than on anything in the document, so `document()` below stays free
     of any branch on scope, mode or emptiness.
     """
@@ -507,18 +605,28 @@ def _section(title: str, note: str, lines: list[str]) -> list[str]:
     return [head + "\n", *lines, "\n"]
 
 
-def _header_section(doc: dict) -> tuple[str, list[str]]:
-    """The cube, and the discovery tip above it when the registry holds at most one repository.
+def _legend_line() -> str:
+    """The one-line legend: every glyph the page uses, each followed by the word that names it.
 
-    The tip is gated on the UNFILTERED `total_projects`, NOT on `len(order)` -- one visible repository
-    plus one archived one is two, and must not print it (borg.zsh:286-290). It is also NOT mutually
-    exclusive with the board's all-archived placeholder: a lone archived repository prints both.
+    Read off `GLYPH_LEGEND`, the same tuple the contract test reads, so the line cannot name a glyph or a word
+    the closed set does not hold. It is one line by construction and stays inside `PAGE_COLUMNS`.
     """
-    lines: list[str] = []
-    if doc.get("total_projects", 0) <= 1:
-        lines.append(f"  {DIM}Tip: run 'borg scan' to discover repositories from session history{NC}\n")
-    lines.extend(_cube_lines())
-    return "", lines
+    return "  " + DIM + "  ".join(f"{glyph} {word}" for glyph, word in GLYPH_LEGEND) + NC + "\n"
+
+
+def _header_section(_doc: dict) -> tuple[str, list[str]]:
+    """The Queen's masthead: the name, then the legend, then the blank that opens `▸ IN FOCUS`.
+
+    THE CUBE IS GONE (doorways S2). Eight lines of art plus its two blanks were a third of the thirty lines the
+    page may spend outside REPOSITORIES, and the page has to carry a legend and a sentence for every section.
+    The wordmark stays, which is what `THE BORG COLLECTIVE` assertions elsewhere look for. The discovery tip
+    moved to the board (`_board_section`), the one section whose length is the registry's.
+    """
+    return "", [
+        f"  {BOLD}THE BORG COLLECTIVE{NC}  {DIM}resistance is futile{NC}\n",
+        _legend_line(),
+        "\n",
+    ]
 
 
 # ── the compass: the owner's map, rendered from the `compass` block the document carries ────────────
@@ -728,7 +836,9 @@ def _is_repository_scope(doc: dict) -> bool:
     return (doc.get("scope") or {}).get("kind") == "repository"
 
 
-def _board_entries(groups: list[tuple[str, list[str]]], repositories: dict) -> list[tuple[str, dict]]:
+def _board_entries(
+    groups: list[tuple[str, list[str]]], repositories: dict, name_cap: int = 0
+) -> list[tuple[str, dict]]:
     """The board's `(name, entry)` rows in print order: each repository, then its worktrees beneath it.
 
     A worktree's row prints under "└ <name>", and that prefix is part of the DISPLAYED name, so it is applied
@@ -737,15 +847,30 @@ def _board_entries(groups: list[tuple[str, list[str]]], repositories: dict) -> l
     """
     entries: list[tuple[str, dict]] = []
     for head, children in groups:
-        entries.append((head, repositories[head]))
+        entries.append((head, _capped(head, repositories[head], name_cap)))
         for child in children:
             shown = {**repositories[child], "display_name": _WORKTREE_MARK + _board_display(child, repositories[child])}
-            entries.append((child, shown))
+            entries.append((child, _capped(child, shown, name_cap)))
     return entries
 
 
+def _capped(name: str, entry: dict, cap: int) -> dict:
+    """`entry` with its displayed name cut to `cap` columns and ending `…` when it was longer; `cap` 0 means never.
+
+    ONLY THE COMPACT PAGE CUTS A NAME (`_NAME_CAP`), and it is the one place the board gives up the rule that a
+    name is an argument (`_COL_REPOSITORY`): a name wide enough that the row's head alone passes `PAGE_COLUMNS`
+    would push the destination state off the screen, and a state that is cut off is a worse loss than a name that is
+    shortened. `--full` prints the name whole.
+    """
+    shown = _board_display(name, entry)
+    return entry if not cap or len(shown) <= cap else {**entry, "display_name": shown[: cap - 1] + "…"}
+
+
+_TIP = f"  {DIM}Tip: run 'borg scan' to discover repositories from session history{NC}\n"
+
+
 # JUSTIFICATION: transcribes `overview()` statement by statement for one golden-diffable section.
-def _board_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-many-locals
+def _board_section(doc: dict, compact: bool = False) -> tuple[str, list[str]]:  # pylint: disable=too-many-locals
     """REPOSITORIES: every registered repository, on the QUEEN'S page only. Transcribed from `overview()`.
 
     IT WAS SCOPE-INVARIANT UNTIL 2026-10-13 and no longer is: the board is the cross-repository overview, and
@@ -759,8 +884,19 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     one repository (`worktree.repository_groups`): the head row is the repository, its worktrees follow
     indented with `└`, and the note counts repositories, naming worktrees separately, instead of counting each
     checkout as a repository of its own. A registry with no shared `repo` renders exactly as it always did.
+
+    `compact` (the Queen's page) differs in one thing: a displayed name past `_NAME_CAP` columns is cut with `…`
+    (`_capped`), so a row's head and its destination state always fit `PAGE_COLUMNS`. Every repository stays on the
+    board either way (idle collapse, L4, was rejected); the page-wide width fit is `document`'s.
     """
     total_projects = doc.get("total_projects", 0)
+    # The discovery tip rides at the END of this section, where the page's line budget does not count it (it used
+    # to head the page, in the masthead). Gated on the UNFILTERED `total_projects`, NOT on `len(order)` -- one
+    # visible repository plus one archived one is two, and must not print it (borg.zsh:286-290). It is NOT
+    # mutually exclusive with the all-archived placeholder: a lone archived repository prints both. An EMPTY registry
+    # prints neither the tip nor a second line: its placeholder already says `Run: borg scan`, and the section keeps
+    # its rule of exactly one placeholder.
+    tip = [_TIP] if total_projects == 1 else []
     order = doc.get("order") or []
     repositories = doc.get("projects") or {}
 
@@ -771,7 +907,7 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     if total_projects == 0:
         return "", [_placeholder("No repositories registered. Run: borg scan")]
     if not order:
-        return "", [_placeholder("No repositories to show. Run: borg link --all")]
+        return "", [_placeholder("No repositories to show. Run: borg link --all"), *tip]
 
     # "Need attention" is the WAITING count, which is not `capacity.active`: capacity counts every
     # session holding a slot (active AND waiting) against BORG_MAX_ACTIVE and belongs in SIGNALS,
@@ -785,7 +921,7 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
         counted += f" · {_plural(worktrees, 'worktree', 'worktrees')}"
     note = f"the collective · {counted} · {waiting} need attention"
 
-    entries = _board_entries(groups, repositories)
+    entries = _board_entries(groups, repositories, _NAME_CAP if compact else 0)
     displayed = dict(entries)
 
     # MEASURED ONCE AND HANDED TO BOTH the header and every row, which is the only arrangement in
@@ -823,7 +959,7 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
         if suffixes[name]:
             row = _overview_row(name, entry, countdowns, marks[name], width, routed.get(name), suffixes[name], budget)
         lines.append(row)
-    return note, lines
+    return note, [*lines, *tip]
 
 
 def _cortex_countdowns(doc: dict) -> dict[str, str]:
@@ -924,9 +1060,22 @@ def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str,
     return out
 
 
-def _grid_section(doc: dict) -> tuple[str, list[str]]:
+def _expand_line(what: str) -> str:
+    """The one body line of a section that renders as a count: what the full form holds, and the command that prints it.
+
+    THE SAME COMMAND FOR EVERY COUNTED SECTION (`EXPAND_COMMAND`), because the flag is the page's, not a section's.
+    """
+    return f"  {DIM}— {what}:{NC} {CYAN}{EXPAND_COMMAND}{NC}\n"
+
+
+def _grid_section(doc: dict, compact: bool = False) -> tuple[str, list[str]]:
     """STACKS: the declared cross-repository topology, one picture and one detail block set per
     chain, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
+
+    `compact` (the Queen's page, doorways S2) renders the same header note and then ONE line, the command that
+    draws every stack -- a count and the way to expand it, because 20 stacks drew 650 lines. The note carries the
+    counts, including `unresolved`, so the three-state honesty of the full section is not lost: an empty or
+    refused grid still prints its own diagnosis, and only a grid with stacks to draw collapses.
 
     The note is UNCONDITIONAL, even when no manifest was selected: `0 stacks · 0 refs · 0
     unresolved · swept back to <mark>` is the honest reading of a repository with nothing declared,
@@ -959,6 +1108,8 @@ def _grid_section(doc: dict) -> tuple[str, list[str]]:
     )
     if not manifests:
         return note, [_placeholder(_grid_placeholder(grid_block))]
+    if compact:
+        return note, [_expand_line("every stack, drawn")]
 
     columns_by_manifest = [picture.assign_columns(manifest) for manifest in manifests]
     ids = picture.node_ids(manifests, columns_by_manifest)
@@ -1147,8 +1298,12 @@ def _next_tally(manifests: list[dict]) -> tuple[dict[str, list[str]], list[str],
     return grouped, unsure_kinds, ready_total, unlooked
 
 
-def _next_section(doc: dict) -> tuple[str, list[str]]:
+def _next_section(doc: dict, compact: bool = False) -> tuple[str, list[str]]:
     """NEXT: what can actually be picked up right now, split into yours / mine / unsure.
+
+    `compact` (the Queen's page, doorways S2) keeps the note and every non-populated sentence, and replaces the
+    ROWS with one line of per-owner counts and the chooser that lists them: the rows come from the stacks, so they
+    grow with the stacks, and `WAITING ON YOU` already prints the ones that are the reader's.
 
     THREE-STATE, NOT LIST-OR-EMPTY. `grid.ready_refs` returns `unlooked` when nothing on the page was
     resolved, and this renders that as its own sentence rather than as "nothing is ready". A
@@ -1182,6 +1337,9 @@ def _next_section(doc: dict) -> tuple[str, list[str]]:
     if not ready_total:
         return note, [_placeholder("nothing is ready right now.")]
 
+    if compact:
+        owners = " · ".join(f"{group} {len(grouped[group])}" for group in _ROUTE_GROUPS if grouped[group])
+        return f"{note} · {owners} · {CYAN}borg next{NC}{DIM}", []
     lines: list[str] = []
     for group in (_GROUP_YOURS, _GROUP_MINE, _GROUP_UNSURE):
         rows = grouped[group]
@@ -1301,12 +1459,14 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
 
 def _waiting_line(item: dict, ref_w: int, repo_w: int) -> str:
     """One waiting item on one line: marker, ref, repository, the sentence, what it unblocks."""
-    text = item["text"] if len(item["text"]) <= _WAITING_TEXT else item["text"][: _WAITING_TEXT - 1] + "…"
-    text = text.rstrip()
     pad_ref = " " * (ref_w - len(item["label"]))
     shown_ref = picture.link_ref(item["ref"], item["label"]) if item["linkable"] else item["label"]
     unblocks = f"  {DIM}unblocks {item['unblocks']}{NC}" if item["unblocks"] else ""
-    return f"  {YELLOW}▶{NC} {shown_ref}{pad_ref}  {item['repository']:<{repo_w}}  {text}{unblocks}\n"
+    head = f"  {YELLOW}▶{NC} {shown_ref}{pad_ref}  {item['repository']:<{repo_w}}  "
+    # THE TITLE YIELDS, THE REF AND `unblocks` NEVER DO: the sentence is cut to what the page width leaves after them.
+    room = min(_WAITING_TEXT, PAGE_COLUMNS - picture.visible_len(head) - picture.visible_len(unblocks))
+    text = item["text"] if len(item["text"]) <= room else item["text"][: max(room, 1) - 1] + "…"
+    return f"{head}{text.rstrip()}{unblocks}\n"
 
 
 _GH_REF = re.compile(r"^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([0-9]+)$")
@@ -1360,8 +1520,25 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
                 return f"  {BOLD}next{NC}  {looked}  {CYAN}borg next{NC}\n"
             return f"  {BOLD}next{NC}  {DIM}nothing is ready{NC}  {CYAN}borg next{NC}\n"
         ref, repository = mine
+    command = _next_action_command(ref)
+    # THE COMMAND IS THE LINE: it is never cut. A GitHub ref shows as `#N` (the command and the repository name the
+    # rest); what still does not fit is cut in the MIDDLE with `…`, the repository name first and then the label, so
+    # both ends of each stay readable.
+    # JUSTIFICATION: str.partition on a plain string; the Demeter rule reads it as a chain on a stranger.
+    label = f"#{ref.partition('#')[2]}" if _GH_REF.match(ref) else ref  # pylint: disable=clean-arch-demeter
+    room = PAGE_COLUMNS - len("  next  ") - 2 - len(command)
+    repository = _middle(repository, max(room - len(label) - 3, 4)) if repository else ""
+    label = _middle(label, room - (len(repository) + 3 if repository else 0))
     where = f" {DIM}({repository}){NC}" if repository else ""
-    return f"  {BOLD}next{NC}  {ref}{where}  {CYAN}{_next_action_command(ref)}{NC}\n"
+    return f"  {BOLD}next{NC}  {label}{where}  {CYAN}{command}{NC}\n"
+
+
+def _middle(text: str, room: int) -> str:
+    """`text` cut to `room` characters with `…` in the middle when it is longer (room is at least 2)."""
+    if len(text) <= room:
+        return text
+    keep = max(room, 2) - 1
+    return text[: keep - keep // 2] + "…" + text[len(text) - keep // 2 :]
 
 
 def _repository_you_count(doc: dict) -> tuple[str, int]:
@@ -1388,7 +1565,33 @@ def _repository_you_count(doc: dict) -> tuple[str, int]:
     return repository, count
 
 
-def _waiting_section(doc: dict) -> tuple[str, list[str]]:
+def _waiting_tail(doc: dict, leftover: int, capped: bool) -> list[str]:
+    """What follows the rows: the chooser's hidden counts and a degraded block, one line each, or ONE line when capped.
+
+    Capped, `+N more` (rows the cap left off) and the hidden counts share a single line that ends in the chooser, and
+    the degraded sentence rides at the END of that line: it is the one part of the line with no fixed width, so it is
+    the part the page-width cut may take, and the command is never it.
+    """
+    waiting = doc.get("waiting") or {}
+    # The hidden counts (`+N agent tasks`, ...) describe repository-level rows, none of which a directory's
+    # page shows, so they are not printed there either.
+    hidden = [] if _is_repository_scope(doc) else waiting.get("hidden_lines") or []
+    degraded = waiting.get("degraded")
+    if not capped:
+        tail = [f"  {DIM}{line}{NC}\n" for line in hidden]
+        if degraded:
+            tail.append(_placeholder(f"rows degraded: {degraded}"))
+        return tail
+    parts = [f"+{leftover} more"] if leftover else []
+    parts.extend(str(line).strip() for line in hidden)
+    if not parts and not degraded:
+        return []
+    counted = f"{DIM}{' · '.join(parts)}{NC}  " if parts else ""
+    reason = f"  {DIM}rows degraded: {degraded}{NC}" if degraded else ""
+    return [f"  {counted}{CYAN}borg next{NC}{reason}\n"]
+
+
+def _waiting_section(doc: dict, cap: int | None = None) -> tuple[str, list[str]]:
     """WAITING ON YOU: what only you can move, last on the page where the eye lands.
 
     ALWAYS PRESENT, per the board directive's AC4: empty prints ONE line, `nothing waits on you`, not
@@ -1397,39 +1600,50 @@ def _waiting_section(doc: dict) -> tuple[str, list[str]]:
     waits, and saying so would be false, so it says nobody looked. The chooser's hidden-count lines
     (`+N more decisions`, `+N agent tasks`, `+N stale drafts`) follow the items verbatim, and the
     section's final line is the single recommended next action (`_next_action_line`).
+
+    `cap` (the Queen's page, doorways S2) is the most rows printed, decisions first and due parked thoughts after.
+    Everything the page does not print is COUNTED on ONE line before the next action (`_waiting_tail`), so a capped
+    section is longer than its cap by that line and the next action, never by the length of the queue. `None` (the
+    directory's page, and `--full`) prints it all, byte for byte as before.
     """
     items, unlooked = _waiting(doc)
-    waiting = doc.get("waiting") or {}
-    # The hidden counts (`+N agent tasks`, ...) describe repository-level rows, none of which a directory's
-    # page shows, so they are not printed there either.
-    hidden = [] if _is_repository_scope(doc) else waiting.get("hidden_lines") or []
-    tail = [f"  {DIM}{line}{NC}\n" for line in hidden]
-    if waiting.get("degraded"):
-        tail.append(_placeholder(f"rows degraded: {waiting['degraded']}"))
     action = _next_action_line(doc, items, unlooked)
     # Parked thoughts whose look-again date has come ride AFTER the real items and are not offered by the next-action
     # line: a parked thought is a reminder to look, not a decision with a command that answers it.
     parking, more_parked = _parking_due(doc)
-    parked = [_parking_line(item) for item in parking]
-    if more_parked:
-        parked.append(f"  {DIM}+{more_parked} more parked items due{NC}\n")
+    total = len(items) + len(parking) + more_parked
+    shown = total if cap is None else min(cap, len(items) + len(parking))
+    # A due parked thought keeps at least ONE of the capped slots (and any the decisions leave empty): seven sessions
+    # waiting must not starve the reminder to look.
+    parked_n = len(parking) if cap is None else min(len(parking), max(1, shown - len(items)))
+    tail = _waiting_tail(doc, total - shown, cap is not None)
     if not items and not parking:
-        if unlooked:
-            return "nobody looked", [
-                _placeholder("no state on this page was resolved; run without --local."),
-                *tail,
-                action,
-            ]
-        repository, count = _repository_you_count(doc)
-        if count:
-            return "", [_placeholder(f"nothing here waits on you · {count} for {repository}: borg next"), *tail, action]
-        return "", [_placeholder("nothing waits on you"), *tail, action]
-    note = _plural(len(items) + len(parking) + more_parked, "item", "items")
+        note, placeholder = _nothing_line(doc, unlooked)
+        return note, [placeholder, *tail, action]
+    note = _plural(total, "item", "items")
     if unlooked:
         note += " — and some refs nobody looked up"
-    ref_w = max((len(item["label"]) for item in items), default=0)
-    repo_w = max((len(item["repository"]) for item in items), default=0)
-    return note, [*(_waiting_line(item, ref_w, repo_w) for item in items), *parked, *tail, action]
+    rows = _waiting_rows(items[: shown - parked_n], parking[:parked_n])
+    if cap is None and more_parked:
+        rows.append(f"  {DIM}+{more_parked} more parked items due{NC}\n")
+    return note, [*rows, *tail, action]
+
+
+def _waiting_rows(kept: list[dict], parked: list[dict]) -> list[str]:
+    """WAITING ON YOU's rows: the decisions in `kept`, aligned to each other, then the due parked thoughts."""
+    ref_w = max((len(item["label"]) for item in kept), default=0)
+    repo_w = max((len(item["repository"]) for item in kept), default=0)
+    return [*(_waiting_line(item, ref_w, repo_w) for item in kept), *(_parking_line(item) for item in parked)]
+
+
+def _nothing_line(doc: dict, unlooked: bool) -> tuple[str, str]:
+    """`(note, placeholder)` of an empty WAITING ON YOU: three-state, never `nothing` when nobody looked."""
+    if unlooked:
+        return "nobody looked", _placeholder("no state on this page was resolved; run without --local.")
+    repository, count = _repository_you_count(doc)
+    if count:
+        return "", _placeholder(f"nothing here waits on you · {count} for {repository}: borg next")
+    return "", _placeholder("nothing waits on you")
 
 
 def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:
@@ -1444,12 +1658,19 @@ def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:
     return doc.get(key) or [], True
 
 
-def _queued_section(doc: dict) -> tuple[str, list[str]]:
-    """QUEUED: filed-but-not-started directives, at the document's breadth."""
+def _queued_section(doc: dict, compact: bool = False) -> tuple[str, list[str]]:
+    """QUEUED: filed-but-not-started directives, at the document's breadth.
+
+    `compact` (the Queen's page) is the count in the note and the command that lists them: 138 directives drew 138
+    lines. Nothing queued still prints its own placeholder, so an empty queue cannot read as a collapsed one.
+    """
     directives, show_repository = _scoped_rows(doc, "directives")
     if not directives:
         return "", [_placeholder("nothing queued. Run /borg-plan to file one.")]
-    return _plural(len(directives), "directive", "directives"), _bullet_lines(directives, show_repository)
+    note = _plural(len(directives), "directive", "directives")
+    if compact:
+        return note, [_expand_line("every directive, listed")]
+    return note, _bullet_lines(directives, show_repository)
 
 
 def _shipped_section(doc: dict) -> tuple[str, list[str]]:
@@ -1534,8 +1755,14 @@ def _width_line(grid_block: dict) -> list[str]:
     ]
 
 
-def _signals_section(doc: dict) -> tuple[str, list[str]]:
+def _signals_section(doc: dict, compact: bool = False) -> tuple[str, list[str]]:
     """SIGNALS: capacity, then every warning the document carried, then the ladder's own gap.
+
+    `compact` (the Queen's page) prints the first `_SIGNALS_CAP` signals and the ladder's gap; past the cap the note
+    counts the signals and names the command that prints them all. A signal wider than the page is cut at
+    `PAGE_COLUMNS` with `…` and is whole under `--full`. The gap line stays last and always present: it is the section's
+    last word on a page nobody swept (`test_the_last_word_on_a_local_page_is_that_nobody_looked`), so no count
+    may displace it.
 
     WARNINGS ARE NEVER SWALLOWED. build_grid's docstring makes the argument for carrying them; this
     is where they surface. A document with a discovery, selection, sweep or fetch warning that
@@ -1551,29 +1778,47 @@ def _signals_section(doc: dict) -> tuple[str, list[str]]:
     # BEFORE the resolution line, deliberately: `_resolution_line` is the section's last word on a
     # `--local` render and `test_the_last_word_on_a_local_page_is_that_nobody_looked` pins that.
     lines.extend(_width_line(grid_block))
-    lines.extend(_resolution_line(grid_block))
+    resolution = _resolution_line(grid_block)
+    if compact and len(lines) > _SIGNALS_CAP:
+        return f"{len(lines)} signals · {EXPAND_COMMAND}", [*lines[:_SIGNALS_CAP], *resolution]
+    lines.extend(resolution)
     if not lines:
         return "", [_placeholder("nothing to report.")]
     return "", lines
 
 
-SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (
-    ("", _header_section),  # the cube; no ▸ line
-    ("IN FOCUS", _focus_section),  # ABOVE the board -- the `Status:` invariant
-    ("REPOSITORIES", _board_section),  # registry-wide in BOTH contexts
-    ("STACKS", _grid_section),
-    ("QUEUED", _queued_section),
-    ("SHIPPED", _shipped_section),
-    # AC4. EIGHT SECTIONS NOW, and the insertion point is deliberate: NEXT reads the same grid STACKS
-    # draws, and sits below SHIPPED so the page reads history-then-future. Placing it here rather
-    # than reserving an always-empty slot in AC2 is what that directive chose, so that the spine test
-    # going red is a reviewable event rather than a diff nobody sees.
-    ("NEXT", _next_section),
-    ("SIGNALS", _signals_section),
-    # LAST ON PURPOSE: link-unification L3 puts the answer in the final lines before the prompt, and
-    # where the board mock and L3 disagree about position, L3 wins. Always present (board AC4).
-    ("WAITING ON YOU", _waiting_section),
-)
+Builder = Callable[[dict], tuple[str, list[str]]]
+
+
+def _queen_sections(*, compact: bool) -> tuple[tuple[str, Builder], ...]:
+    """The Queen's spine, with the budgeted builders (`compact`) or the unbudgeted ones (`--full`).
+
+    ONE LIST WRITTEN ONCE, so the two pages cannot disagree about which sections exist or in what order: they
+    differ only in the five builders that take a budget. The titles are byte-identical on both.
+    """
+    return (
+        ("", _header_section),  # the masthead and the legend; no ▸ line
+        ("IN FOCUS", _focus_section),  # ABOVE the board -- the `Status:` invariant
+        ("REPOSITORIES", partial(_board_section, compact=compact)),  # registry-wide in BOTH contexts
+        ("STACKS", partial(_grid_section, compact=compact)),
+        ("QUEUED", partial(_queued_section, compact=compact)),
+        ("SHIPPED", _shipped_section),
+        # AC4. EIGHT SECTIONS NOW, and the insertion point is deliberate: NEXT reads the same grid STACKS
+        # draws, and sits below SHIPPED so the page reads history-then-future. Placing it here rather
+        # than reserving an always-empty slot in AC2 is what that directive chose, so that the spine test
+        # going red is a reviewable event rather than a diff nobody sees.
+        ("NEXT", partial(_next_section, compact=compact)),
+        ("SIGNALS", partial(_signals_section, compact=compact)),
+        # LAST ON PURPOSE: link-unification L3 puts the answer in the final lines before the prompt, and
+        # where the board mock and L3 disagree about position, L3 wins. Always present (board AC4).
+        ("WAITING ON YOU", partial(_waiting_section, cap=_WAITING_CAP if compact else None)),
+    )
+
+
+# THE QUEEN'S PAGE, held to one screen (doorways S2): `PAGE_LINES` outside REPOSITORIES, `PAGE_COLUMNS` on every line.
+SECTIONS: tuple[tuple[str, Builder], ...] = _queen_sections(compact=True)
+# `borg link --overview --full`: the same sections with no budget, for the reader who asked for everything.
+FULL_SECTIONS: tuple[tuple[str, Builder], ...] = _queen_sections(compact=False)
 
 
 def _queen_pointer_section(_doc: dict) -> tuple[str, list[str]]:
@@ -1590,7 +1835,7 @@ def _queen_pointer_section(_doc: dict) -> tuple[str, list[str]]:
 # THE PAGE OF REPOSITORY SCOPE: strictly one directory (2026-10-13). IN FOCUS carries the scope label, the
 # identity, the live session and the directory's own checkpoints; WAITING ON YOU carries its own session row
 # and the next action. No board, no STACKS, no NEXT stack rows, no QUEUED, no SHIPPED, no SIGNALS, no cube.
-REPOSITORY_SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (
+REPOSITORY_SECTIONS: tuple[tuple[str, Builder], ...] = (
     ("IN FOCUS", _focus_section),  # FIRST -- the `Status:` invariant
     ("", _queen_pointer_section),
     ("WAITING ON YOU", _waiting_section),  # LAST -- L3
@@ -1613,7 +1858,7 @@ def _unregistered_section(_doc: dict) -> tuple[str, list[str]]:
     ]
 
 
-UNREGISTERED_SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (("", _unregistered_section),)
+UNREGISTERED_SECTIONS: tuple[tuple[str, Builder], ...] = (("", _unregistered_section),)
 
 
 def _is_unregistered(doc: dict) -> bool:
@@ -1621,17 +1866,20 @@ def _is_unregistered(doc: dict) -> bool:
     return bool((doc.get("scope") or {}).get("unregistered"))
 
 
-def _sections_for(doc: dict) -> tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...]:
+def _sections_for(doc: dict, full: bool = False) -> tuple[tuple[str, Builder], ...]:
     """The section list for this document's scope: one directory's page, the hint, or the Queen's overview.
 
-    A document with no `scope` (one built before S1) is the Queen's, as it always rendered.
+    A document with no `scope` (one built before S1) is the Queen's, as it always rendered. `full` picks the
+    Queen's unbudgeted list and means nothing to the other two pages, which have no budgeted section.
     """
     if _is_unregistered(doc):
         return UNREGISTERED_SECTIONS
-    return REPOSITORY_SECTIONS if _is_repository_scope(doc) else SECTIONS
+    if _is_repository_scope(doc):
+        return REPOSITORY_SECTIONS
+    return FULL_SECTIONS if full else SECTIONS
 
 
-def document(doc: dict) -> str:
+def document(doc: dict, full: bool = False) -> str:
     """THE ONE HUMAN ENTRY POINT. Prints the section list its scope names and joins; no branch inside a section.
 
     The choice of list is made once, in `_sections_for`. Every branch that used to pick a renderer lives
@@ -1640,5 +1888,16 @@ def document(doc: dict) -> str:
     (the Queen's) or `REPOSITORY_SECTIONS`' (a directory's). A builder that returns nothing still renders
     its header plus one placeholder, so an empty section cannot silently disappear and take the invariant
     with it.
+
+    THE QUEEN'S COMPACT PAGE IS THE ONLY ONE FITTED TO `PAGE_COLUMNS`: each of its lines is cut to that many
+    visible columns (`_fit_line`), because free text the renderer does not control (a summary, a directive title, a
+    warning) must not be able to push the screen wider. `--full` and the directory's page are not fitted: a stack's
+    picture is its own width, and a directory's page is out of this contract.
+
+    THE COMPACT PAGE ENDS ON ITS LAST LINE, NOT ON A BLANK: the section separator after WAITING ON YOU was a row of
+    the screen that held nothing, and link-unification L3 wants the next action to be the last thing the eye lands
+    on. One line is the difference between 51 and 50 on the live registry.
     """
-    return "".join(line for title, build in _sections_for(doc) for line in _section(title, *build(doc)))
+    sections = _sections_for(doc, full)
+    text = "".join(line for title, build in sections for line in _section(title, *build(doc)))
+    return _fit_text(text).rstrip("\n") + "\n" if sections is SECTIONS else text

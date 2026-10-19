@@ -104,6 +104,14 @@ setup() {
     [[ "$output" != *"was removed"* ]] || false
 }
 
+# Doorways S2: the flag that prints the Queen's page with no budget is in the usage line AND explained.
+@test "borg link --help lists --full in the usage line and explains it" {
+    run "$BORG_CMD" link --help
+    [ "$status" -eq 0 ]
+    [[ "${lines[0]}" == *"[--overview] [--full]"* ]] || false
+    [[ "$output" == *"--full prints the Queen's view with no page budget"* ]] || false
+}
+
 @test "drone help exits 0" {
     run "$DRONE_CMD" help
     [ "$status" -eq 0 ]
