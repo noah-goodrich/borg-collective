@@ -1,0 +1,55 @@
+{
+  "desc": "borg 0.9.10: the doorways one-screen board release",
+  "program": "2026-10-19-release-0-9-10",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#436",
+      "why": "a PR stacked on an open PR is not mergeable now"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#438",
+      "why": "the board stops contradicting itself"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#440",
+      "why": "the Queen page fits one screen"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#441",
+      "why": "/borg-link paints the CLI page verbatim"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#442",
+      "why": "borg next --line, statusline, tmux string"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#443",
+      "why": "/borg-next preview cards"
+    },
+    {
+      "lane": "_default",
+      "order": "7",
+      "ref": "noah-goodrich/borg-collective#444",
+      "why": "simplify cleanup and statusline symlink fix"
+    },
+    {
+      "lane": "_default",
+      "order": "8",
+      "ref": "noah-goodrich/borg-collective#446",
+      "status": "open",
+      "why": "VERSION 0.9.10, release notes, then tag"
+    }
+  ]
+}

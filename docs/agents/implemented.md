@@ -2,7 +2,7 @@
 
 Reference moved verbatim from the top-level CLAUDE.md.
 
-## Current State (v2, release v0.9.9)
+## Current State (v2, release v0.9.10)
 
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
@@ -37,6 +37,12 @@ Reference moved verbatim from the top-level CLAUDE.md.
   resolution, checkpoint-vs-source contradiction detection. **`recon` retired as a human verb
   2026-08-26** (bare `borg recon` dies pointing at `borg link`); the engine and its two machine
   flags (`--json`, `--adapters`) survive
+- Doorways one-screen board (v0.9.10): the Queen page (`borg link --overview`) is one screen of about 50 lines with
+  a legend, `--full` restores the long form, and the page no longer contradicts itself; `/borg-link` paints the CLI
+  page verbatim; `borg next --line` is a one-line glance (at most 80 columns); `borg setup --statusline` is the
+  opt-in Claude Code status line (`--statusline=off` removes it); a tmux `status-right` string is in
+  `docs/agents/commands.md`; `/borg-next` shows preview cards (additive `card` field in `--json`). `borg next` no
+  longer marks a PR stacked on an open PR as mergeable now
 - `borg-sync` (lib/borg-sync.zsh): mtime-based file sync helpers shared by the CLI and hooks
 - Auto-memory read instrumentation: `borg-memory-read-log.sh` (PostToolUse/Read) logs every read
   of a Claude Code project-memory file to `$BORG_DIR/memory-hits.log`; `bin/memory-hits-report`
