@@ -59,8 +59,11 @@ def _doc(**overrides) -> dict:
     repositories = base.get("projects")
     if isinstance(repositories, dict):
         base["projects"] = {
-            name: ({**entry, "summary": link_core.flatten_summary(entry["summary"])}
-                   if isinstance(entry, dict) and isinstance(entry.get("summary"), str) else entry)
+            name: (
+                {**entry, "summary": link_core.flatten_summary(entry["summary"])}
+                if isinstance(entry, dict) and isinstance(entry.get("summary"), str)
+                else entry
+            )
             for name, entry in repositories.items()
         }
     return base
@@ -584,11 +587,13 @@ def test_the_last_word_on_a_local_page_is_that_nobody_looked():
 
     MUTATION: move the `_resolution_line` call above the warnings loop."""
     doc = _doc()
-    doc["grid"].update({
-        "declared": 3,
-        "unresolved": 3,
-        "warnings": ['declared: 1 row(s) carry a word that is not a PR state ("review" x1) -- shown unresolved'],
-    })
+    doc["grid"].update(
+        {
+            "declared": 3,
+            "unresolved": 3,
+            "warnings": ['declared: 1 row(s) carry a word that is not a PR state ("review" x1) -- shown unresolved'],
+        }
+    )
     page = plain(render.document(doc))
     # SIGNALS is no longer the last section (WAITING ON YOU lands last), so the last word is read OFF
     # THE SIGNALS SECTION, which is what this test's docstring always claimed.
@@ -1077,7 +1082,8 @@ class TestOverviewSummaryCut:
         row = render._overview_row(  # pylint: disable=protected-access
             "alpha",
             _as_document_carries(
-                {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": "top\nbottom"}),
+                {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": "top\nbottom"}
+            ),
             {},
         )
         assert row.count("\n") == 1
@@ -1114,9 +1120,16 @@ def _as_document_carries(entry: dict) -> dict:
     renderer had to be edited to grow.
     """
     doc = link_core.assemble(
-        generated_at="2026-01-01T00:00:00Z", show_all=False, total_projects=1, capacity={},
-        projects={"alpha": entry}, order=["alpha"], directives=[], assimilated=[],
-        cortex_pending=[], focus=None,
+        generated_at="2026-01-01T00:00:00Z",
+        show_all=False,
+        total_projects=1,
+        capacity={},
+        projects={"alpha": entry},
+        order=["alpha"],
+        directives=[],
+        assimilated=[],
+        cortex_pending=[],
+        focus=None,
     )
     entry = doc["projects"]["alpha"]
     assert isinstance(entry, dict)
@@ -1156,7 +1169,8 @@ def test_board_row_stays_one_line_for_every_surviving_control(ch):
     row = render._overview_row(  # pylint: disable=protected-access
         "alpha",
         _as_document_carries(
-            {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": f"top{ch}bottom"}),
+            {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": f"top{ch}bottom"}
+        ),
         {},
     )
     assert row.count("\n") == 1
@@ -1425,12 +1439,79 @@ def test_nothing_ready_and_nobody_looking_are_different_sentences():
     itself inside one screen.
     """
     empty = "\n".join(_next_body(_ready_doc([], declared=3)))
-    unlooked = "\n".join(_next_body(_ready_doc([], state="unlooked", declared=3)))
+    # A declared-only node, as `ready_refs` sees it under `--local`. The fixture used to carry NO nodes, which no
+    # real unresolved manifest does: a manifest with no refs is `_is_unlooked` False by design.
+    declared_only = {"o/r#1": {"state_source": "declared"}}
+    unlooked = "\n".join(_next_body(_ready_doc([], nodes=declared_only, state="unlooked", declared=3)))
     assert "nothing is ready" in empty
     assert "0 ready of 3" in empty
     assert "nobody looked" in unlooked
     assert "nothing is ready" not in unlooked
     assert empty != unlooked
+
+
+def _swept_board_doc(*, extra: dict | None = None) -> dict:
+    """A fully swept board built the way production builds it: every manifest goes through `grid_manifest`, so
+    the `ready` block on each one is DERIVED, not typed. Handing a test `state: "unlooked"` would be supplying
+    the very value production must compute, and the live defect lives in what production computes for a
+    manifest that declares no refs.
+
+    One manifest has already merged everything (resolved, nothing ready), one declares no refs at all. The
+    optional `extra` is a third, declared-only manifest that was never swept.
+    """
+    done = link_grid.grid_manifest(
+        {
+            "program": "done",
+            "rows": [{"ref": f"o/r#{n}", "order": str(n), "lane": "L", "status": "merged"} for n in (1, 2, 3)],
+        },
+        {f"o/r#{n}": {"state": "merged"} for n in (1, 2, 3)},
+        {},
+    )
+    empty = link_grid.grid_manifest({"program": "empty", "rows": []}, {}, {})
+    manifests = [done, empty] + ([link_grid.grid_manifest(extra, {}, {})] if extra else [])
+    declared = sum(len(manifest["nodes"]) for manifest in manifests)
+    unresolved = sum(
+        1
+        for manifest in manifests
+        for node in manifest["nodes"].values()
+        if node["state_source"] not in link_grid.RESOLVED_STATE_SOURCES
+    )
+    block = dict(_doc()["grid"])
+    block.update({"manifests": manifests, "declared": declared, "unresolved": unresolved, "swept": True})
+    return _doc(grid=block)
+
+
+def test_the_derived_fixture_really_produces_the_state_the_defect_needs():
+    """Guards the guard: if `grid_manifest` ever stopped calling an empty manifest `unlooked`, the two cases below
+    would pass for the wrong reason. The premise is asserted, not assumed."""
+    manifests = _swept_board_doc()["grid"]["manifests"]
+    assert [manifest["ready"]["state"] for manifest in manifests] == ["known", "unlooked"]
+    assert manifests[1]["nodes"] == {}
+
+
+def test_a_fully_swept_board_with_nothing_ready_never_says_nobody_looked():
+    """AC1 of the doorways directive. MUTATION: drop the `bool(nodes)` guard from `_is_unlooked`.
+
+    Live cause: three manifests that declare no refs have nothing to resolve, so `ready_refs` calls their READY set
+    `unlooked`. `_waiting` already ignored them, `_next_tally` did not, so NEXT said `nobody looked` above a
+    WAITING ON YOU that had looked just fine, while STACKS said `0 unresolved`.
+    """
+    doc = _swept_board_doc()
+    assert doc["grid"]["unresolved"] == 0 and doc["grid"]["declared"] == 3
+    next_block = "\n".join(_next_body(doc))
+    assert "nobody looked" not in next_block
+    assert "0 ready of 3" in next_block and "nothing is ready" in next_block
+    page = plain(render.document(doc))
+    assert "nobody looked" not in page
+    assert _page_tail(doc)[-1] == "  next  nothing is ready  borg next"
+
+
+def test_an_unswept_manifest_still_makes_next_say_nobody_looked_beside_an_empty_one():
+    """The three-state rule survives the fix: a manifest that DECLARES refs and resolved none is still unlooked,
+    and an empty manifest next to it does not hide that. MUTATION: make `_is_unlooked` return False always."""
+    doc = _swept_board_doc(extra={"program": "declared", "rows": [{"ref": "o/r#9", "order": "1", "lane": "L"}]})
+    assert doc["grid"]["unresolved"] == 1
+    assert "nobody looked" in "\n".join(_next_body(doc))
 
 
 def test_a_ready_row_carries_its_provenance_mark():
@@ -1585,7 +1666,9 @@ def test_the_board_counts_a_repositories_routed_next_rows_and_dashes_the_rest():
         projects={"alpha": entry, "beta": {**entry, "path": "/work/beta"}},
     )
     assert render._routing_counts(doc) == {"alpha": {"yours": 2, "mine": 0, "unsure": 1}}  # pylint: disable=protected-access
-    rows = {line.split()[0]: line for line in plain(render.document(doc)).split("\n") if line[1:6] in ("alpha", "beta ")}
+    rows = {
+        line.split()[0]: line for line in plain(render.document(doc)).split("\n") if line[1:6] in ("alpha", "beta ")
+    }
     assert "YOURS" in plain(render.document(doc))
     assert " 2    –      1" in rows["alpha"]
     assert " –    –      –" in rows["beta"]
@@ -1596,6 +1679,8 @@ def test_an_unlooked_manifest_with_no_refs_does_not_cloud_waiting_on_you():
     doc = _ready_doc([], state="unlooked", declared=0)
     doc["grid"]["manifests"][0]["nodes"] = {}
     assert _waiting_body(doc) == ["  — nothing waits on you"]
+
+
 def test_the_page_ends_on_one_next_action_with_a_runnable_command_for_a_yours_row():
     """link-unification L3: `borg link | tail -5` holds the recommended action and its command.
 
@@ -1635,6 +1720,8 @@ def test_the_next_action_line_ends_both_pages_but_a_directory_sees_only_its_own_
     last = _page_tail(repo)[-1]
     assert last.startswith("  next  ") and last.endswith("borg next")
     assert "o/r#2" not in last
+
+
 # ── the page of repository scope: strictly one directory (2026-10-13) ───────────────────────────────
 
 
@@ -1832,6 +1919,54 @@ def test_a_directory_with_nothing_waiting_says_so_and_still_gives_a_runnable_nex
     out = plain(render.document(_door_doc()))
     assert "— nothing waits on you" in out
     assert [line for line in out.split("\n") if line.strip()][-1] == "  next  nothing is ready  borg next"
+    assert "nothing here waits on you" not in out, "no repository rows, so the plain sentence stands"
+
+
+def _you_row(project: str, number: int) -> dict:
+    return {
+        "project": project,
+        "item": f"Synthetic PR {number}",
+        "next_step": "merge",
+        "owner": "YOU",
+        "ref": f"example/{project}#{number}",
+    }
+
+
+def test_a_directory_never_says_nothing_waits_while_its_repository_has_you_rows():
+    """AC1 of the doorways directive. MUTATION: drop `_repository_you_count` from `_waiting_section` and the page
+    prints `nothing waits on you` above two rows that `borg next --rows` holds for this very repository.
+
+    The page stays strictly about its own directory: the rows are COUNTED and `borg next` is named, never listed.
+    A row for another repository does not count, and the directory's own session row is not a repository row.
+    """
+    rows = [_you_row("borg", 436), _you_row("borg", 437), _you_row("elsewhere", 85)]
+    waiting = {"rows": rows, "hidden": {}, "hidden_lines": [], "degraded": None}
+    out = plain(render.document(_door_doc(waiting=waiting)))
+    assert "nothing waits on you" not in out
+    assert "— nothing here waits on you · 2 for borg: borg next" in out
+    assert "#436" not in out and "#437" not in out and "#85" not in out, "counted, not listed"
+    assert [line for line in out.split("\n") if line.strip()][-1] == "  next  nothing is ready  borg next"
+
+
+def test_the_count_line_is_singular_for_one_row_and_absent_for_none():
+    one = {"rows": [_you_row("borg", 436)], "hidden": {}, "hidden_lines": [], "degraded": None}
+    assert "nothing here waits on you · 1 for borg: borg next" in plain(render.document(_door_doc(waiting=one)))
+    none = {"rows": [_you_row("elsewhere", 85)], "hidden": {}, "hidden_lines": [], "degraded": None}
+    assert "— nothing waits on you" in plain(render.document(_door_doc(waiting=none)))
+
+
+def test_the_count_line_names_the_repository_of_a_main_checkout_too():
+    """A main checkout has no `worktree_of`; its own registry name is the repository."""
+    doc = _door_doc(waiting={"rows": [_you_row("door", 7)], "hidden": {}, "hidden_lines": [], "degraded": None})
+    doc["focus"]["identity"] = {"kind": "main", "branch": "main"}
+    assert "nothing here waits on you · 1 for door: borg next" in plain(render.document(doc))
+
+
+def test_a_directory_with_its_own_item_still_prints_the_item_and_no_nothing_sentence():
+    session = {"project": "door", "item": "session", "next_step": "reply to session", "owner": "YOU", "ref": None}
+    waiting = {"rows": [session, _you_row("borg", 436)], "hidden": {}, "hidden_lines": [], "degraded": None}
+    out = plain(render.document(_door_doc(waiting=waiting)))
+    assert "▶ session" in out and "nothing waits on you" not in out and "nothing here waits" not in out
 
 
 def test_a_degraded_waiting_block_is_still_reported_on_a_directory_page():
