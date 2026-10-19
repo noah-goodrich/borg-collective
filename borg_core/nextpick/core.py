@@ -541,3 +541,69 @@ def numbered_rows(work: list[dict[str, Any]], ranked: list[dict[str, Any]]) -> l
         }
         for index, row in enumerate(work)
     ]
+
+
+CARD_WIDTH = 42
+CARD_LINES = 6
+
+
+def _cut(text: str, width: int) -> str:
+    """`text` as one line of at most `width` columns, a cut ending in an ellipsis."""
+    text = " ".join(text.split())
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def _wrap(text: str, width: int, max_lines: int, indent: str = "") -> list[str]:
+    """Greedy word wrap into at most `max_lines` lines of `width`; the last line ends in an ellipsis when text is lost.
+
+    A word wider than a line goes on a line of its own, uncut: that is how the command keeps its repository name.
+    """
+    if max_lines < 1:
+        return []
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        trial = f"{current} {word}" if current else word
+        if len(trial) <= width or not current:
+            current = trial
+        else:
+            lines.append(current)
+            current = indent + word
+    if current:
+        lines.append(current)
+    if len(lines) > max_lines:
+        lines = [*lines[: max_lines - 1], _cut(" ".join(lines[max_lines - 1 :]), width)]
+    return lines
+
+
+def chooser_card(row: dict[str, Any], *, shown: bool = False) -> list[str]:
+    """The preview card `/borg-next` shows beside a row's option: at most `CARD_LINES` lines of `CARD_WIDTH` columns.
+
+    The last line is the exact command choosing the row runs. The command and the ref are never cut. When the command
+    is wider than the card it wraps at word boundaries onto indented lines, and the label lines give way to it first:
+    the waiting reason goes, then the meta line, then the next step shrinks, and the label is always kept.
+    `shown` adds `--shown`, because the skill logs it iff a suggestion was displayed.
+
+    PURE: the text is copied from checkpoints and session state, so the skill shows it as data.
+    """
+    command = f"borg next --open {row['project']} --chosen" + (" --shown" if shown else "")
+    command_lines = _wrap(command, CARD_WIDTH, 99, indent="  ")
+    room = max(CARD_LINES - len(command_lines), 1)
+    label = row["project"] + (f" · {row['item']}" if row.get("item") else "")
+    room -= 1
+    step = _wrap(row.get("next_step") or "", CARD_WIDTH, min(2, max(room, 0)))
+    room -= len(step)
+    ref = row.get("ref")
+    meta = [str(ref)] if ref else []
+    meta += [row.get("owner") or "—", row.get("ready") or "—"]
+    meta_line = " · ".join(meta)
+    if len(meta_line) > CARD_WIDTH and ref:
+        meta_line = f"{ref} · " + _cut(" · ".join(meta[1:]), max(CARD_WIDTH - len(str(ref)) - 3, 1))
+    head = [_cut(label, CARD_WIDTH)]
+    if room >= 1:
+        head.append(meta_line if ref else _cut(meta_line, CARD_WIDTH))
+        room -= 1
+    head += step
+    if room >= 1 and row.get("waiting_reason"):
+        head.append(_cut(f"“{row['waiting_reason']}”", CARD_WIDTH))
+    return [*head, *command_lines]

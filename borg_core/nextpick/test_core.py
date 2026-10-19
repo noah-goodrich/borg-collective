@@ -628,3 +628,83 @@ def test_null_or_different_repo_is_a_group_of_one():
 def test_sessions_are_never_deduped_across_a_repo_group():
     ranked = [{**_rank("a", "waiting"), "repo": "/g"}, {**_rank("b", "waiting"), "repo": "/g"}]
     assert [r["item"] for r in _work(ranked, {})] == ["session", "session"]
+
+
+def _card_row(**over):
+    row = {
+        "project": "alpha",
+        "item": "ship the thing",
+        "next_step": "merge #7",
+        "owner": "YOU",
+        "ready": "✔ now",
+        "ref": "o/alpha#7",
+        "waiting_reason": "",
+    }
+    return {**row, **over}
+
+
+def _assert_fits(card):
+    assert 1 <= len(card) <= core.CARD_LINES
+    assert all(len(line) <= core.CARD_WIDTH for line in card), card
+
+
+def test_card_ends_in_the_exact_command_and_carries_the_next_step():
+    card = core.chooser_card(_card_row())
+    _assert_fits(card)
+    assert card[-1] == "borg next --open alpha --chosen"
+    assert card[0] == "alpha · ship the thing"
+    assert "merge #7" in card
+    assert "o/alpha#7 · YOU · ✔ now" in card
+
+
+def test_card_command_carries_shown_only_when_asked():
+    assert core.chooser_card(_card_row(), shown=True)[-1] == "borg next --open alpha --chosen --shown"
+
+
+def test_card_three_states_waiting_session_pr_and_plan_row():
+    waiting = _card_row(
+        item="", next_step="reply to session", ready="✔ 2d", ref=None, waiting_reason="needs a call on the schema"
+    )
+    pr = _card_row(next_step="await review #9", owner="—", ready="… wait")
+    plan = _card_row(item="AC5", next_step="finish the cards", owner="AGENT", ready="○", ref=None)
+    for row in (waiting, pr, plan):
+        card = core.chooser_card(row)
+        _assert_fits(card)
+        assert card[-1] == "borg next --open alpha --chosen"
+        assert row["next_step"] in card
+    assert core.chooser_card(waiting)[0] == "alpha"
+    assert "“needs a call on the schema”" in core.chooser_card(waiting)
+    assert "—" in core.chooser_card(pr)[1]
+
+
+def test_card_long_label_and_next_step_are_cut_with_an_ellipsis():
+    row = _card_row(item="x" * 80, next_step="word " * 40, waiting_reason="y" * 90)
+    card = core.chooser_card(row)
+    _assert_fits(card)
+    assert card[0].endswith("…") and card[0].startswith("alpha · xxx")
+    assert any(line.endswith("…") for line in card[1:-1])
+    assert card[-1] == "borg next --open alpha --chosen"
+
+
+def test_card_long_ref_is_never_cut():
+    ref = "some-org/some-very-long-repository-name#1234"
+    card = core.chooser_card(_card_row(ref=ref))
+    assert any(line.startswith(ref) for line in card)
+
+
+def test_card_long_command_wraps_whole_and_label_lines_give_way():
+    name = "a-repository-with-a-quite-long-name"
+    card = core.chooser_card(_card_row(project=name, waiting_reason="why"), shown=True)
+    _assert_fits(card)
+    command = card[card.index(next(line for line in card if line.startswith("borg next --open"))) :]
+    assert len(command) == 3
+    assert " ".join(part.strip() for part in command) == f"borg next --open {name} --chosen --shown"
+    assert card[0].startswith(name) and any("merge #7" in line for line in card)
+    assert not any("why" in line for line in card)
+
+
+def test_card_with_a_name_wider_than_the_card_keeps_it_whole():
+    name = "n" * 50
+    card = core.chooser_card(_card_row(project=name))
+    assert any(name in line for line in card)
+    assert card[-1].endswith("--chosen")

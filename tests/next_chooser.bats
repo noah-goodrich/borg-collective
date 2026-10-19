@@ -247,7 +247,7 @@ _log_count() {
     [ "$status" -eq 0 ]
     printf "%s" "$output" | jq -e "(.rows | length) == 2 and .rec == \"wait-old\" and .suggestion == null
         and .quiet == [\"act\",\"idle\",\"never\"] and .degraded == null
-        and (.rows[0] | keys | sort) == [\"age\",\"item\",\"n\",\"next_step\",\"owner\",\"project\",\"ready\",\"ref\",\"status\",\"url\",\"waiting_reason\"]
+        and (.rows[0] | keys | sort) == [\"age\",\"card\",\"item\",\"n\",\"next_step\",\"owner\",\"project\",\"ready\",\"ref\",\"status\",\"url\",\"waiting_reason\"]
         and (.rows[0] | .next_step == \"reply to session\" and .owner == \"YOU\" and (.ready | startswith(\"✔\")))"
     [ "$(_log_count)" = "0" ]
     [ -z "$(_selected)" ]
