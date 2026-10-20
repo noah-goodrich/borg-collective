@@ -1,5 +1,8 @@
 """Unit tests for borg_core.recon.core (pure logic, no I/O)."""
 
+import re
+from pathlib import Path
+
 from borg_core.recon import core
 
 VALID_ITEM = {
@@ -490,3 +493,32 @@ def test_render_digest_notes_dropped_items():
     doc = core.assemble("since", "gen", [{"source": "s", "summary": "ok", "ok": True, "dropped": 3}], {}, [])
     output = core.render_digest(doc)
     assert "dropped 3 malformed" in output
+
+
+# ── the link-up template and the parser cannot drift apart ───────────────────────────────────────────
+
+_SKILL = Path(__file__).resolve().parents[2] / "skills" / "borg-link-up" / "SKILL.md"
+
+
+def _template_example() -> str:
+    """The fenced `Waits on you:` example the link-up skill carries, read from the skill file itself."""
+    found = re.search(r"```markdown\n(Waits on you:\n(?:- .*\n)+)```", _SKILL.read_text(encoding="utf-8"))
+    assert found, "borg-link-up/SKILL.md no longer carries a fenced `Waits on you:` example"
+    return found[1]
+
+
+def test_the_link_up_templates_own_example_parses_into_you_items():
+    example = _template_example()
+    body = f"tl;dr x\n\n## 4. Blockers\n\nNo blockers.\n\n{example}\n## 5. Next Session\n\n1. Do the next thing\n"
+    bullets = [line[2:] for line in example.splitlines()[1:]]
+    assert len(bullets) >= 2
+    assert core.checkpoint_owned_items(body) == [
+        *({"text": b, "owner": "YOU"} for b in bullets),
+        {"text": "Do the next thing", "owner": "AGENT"},
+    ]
+
+
+def test_the_link_up_templates_none_form_yields_no_you_items():
+    assert "`Waits on you: none`" in _SKILL.read_text(encoding="utf-8")
+    body = "## 4. Blockers\n\nNo blockers.\n\nWaits on you: none\n\n## 5. Next Session\n\n1. Do the next thing\n"
+    assert core.checkpoint_owned_items(body) == [{"text": "Do the next thing", "owner": "AGENT"}]

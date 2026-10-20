@@ -138,6 +138,16 @@ setup() {
     grep -q 'borg checkpoint-name' "${REPO_ROOT}/skills/borg-link-up/SKILL.md"
 }
 
+@test "checkpoint: borg-link-up asks for the Waits on you: list in Blockers" {
+    # The reader (recon.core._WAIT_LEAD_IN) matches `Waits on you:` at end of line; a skill that stops
+    # asking for that spelling starves every owned-next surface. Pins the instruction, the own-line
+    # rule, and the none form. borg_core/recon/test_core.py pins that the parser accepts the example.
+    local skill="${REPO_ROOT}/skills/borg-link-up/SKILL.md"
+    grep -q 'Waits on you:` ON ITS OWN LINE' "$skill"
+    grep -q 'Waits on you: none' "$skill"
+    grep -q '^Waits on you:$' "$skill"
+}
+
 @test "checkpoint: the verb exists in the CLI and in borg help" {
     # A skill instructing a command that does not exist is worse than the prose it replaced, and
     # `borg help` is this repo's stated surface of record.

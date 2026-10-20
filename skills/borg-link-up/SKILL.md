@@ -72,6 +72,14 @@ Which files are changed and ready to commit right now (GIT_STATUS)? If nothing, 
 ## 4. Blockers
 What prevented completion? List specific issues, missing information, or dependencies. If none, say "No blockers."
 
+After the blockers, write the line `Waits on you:` ON ITS OWN LINE, then one bullet per thing only the user can do (a decision, a credential rotation, a file to copy, an approval), each bullet naming the thing and the action. Write `Waits on you: none` when there is nothing. The spelling is exact because `borg next`, `borg link` and the arrival brief read this list as the user's rows; the shape is:
+
+```markdown
+Waits on you:
+- Rotate the demo token in the vault.
+- Approve the invented budget in the tracker.
+```
+
 ## 5. Next Session
 What should the next session focus on first? Be specific enough that someone returning after 2 days knows exactly where to start. Include the exact file and function if applicable.
 
