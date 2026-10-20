@@ -2,7 +2,7 @@
 
 A runbook for bringing a machine from an older borg to the current release, or for installing borg on a fresh machine. It is written so that a person, or a Claude Code session with no other context, can follow it top to bottom. The GitHub release notes for each version describe what changed; this page holds the per-machine steps, and a future release that needs anything from you adds a row to the migration table in section 5 instead of rewriting the notes.
 
-This page was last checked against release 0.9.10.
+This page was last checked against release 0.9.11.
 
 ## 1. Who this is for and how to use it with Claude Code
 
@@ -117,7 +117,8 @@ Find the row for the version you started from. If you skipped several releases, 
 | 0.9.7 | Registry key, below |
 | 0.9.8 | 0.9.9 update order, below |
 | 0.9.9 | 0.9.10 update order, below |
-| 0.9.10 | None (current release) |
+| 0.9.10 | 0.9.11 update order, below |
+| 0.9.11 | None (current release) |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
 
@@ -132,6 +133,18 @@ run-in <BORG> ./install.sh
 ```
 
 2. Run `borg doctor`. Every RESUME row should now be OK except `resume-guardian`, which stays a known warning (section 6). On a machine signed in with a subscription this clears both the `resume-watch` and the `resume-probe` FAIL rows: the probe reads the path of the Claude binary from the watcher's plist, so it cannot pass without it. On a usage-billed account (an Enterprise seat), `/usage` reports cost and has no session limit, so `resume-probe` shows `INFO`, not `OK`: limit-class resumes and the guardian's limit thresholds do not apply there, and every other resume path is unchanged. A `FAIL` on that row on any account still means the probe cannot read `/usage` at all.
+
+### Updating to 0.9.11: update order
+
+0.9.11 is the arrival brief release: a new SessionStart hook prints a four-line brief when a session starts or resumes in a repository. No migration is needed: the new `focus.since.head_moves` key in `--json` is additive.
+
+The path from 0.9.10, in order (the commands are in section 4):
+
+1. Pull the checkouts.
+2. Run `claude plugin update` for borg-collective.
+3. Run `borg setup`.
+4. Restart every open Claude Code session, because a new SessionStart hook ships through the plugin and a running session does not load it.
+5. On the next start, look for "SessionStart:startup says:" followed by the brief.
 
 ### Updating to 0.9.10: update order
 

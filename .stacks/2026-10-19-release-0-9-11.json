@@ -1,0 +1,12 @@
+{
+  "desc": "borg 0.9.11: the arrival brief release",
+  "program": "2026-10-19-release-0-9-11",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#447",
+      "why": "the arrival brief on SessionStart"
+    }
+  ]
+}
