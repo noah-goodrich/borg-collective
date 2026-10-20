@@ -242,7 +242,8 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict], c
     same as `borg next --local`. NEVER writes next-recs.jsonl: only the row-building half of nextpick runs.
     `compass` is the block this page renders, handed to the ranking so the compass orders these rows exactly as it
     orders `borg next`'s.
-    In repository scope only that repository's rows are built, because the sweep covered only that repository.
+    In repository scope only that repository's rows are built, because the sweep covered only that repository; the
+    Queen's checkpoint rows (label `queen`) join every other scope and never a repository page.
     Fail-open: any failure degrades to an empty block that says why.
     """
     try:
@@ -252,7 +253,7 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict], c
         )
         by_repository = recon_core.merge_by_repository(tracks)
         rows, _quiet, degraded, hidden = nextpick_cli.item_rows(
-            scoped, local, False, swept=(by_repository, None), compass=compass
+            scoped, local, False, swept=(by_repository, None), compass=compass, queen=scope.get("kind") != "repository"
         )
     # JUSTIFICATION: a side block must never take the page down; degrade and say why.
     except Exception as exc:  # pylint: disable=broad-exception-caught

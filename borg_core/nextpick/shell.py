@@ -122,6 +122,25 @@ def checkpoint_owned(repositories: dict[str, Any], names: list[str]) -> dict[str
     return found
 
 
+QUEEN = "queen"
+
+
+def queen_owned() -> dict[str, dict[str, Any]]:
+    """`{"queen": {"items": owned items, "mtime": float | None}}` of the Queen's newest checkpoint, or `{}`. Fail-open.
+
+    The Queen is not in the registry; its checkpoints live in `<orchestrator root>/.borg/checkpoints`. The read is the
+    one repositories use (`link.shell.read_latest_checkpoint`, then `recon.core.checkpoint_owned_items`), so the rows
+    carry the same owners and freshness. A missing or unreadable directory, or one yielding no items, gives `{}`.
+    """
+    try:
+        text, mtime = link_shell.read_latest_checkpoint([(QUEEN, link_shell.orchestrator_root())])
+        items = recon_core.checkpoint_owned_items(text)
+    # JUSTIFICATION: an unreadable Queen checkpoint must mean no Queen rows, never a failed chooser.
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {}
+    return {QUEEN: {"items": items, "mtime": mtime}} if items else {}
+
+
 def read_log_rows() -> list[dict[str, Any]]:
     """Every parseable row of `next-recs.jsonl`, rotated generation first. Missing or unreadable files yield []."""
     target = log_path()

@@ -98,6 +98,7 @@ def item_rows(
     show_all: bool = False,
     swept: tuple[dict[str, list[dict[str, Any]]], str | None] | None = None,
     compass: dict[str, Any] | None = None,
+    queen: bool = False,
 ) -> tuple[list[dict[str, Any]], list[str], str | None, dict[str, int]]:
     """`(rows, quiet, degraded, hidden)`: work items from the recon sweep, plans, sessions and checkpoints.
 
@@ -105,6 +106,10 @@ def item_rows(
 
     `compass` is the map's block, when the caller has one: it reorders the repositories (`core.rank`) and so the
     rows, and the caller that shows these rows on a page hands in the same block it renders.
+
+    `queen` adds the Queen's newest checkpoint as rows labeled `queen`, ranked LAST so no registry row shifts. The
+    whole board and the Queen page pass it; a repository page does not (it covers one repository). Never written
+    to the registry: the Queen is only read.
 
     Each source is gathered fail-open (a failed sweep only sets `degraded`). Under `local` the sweep is skipped, so
     only session, plan and checkpoint rows appear.
@@ -115,11 +120,16 @@ def item_rows(
     ranked = core.rank(repositories, compass)
     names = [item["name"] for item in ranked]
     by_repository, degraded = swept if swept is not None else shell.recon_items(repositories, local)
+    checkpoints = shell.checkpoint_owned(repositories, names)
+    queen_cp = shell.queen_owned() if queen and shell.QUEEN not in repositories else {}
+    if queen_cp:
+        ranked = [*ranked, {"name": shell.QUEEN, "status": "", "last_activity": None, "repo": ""}]
+        checkpoints.update(queen_cp)
     work, quiet = core.work_items(
         ranked,
         by_repository,
         shell.read_plans(repositories, names),
-        shell.checkpoint_owned(repositories, names),
+        checkpoints,
         int(datetime.now(UTC).timestamp()),
     )
     shown, hidden = core.cap_rows(work, show_all)
@@ -130,7 +140,7 @@ def rows_output(
     repositories: dict[str, Any], local: bool, show_all: bool = False, compass: dict[str, Any] | None = None
 ) -> list[str]:
     """The chooser screen plus the trailing names line (one repository per ROW, so a key selects a row)."""
-    rows, quiet, _degraded, hidden = item_rows(repositories, local, show_all, compass=compass)
+    rows, quiet, _degraded, hidden = item_rows(repositories, local, show_all, compass=compass, queen=True)
     suggestion = core.suggestion_for(rows, shell.read_log_rows())
     lines = core.render_chooser(rows, suggestion=suggestion, quiet=quiet, hidden=hidden)
     return [*lines, NAMES_PREFIX + "\t".join(row["project"] for row in rows)]
@@ -145,7 +155,7 @@ def rows_json(
 
     Each row also carries `card`, the preview lines `/borg-next` passes verbatim (`core.chooser_card`); additive.
     """
-    rows, quiet, degraded, hidden = item_rows(repositories, local, show_all, compass=compass)
+    rows, quiet, degraded, hidden = item_rows(repositories, local, show_all, compass=compass, queen=True)
     earned = core.suggestion_for(rows, shell.read_log_rows()) is not None
     return {
         "rows": [{**row, "card": core.chooser_card(row, shown=earned)} for row in rows],

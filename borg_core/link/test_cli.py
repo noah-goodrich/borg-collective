@@ -17,6 +17,12 @@ import pytest
 from borg_core.link import cli, core, picture, shell
 
 
+@pytest.fixture(autouse=True)
+def _no_real_queen(tmp_path, monkeypatch):
+    """The Queen's checkpoint feeds `waiting`; an empty root keeps the developer's real one out of every test."""
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(tmp_path / "no-queen"))
+
+
 @pytest.fixture()
 def isolated_env(tmp_path, monkeypatch):
     borg_dir = tmp_path / "borg-dir"
@@ -1439,3 +1445,28 @@ def test_no_color_strips_the_error_line_but_json_errors_never_had_colour(isolate
     err = capsys.readouterr().err
     assert err == "▸ ERROR: repository 'nope' not in registry. Run: borg add [path]\n"
     assert "\033" not in err
+
+
+def test_waiting_carries_the_queen_checkpoint_on_the_queen_page_and_never_on_a_repository_page(tmp_path, monkeypatch):
+    """AC2 of one-owned-next-list. The Queen's checkpoint is read from a real file under BORG_ORCHESTRATOR_ROOT."""
+    root = tmp_path / "queen-root"
+    store = root / ".borg" / "checkpoints"
+    store.mkdir(parents=True)
+    (store / "2026-10-02-0900.md").write_text(
+        "## 4. Blockers\n\nWaits on you:\n- Approve the invented budget\n- Copy the demo file over\n\n"
+        "## 5. Next Session\n\n1. Draft the invented memo\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(root))
+    repositories = {"alpha": {"path": "/nonexistent/alpha", "status": "idle", "last_activity": None, "pinned": False}}
+
+    queen_page = cli._waiting(  # pylint: disable=protected-access
+        repositories, {"kind": "orchestrator", "repository": None, "local": True}, True, []
+    )
+    assert [(r["project"], r["owner"]) for r in queen_page["rows"]] == [("queen", "YOU"), ("queen", "YOU")]
+    assert queen_page["hidden"]["agent"] == 1
+
+    repo_page = cli._waiting(  # pylint: disable=protected-access
+        repositories, {"kind": "repository", "repository": "alpha", "local": True}, True, []
+    )
+    assert repo_page["rows"] == []
