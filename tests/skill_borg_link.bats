@@ -546,14 +546,14 @@ _injection_line() {
     [ "${lines[${#lines[@]}-1]}" = 'BORG-LINK-UNAVAILABLE' ]
 }
 
-@test "paint: the model reproduces the page in one fenced block with at most 2 plain lines and no tool call" {
+@test "paint: the model reproduces the page in one fenced block with plain restating lines and no tool call" {
     run _section '## Paint' '## Fallback' "$SKILL"
     [ "$status" -eq 0 ]
     [[ "$output" == *'into ONE fenced block'* ]] || false
-    [[ "$output" == *'at most 2 plain lines'* ]] || false
+    [[ "$output" == *'plain lines that only restate the page'* ]] || false
     [[ "$output" == *'No other tool call: no Bash, no jq, no Read.'* ]] || false
     [[ "$output" == *'byte for byte into ONE fenced block'* ]] || false
-    [[ "$output" == *'never fix, shorten, reorder or annotate a line; comments go only in these 2 lines'* ]] || false
+    [[ "$output" == *'never fix, shorten, reorder or annotate a line; comments go only in these lines'* ]] || false
     [[ "$output" == *'no escape bytes'* ]] || false
 }
 

@@ -36,8 +36,8 @@
       "review_by": "2027-01-31"
     },
     "agents/borg-nanoprobe": {
-      "waiver": "Phase 1 (evals-for-everything): model eval (scope gate: three deliverables refused, one accepted)",
-      "review_by": "2026-11-15"
+      "waiver": "Phase 1 (evals-for-everything): the model eval slipped behind Phase 1b and is due 2026-12-15 (scope gate: three deliverables refused, one accepted)",
+      "review_by": "2026-12-15"
     },
     "agents/borg-researcher": {
       "waiver": "Phase 4 long-tail review (evals-for-everything)",
@@ -97,8 +97,8 @@
       "review_by": "2027-01-31"
     },
     "skills/borg-verify": {
-      "waiver": "Phase 1 (evals-for-everything): model eval (seeded-defect diff must FAIL, clean diff PASS)",
-      "review_by": "2026-11-15"
+      "waiver": "Phase 1 (evals-for-everything): the model eval slipped behind Phase 1b and is due 2026-12-15 (seeded-defect diff must FAIL, clean diff PASS)",
+      "review_by": "2026-12-15"
     },
     "skills/break-glass": {
       "waiver": "Phase 2 (evals-for-everything): eval to be built (negative-heavy: no unprompted permission change)",
