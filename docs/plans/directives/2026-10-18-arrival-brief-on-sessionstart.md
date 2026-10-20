@@ -1,5 +1,5 @@
 # Directive: The arrival brief rides SessionStart systemMessage
-*Filed: 2026-10-18 · Status: Proposed · Owner: Noah*
+*Filed: 2026-10-18 · Status: Approved (Noah, 2026-10-19) · Owner: Noah*
 
 **tl;dr** — The spike on 2026-10-18 showed that text printed before `claude` starts is hidden by the fullscreen renderer, and that a SessionStart `systemMessage` renders at the top of the transcript before any typing. This directive builds screen 4 of the board-chooser directive (and the Doorways arrival brief) as a SessionStart hook that prints the brief from the `borg link <repo> --json` document on `startup` and `resume` only, so launched, hand-typed and resumed sessions all get it with no launcher change.
 
@@ -40,21 +40,21 @@ A new SessionStart hook emits a top-level `systemMessage` carrying the brief. Ev
 
 ## Acceptance criteria
 
-- [ ] AC1 — A real SessionStart `startup` input produces a top-level `systemMessage` with the four brief lines.
+- [x] AC1 — A real SessionStart `startup` input produces a top-level `systemMessage` with the four brief lines.
   - Verify: `bats tests/arrival_brief.bats` has a case that pipes a SessionStart input JSON (fields `session_id`, `cwd`, `hook_event_name`, `source`: `startup`) into the hook against a fixture repository and asserts `jq -e '.systemMessage | test("last time") and test("next") and test("since then")'` on stdout. The case fails against an empty hook body.
-- [ ] AC2 — A `resume` input with an existing title emits no `sessionTitle`; an empty title emits one.
+- [x] AC2 — A `resume` input with an existing title emits no `sessionTitle`; an empty title emits one.
   - Verify: the same file has two cases. With `session_title` set to `kept`, `jq -e '.hookSpecificOutput.sessionTitle // empty'` prints nothing and exits 4 on `-e`; with it empty, the same filter prints a non-empty string.
-- [ ] AC3 — `clear`, `compact` and `fork` sources print nothing.
+- [x] AC3 — `clear`, `compact` and `fork` sources print nothing.
   - Verify: one case per source asserts stdout is empty and exit 0. The registered matcher is checked by `jq -e '.hooks.SessionStart[] | select(.hooks[].command | test("arrival-brief")) | .matcher == "startup|resume"'` on the plugin's built `hooks/hooks.json` (see AC7).
-- [ ] AC4 — The brief comes from the `borg link --json` document, not a second read.
+- [x] AC4 — The brief comes from the `borg link --json` document, not a second read.
   - Verify: the test replaces `borg` with a mock that records its argv; the case asserts exactly one call whose args are `link <repo> --json`, and that no `git` process is spawned by the hook (mock `git` on PATH exits 99 and the case still passes).
-- [ ] AC5 — The Queen session gets one verdict line.
+- [x] AC5 — The Queen session gets one verdict line.
   - Verify: a case with input `cwd` equal to `$BORG_ORCHESTRATOR_ROOT` asserts the message has exactly one line and the registry file is byte-identical before and after.
-- [ ] AC6 — A failing brief is loud.
+- [x] AC6 — A failing brief is loud.
   - Verify: a case where the mock `borg` exits 1 asserts `.systemMessage` is a non-empty single line containing the word `unavailable`, exit 0.
-- [ ] AC7 — The plugin build ships and registers the hook.
+- [x] AC7 — The plugin build ships and registers the hook.
   - Verify: after `scripts/build-plugin.sh`, `jq -e '[.hooks.SessionStart[] | select(.hooks[].command | test("borg-arrival-brief"))] | length == 1 and .[0].matcher == "startup|resume"'` on the claude-plugins checkout's `borg-collective/hooks/hooks.json` exits 0, and `test -x` accepts `borg-collective/hooks/borg-arrival-brief.sh` beside it.
 - [ ] AC8 — It renders live (manual, once, Noah).
   - Verify: start a new `claude` in a repository with a checkpoint and see "SessionStart:startup says:" with the four lines before typing; resume it and see "SessionStart:resume says:" with the title unchanged.
-- [ ] AC9 — Suite green.
+- [x] AC9 — Suite green.
   - Verify: `make test && make test-bats && make lint`.

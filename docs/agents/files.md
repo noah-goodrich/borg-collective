@@ -35,6 +35,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
         cli.py              argparse, `_mode` (json|porcelain|human), BrokenPipeError, dispatch
 hooks/
     borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
+    borg-arrival-brief.sh   SessionStart (startup|resume) → the arrival brief as a systemMessage
     borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
     borg-notify.sh          permission/elicitation Notification → status=waiting + waiting_reason
     borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan

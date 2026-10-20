@@ -53,7 +53,7 @@ def test_the_brief_is_a_rule_and_four_labelled_lines():
 
 def test_since_then_leads_with_derived_facts():
     since = _lines(_doc())[4]
-    assert "HEAD moved 4 times" in since and "1 shipped (2026-10-19-done)" in since and "last active 3h ago" in since
+    assert "HEAD moved 4 times" in since and "1 directive shipped" in since and "last active 3h ago" in since
     assert since.index("HEAD moved") < since.index("last active")
 
 

@@ -205,7 +205,7 @@ def _since_then(doc: dict) -> str:
         if day and str(item.get("ship_date") or "") >= day
     ]
     if shipped:
-        facts.append(f"{len(shipped)} shipped ({shipped[0]}{', ...' if len(shipped) > 1 else ''})")
+        facts.append(f"{len(shipped)} directive{'s' if len(shipped) != 1 else ''} shipped")
     if entry.get("relative_activity"):
         facts.append(f"last active {entry['relative_activity']}")
     return _facts_row("since then", facts, "nothing recorded")
