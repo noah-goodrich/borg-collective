@@ -126,6 +126,7 @@ else
         printf ']}\n'
         printf '{"type":"system","subtype":"hook_started","hook_event":"SessionStart"}\n'
         printf '{"type":"system","subtype":"hook_started","hook_event":"SessionStart"}\n'
+        printf '{"type":"system","subtype":"hook_started","hook_event":"SessionStart"}\n'
         printf '{"type":"system","subtype":"hook_started","hook_event":"Stop"}\n'
         printf '{"type":"system","subtype":"hook_started","hook_event":"Stop"}\n'
         if [ "$dup" = dup ]; then printf '{"type":"system","subtype":"hook_started","hook_event":"SessionStart"}\n'; fi
@@ -143,8 +144,8 @@ else
         bad "CHECKER: a clean synthesized session exited $clean_rc (see $OUT/checker/clean.out)"
     fi
     if [ "$dup_rc" -eq 1 ] && grep -q 'observed 2 of 1 authored' "$OUT/checker/dup.out" \
-        && grep -q 'fired 3 of 2 authored' "$OUT/checker/dup.out"; then
-        ok "CHECKER: a planted duplicate skill, plugin dir and SessionStart hook exit 1, naming 2 of 1 (plugin) and 3 of 2 (hooks)"
+        && grep -q 'fired 4 of 3 authored' "$OUT/checker/dup.out"; then
+        ok "CHECKER: a planted duplicate skill, plugin dir and SessionStart hook exit 1, naming 2 of 1 (plugin) and 4 of 3 (hooks)"
     else
         bad "CHECKER: the planted duplicate did not turn red with both counts named (rc $dup_rc; see $OUT/checker/dup.out)"
     fi

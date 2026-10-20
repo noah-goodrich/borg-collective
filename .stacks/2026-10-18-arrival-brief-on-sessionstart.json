@@ -8,6 +8,12 @@
       "ref": "noah-goodrich/borg-collective#437",
       "status": "open",
       "why": "Records the 2026-10-18 spike results and files the arrival-brief directive"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#447",
+      "why": "Builds the arrival brief: the SessionStart hook, its renderer and focus.since"
     }
   ]
 }

@@ -23,7 +23,7 @@ from collections.abc import Mapping
 from typing import NoReturn
 
 from borg_core.compass import shell as compass_shell
-from borg_core.link import core, grid, overlay, picture, render, shell, worktree
+from borg_core.link import arrival, core, grid, headlog, overlay, picture, render, shell, worktree
 from borg_core.nextpick import cli as nextpick_cli
 from borg_core.nextpick import core as nextpick_core
 from borg_core.nextpick import shell as nextpick_shell
@@ -91,6 +91,7 @@ def _focus(repository: str, registry: dict, now_epoch: int) -> dict | None:
     # directory; resolving it inside each reader would also let the list and the head disagree if the registry
     # changed between the two calls.
     sources = worktree.own_source(repository, repositories)
+    checkpoints = shell.read_checkpoints(sources)
     return {
         "name": repository,
         "entry": core.public_entry(entry, now_epoch),
@@ -98,10 +99,17 @@ def _focus(repository: str, registry: dict, now_epoch: int) -> dict | None:
         # repository it is a worktree of. Read for the one directory this page is about, never the registry.
         "identity": shell.read_git_identity(entry.get("path"), shell.resolved_repository_paths(registry)),
         "plan": shell.read_plan(entry.get("path")),
-        "checkpoints": shell.read_checkpoints(sources),
+        "checkpoints": checkpoints,
         "checkpoint_head": shell.read_latest_checkpoint_head(sources),
         "directives": shell.read_directives(entry.get("path")),
         "assimilated": shell.read_assimilated(entry.get("path")),
+        # ADDITIVE (arrival brief): how many times HEAD moved forward since the newest checkpoint, from the git dir's
+        # reflog and not a fork. `head_moves` is null when it cannot be told; DOCUMENT_VERSION stays 2.
+        "since": {
+            "head_moves": headlog.read_head_moves(
+                entry.get("path"), arrival.checkpoint_epoch(checkpoints[0]) if checkpoints else None
+            )
+        },
     }
 
 

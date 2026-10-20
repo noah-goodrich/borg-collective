@@ -556,6 +556,8 @@ def _git_dir_of(directory: str) -> Path | None:
     return target if target.is_absolute() else Path(directory) / target
 
 
+git_dir_of = _git_dir_of  # public name for borg_core.link.headlog (this module is at pylint's line ceiling)
+
 _SHORT_SHA = 7
 
 
