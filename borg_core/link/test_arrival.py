@@ -296,3 +296,15 @@ def test_main_prints_json_and_honours_the_opt_out(monkeypatch, capsys, calls):
     assert json.loads(capsys.readouterr().out)["systemMessage"]
     monkeypatch.setenv("BORG_NO_SESSION_HOOKS", "1")
     assert arrival_hook.main() == 0 and capsys.readouterr().out == ""
+
+
+def test_the_next_line_names_an_owner_for_an_item_nobody_owns():
+    """`waiting.next` with owner `—` (a PR awaiting review) is `unowned`: the arrival vocabulary gains a third word
+    and the page's own vocabularies stay separate. The wording of the row is hand-supplied on purpose; the real-path
+    case that derives it is in test_screen_contract."""
+    doc = _doc()
+    doc["waiting"]["next"] = {"project": "p", "next_step": "await review #5", "detail": "await review #5", "owner": "—"}
+    line = _lines(doc)[2]
+    assert "await review #5" in line and line.endswith("owner: unowned") and "nothing is ready" not in line
+    doc["waiting"]["next"]["owner"] = "YOU"
+    assert _lines(doc)[2].endswith("owner: yours")

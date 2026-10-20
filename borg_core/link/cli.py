@@ -244,6 +244,9 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict], c
     orders `borg next`'s.
     In repository scope only that repository's rows are built, because the sweep covered only that repository; the
     Queen's checkpoint rows (label `queen`) join every other scope and never a repository page.
+    `next` is the first row of the same uncapped work, before the cap (`{project, next_step, detail, owner}` or
+    null): the page keeps only YOU rows, so the first AGENT or unowned item would otherwise not be in the document
+    and NEXT would say "nothing is ready" above a checkpoint that holds one. Additive; same call, no second sweep.
     Fail-open: any failure degrades to an empty block that says why.
     """
     try:
@@ -252,17 +255,18 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict], c
             {repo: repositories[repo]} if scope.get("kind") == "repository" and repo in repositories else repositories
         )
         by_repository = recon_core.merge_by_repository(tracks)
-        rows, _quiet, degraded, hidden = nextpick_cli.item_rows(
-            scoped, local, False, swept=(by_repository, None), compass=compass, queen=scope.get("kind") != "repository"
+        rows, degraded, hidden, first = nextpick_cli.item_rows_with_next(
+            scoped, local, swept=(by_repository, None), compass=compass, queen=scope.get("kind") != "repository"
         )
     # JUSTIFICATION: a side block must never take the page down; degrade and say why.
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        rows, degraded, hidden = [], f"waiting rows failed: {exc}", {"agent": 0, "stale": 0, "overflow": 0}
+        rows, degraded, hidden, first = [], f"waiting rows failed: {exc}", dict(nextpick_core.NO_HIDDEN), None
     return {
         "rows": [row for row in rows if row.get("owner") == "YOU"],
         "hidden": hidden,
         "hidden_lines": nextpick_core.hidden_lines(hidden),
         "degraded": degraded,
+        "next": first,
     }
 
 

@@ -1346,7 +1346,9 @@ def _next_section(doc: dict, compact: bool = False) -> tuple[str, list[str]]:
     if unlooked:
         note += " — and some refs nobody looked up"
     if not ready_total:
-        return note, [_placeholder("nothing is ready right now.")]
+        # The stacks are not the only source of next work: when the document holds a checkpoint item, the section
+        # says it is the stacks that have nothing, and the page's last line names the item.
+        return note, [_placeholder(_NO_READY_STACKS if _next_fallback(doc) else "nothing is ready right now.")]
 
     if compact:
         owners = " · ".join(f"{group} {len(grouped[group])}" for group in _ROUTE_GROUPS if grouped[group])
@@ -1512,14 +1514,35 @@ def _first_mine(doc: dict) -> tuple[str, str] | None:
     return None
 
 
+_NEXT_OWNER = {"YOU": "yours", "AGENT": "mine"}
+_NO_READY_STACKS = "no stack ref is ready right now."
+
+
+def _next_fallback(doc: dict) -> tuple[str, str, str] | None:
+    """`(text, repository, owner)` of the document's first next item, or None when it holds none.
+
+    `waiting.next` is the first row of `borg next`'s own work list read BEFORE the cap (`nextpick.core.first_next`):
+    the page keeps only YOU rows, so without it the first AGENT or unowned checkpoint item is not in the document.
+    `owner` is the arrival brief's vocabulary: `yours` for YOU, `mine` for AGENT, `unowned` for `—`.
+    """
+    row = (doc.get("waiting") or {}).get("next")
+    if not isinstance(row, dict):
+        return None
+    text = " ".join(str(row.get("detail") or row.get("next_step") or "").split())
+    if not text:
+        return None
+    return text, str(row.get("project") or ""), _NEXT_OWNER.get(str(row.get("owner") or ""), "unowned")
+
+
 def _next_action_line(doc: dict, items: list[dict], unlooked: bool, reserve: int = 0) -> str:
     """THE LAST LINE OF THE PAGE (link-unification L3: the answer in the final lines before the prompt).
 
     ONE recommended next action and a command, derived only from data the document already carries, by
     this rule: the first WAITING ON YOU item (a decision only the reader can make) if any; else the
-    first agent (`mine`) ready row; else a sentence saying nothing is ready (or that nobody looked,
-    when no manifest was resolved) followed by `borg next`, so the line always carries a runnable
-    command. It reads `doc` and nothing else, and both pages print the same SHAPE of line; what differs by
+    first agent (`mine`) ready row; else the document's first next item (`_next_fallback`, a checkpoint's Next
+    Session item); else a sentence saying nothing is ready (or that nobody looked, when no manifest was resolved)
+    followed by `borg next`, so the line always carries a runnable command. It reads `doc` and nothing else, and
+    both pages print the same SHAPE of line; what differs by
     scope is only which items it can see (`_waiting`, `_first_mine`). `reserve` (the arrival brief) is the number of
     columns the caller will append after the line; it only narrows the label and repository, never the command.
     """
@@ -1528,12 +1551,16 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool, reserve: int
         ref, repository = (top["ref"] if top["linkable"] else top["text"]), top["repository"]
     else:
         mine = _first_mine(doc)
-        if mine is None:
+        fallback = _next_fallback(doc) if mine is None else None
+        if fallback is not None:
+            ref, repository = fallback[0], fallback[1]
+        elif mine is None:
             if unlooked:
                 looked = f"nobody looked; run {CYAN}borg link{NC} without --local"
                 return f"  {BOLD}next{NC}  {looked}  {CYAN}borg next{NC}\n"
             return f"  {BOLD}next{NC}  {DIM}nothing is ready{NC}  {CYAN}borg next{NC}\n"
-        ref, repository = mine
+        else:
+            ref, repository = mine
     command = _next_action_command(ref)
     # THE COMMAND IS THE LINE: it is never cut. A GitHub ref shows as `#N` (the command and the repository name the
     # rest); what still does not fit is cut in the MIDDLE with `…`, the repository name first and then the label, so
@@ -1552,13 +1579,18 @@ def next_action(doc: dict, reserve: int = 0) -> tuple[str, str]:
 
     THE SAME DERIVATION AS THE PAGE: the same `_waiting_facts` items and the same `_next_action_line`, so the brief
     and `/borg-link` cannot disagree about what is next. `owner` is `yours` when a decision waits on the reader,
-    `mine` when the first ready row is an agent's, and "" when nothing is ready. The line is stripped of colour and
+    `mine` when the first ready row is an agent's, the fallback item's own (`yours`, `mine` or `unowned`) when only
+    a checkpoint item is next, and "" when nothing is ready. The line is stripped of colour and
     of its indent (it starts `next  `); `reserve` columns are left free after it for the caller's owner tag.
     """
     facts = _waiting_facts(doc)
     line = picture.plain(_next_action_line(doc, facts.items, facts.unlooked, reserve)).strip()
-    owner = "yours" if facts.items else ("mine" if _first_mine(doc) else "")
-    return line, owner
+    if facts.items:
+        return line, "yours"
+    if _first_mine(doc):
+        return line, "mine"
+    fallback = _next_fallback(doc)
+    return line, fallback[2] if fallback else ""
 
 
 def _middle(text: str, room: int) -> str:

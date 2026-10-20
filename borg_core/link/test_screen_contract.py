@@ -92,7 +92,7 @@ def _queen(*, stacks: int, directives: int = 3, waiting: int = 0, repositories: 
         waiting={
             "rows": [_you_row(n) for n in range(waiting)],
             "hidden": {},
-            "hidden_lines": ["+5 more decisions", "+9 agent tasks", "+2 stale drafts"] if waiting else [],
+            "hidden_lines": ["+5 more decisions", "+9 agent tasks", "+4 unowned", "+2 stale drafts"] if waiting else [],
             "degraded": "synthetic degraded reason " + "d" * 150 if waiting else None,
         },
         grid=grid,
@@ -284,6 +284,7 @@ def test_waiting_on_you_prints_four_rows_and_counts_the_rest_on_one_line():
     more = next(line for line in body if "more" in line)
     assert more.strip().startswith("+") and "borg next" in more
     assert "+5 more decisions" in more and "+9 agent tasks" in more, "the chooser's hidden counts share the line"
+    assert "+9 agent tasks · +4 unowned · +2 stale drafts" in more, "unowned sits between agent tasks and stale drafts"
     assert body[-1].startswith("  next  "), "the page still ends on the next action"
 
 
@@ -466,3 +467,95 @@ def test_the_repository_page_never_cuts_the_map_directory_in_its_no_map_line():
     page = plain(render.document(document))
     line = next(line for line in page.split("\n") if "Compass: no map at" in line)
     assert line.strip().endswith(map_dir) and picture.visible_len(line) > 100
+
+
+# ── AC4 of 2026-10-20-one-owned-next-list: every "next" surface reads ONE document and none contradicts it ────────
+
+_YOU_CHECKPOINT = (
+    "tl;dr synthetic\n\n## 4. Blockers\n\nWaits on you:\n- Approve the invented budget\n\n"
+    "## 5. Next Session\n\n1. Build the synthetic widget\n"
+)
+_NEXT_ONLY_CHECKPOINT = "tl;dr synthetic\n\n## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n\n1. Build the synthetic widget\n"
+
+
+def _checkpoint_documents(tmp_path, monkeypatch, text: str) -> tuple[dict, dict]:
+    """`(repository page document, Queen page document)` built over ONE registry whose only data is a checkpoint file.
+
+    THE ROWS COME THROUGH THE REAL PATH: the file is written to disk and read by `nextpick.shell`, then built into
+    `waiting` by `link.cli._waiting` (the function `borg link` calls). Nothing here hands in a derived value.
+    """
+    from borg_core.link.test_render import _focus  # pylint: disable=import-outside-toplevel
+
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(tmp_path / "no-queen"))
+    store = tmp_path / "p" / ".borg" / "checkpoints"
+    store.mkdir(parents=True)
+    name = "2026-10-19-162310-abcdef.md"
+    (store / name).write_text(text)
+    entry = {"status": "idle", "last_activity": "2026-10-19", "path": str(tmp_path / "p")}
+    repositories = {"p": entry}
+    repo_scope = {"kind": "repository", "repository": "p", "local": True}
+    queen_scope = {"kind": "orchestrator", "repository": None, "local": True}
+    shown = {**entry, "relative_activity": "3h ago", "summary": "synthetic"}
+    focus = _focus(name="p", entry=shown, checkpoints=[name], checkpoint_head=text)
+    repository_doc = _repository_doc(
+        focus=focus, projects={"p": shown}, waiting=cli._waiting(repositories, repo_scope, True, [])  # pylint: disable=protected-access
+    )
+    queen_doc = _doc(projects={"p": shown}, waiting=cli._waiting(repositories, queen_scope, True, []))  # pylint: disable=protected-access
+    return repository_doc, queen_doc
+
+
+def _last_line(page: str) -> str:
+    return [line for line in plain(page).split("\n") if line.strip()][-1].strip()
+
+
+def test_a_you_row_in_the_checkpoint_is_never_called_nothing_by_the_page_the_glance_line_or_the_brief(
+    tmp_path, monkeypatch
+):
+    """MUTATION: let `_next_action_line` fall straight to "nothing is ready" and the page and the brief go red."""
+    from borg_core.link import arrival  # pylint: disable=import-outside-toplevel
+
+    repository_doc, queen_doc = _checkpoint_documents(tmp_path, monkeypatch, _YOU_CHECKPOINT)
+    assert [r["owner"] for r in queen_doc["waiting"]["rows"]] == ["YOU"], "the file reached the document as a YOU row"
+    pages = [plain(render.document(repository_doc)), plain(render.document(queen_doc))]
+    glance = render.glance_line(queen_doc, False)
+    brief = arrival.brief(repository_doc)
+    for surface in (*pages, glance or "", brief):
+        assert "nothing is ready" not in surface and "nothing waits on you" not in surface, surface
+    assert glance is not None and "Approve the invented budget" in glance
+    assert "Approve the invented budget" in _last_line(render.document(queen_doc))
+    next_line = next(line for line in brief.split("\n") if line.startswith(" next"))
+    assert "Approve the invented budget" in next_line and next_line.endswith("owner: yours")
+
+
+def test_a_checkpoint_with_only_a_next_session_item_gives_every_surface_that_item_and_an_owner(tmp_path, monkeypatch):
+    """Nothing WAITS on the reader here (the item is an agent's), so `nothing waits on you` is true and allowed;
+    `nothing is ready` is not, because the document holds a next item. MUTATION: drop `waiting.next` from the
+    document and the page's last line and the brief's next line both say `nothing is ready`."""
+    from borg_core.link import arrival  # pylint: disable=import-outside-toplevel
+
+    repository_doc, queen_doc = _checkpoint_documents(tmp_path, monkeypatch, _NEXT_ONLY_CHECKPOINT)
+    assert queen_doc["waiting"]["rows"] == [], "an AGENT item is not a YOU row"
+    assert queen_doc["waiting"]["next"]["owner"] == "AGENT"
+    pages = [render.document(repository_doc), render.document(queen_doc)]
+    glance = render.glance_line(queen_doc, False)
+    brief = arrival.brief(repository_doc)
+    for surface in (*(plain(page) for page in pages), glance or "", brief):
+        assert "nothing is ready" not in surface, surface
+    for page in pages:
+        assert "Build the synthetic widget" in _last_line(page)
+    next_line = next(line for line in brief.split("\n") if line.startswith(" next"))
+    assert "Build the synthetic widget" in next_line and next_line.endswith("owner: mine")
+    assert len(next_line) <= render.PAGE_COLUMNS
+
+
+def test_an_empty_checkpoint_still_says_nothing_is_ready_and_carries_no_owner(tmp_path, monkeypatch):
+    """The phrase stays legitimate when the document holds no YOU row and no next item."""
+    from borg_core.link import arrival  # pylint: disable=import-outside-toplevel
+
+    repository_doc, queen_doc = _checkpoint_documents(
+        tmp_path, monkeypatch, "tl;dr synthetic\n\n## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n\nnone\n"
+    )
+    assert queen_doc["waiting"]["next"] is None
+    assert _last_line(render.document(repository_doc)) == "next  nothing is ready  borg next"
+    brief_next = next(line for line in arrival.brief(repository_doc).split("\n") if line.startswith(" next"))
+    assert "nothing is ready" in brief_next and "owner:" not in brief_next

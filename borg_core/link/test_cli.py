@@ -1194,6 +1194,7 @@ def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
     assert [r["ref"] for r in waiting["rows"]] == [r["ref"] for r in rows if r["owner"] == "YOU"]
     assert len(waiting["rows"]) == 5
     assert waiting["hidden"] == hidden and hidden["overflow"] == 2 and hidden["agent"] == 2
+    assert hidden["unowned"] == 0
     assert waiting["hidden_lines"] == ["+2 more decisions", "+2 agent tasks"]
 
     page = cli.render.document({"projects": repositories, "grid": {"manifests": []}, "waiting": waiting}, full=True)

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from borg_core.nextpick import cli, shell
+from borg_core.nextpick import cli, core, shell
 
 REGISTRY = {
     "repositories": {
@@ -156,10 +156,10 @@ def test_rows_json_payload_has_you_and_agent_quiet_rows(state, monkeypatch, caps
     payload, _ = _json_run(monkeypatch, capsys, registry, {"a": [PR_ITEM]})
     assert set(payload) == {"rows", "rec", "suggestion", "quiet", "degraded", "hidden"}
     assert [(r["n"], r["project"], r["owner"]) for r in payload["rows"]] == [(1, "a", "YOU"), (2, "a", "YOU")]
-    assert payload["hidden"] == {"agent": 2, "stale": 0, "overflow": 0}
+    assert payload["hidden"] == {"agent": 2, "stale": 0, "overflow": 0, "unowned": 0}
     session, merge = payload["rows"]
     everything, _ = _json_run(monkeypatch, capsys, registry, {"a": [PR_ITEM]}, argv=("--rows", "--json", "--all"))
-    assert everything["hidden"] == {"agent": 0, "stale": 0, "overflow": 0}
+    assert everything["hidden"] == {"agent": 0, "stale": 0, "overflow": 0, "unowned": 0}
     assert [(r["n"], r["project"], r["owner"]) for r in everything["rows"]] == [
         (1, "a", "YOU"),
         (2, "a", "YOU"),
@@ -381,7 +381,7 @@ def test_rows_json_caps_dedupes_and_counts_stale(state, monkeypatch, capsys, tmp
     payload, _ = _json_run(monkeypatch, capsys, registry, items)
     assert [r["n"] for r in payload["rows"]] == [1, 2, 3, 4, 5]
     assert [r["ref"] for r in payload["rows"]] == ["o/r#1", "o/s#10", "o/s#11", "o/s#12", "o/s#13"]
-    assert payload["hidden"] == {"agent": 0, "stale": 1, "overflow": 4}
+    assert payload["hidden"] == {"agent": 0, "stale": 1, "overflow": 4, "unowned": 0}
 
 
 def test_chooser_screen_and_json_agree_and_all_lists_everything(state, monkeypatch, capsys, tmp_path):
@@ -392,7 +392,7 @@ def test_chooser_screen_and_json_agree_and_all_lists_everything(state, monkeypat
     assert lines[-1] == "names\t" + "\t".join(r["project"] for r in payload["rows"])
     assert "+4 more decisions" in lines and "+1 stale drafts" in lines
     full, _ = _json_run(monkeypatch, capsys, registry, items, argv=("--rows", "--json", "--all"))
-    assert len(full["rows"]) == 10 and full["hidden"] == {"agent": 0, "stale": 0, "overflow": 0}
+    assert len(full["rows"]) == 10 and full["hidden"] == {"agent": 0, "stale": 0, "overflow": 0, "unowned": 0}
     assert [r["n"] for r in full["rows"]] == list(range(1, 11))
     assert "o/r#2" in [r["ref"] for r in full["rows"]]
 
@@ -401,7 +401,7 @@ def test_chooser_screen_and_json_agree_and_all_lists_everything(state, monkeypat
 def test_nextpick_never_writes_the_glance_cache(state: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`borg link` is the glance cache's only writer (it alone sees manifest decisions); `--rows` must not touch it."""
     rows = [{"project": "a", "item": "", "next_step": "merge #9", "owner": "YOU", "ready": "", "ref": "o/a#9"}]
-    monkeypatch.setattr(cli, "item_rows", lambda *_a, **_k: (rows, [], None, {"agent": 0, "stale": 0, "overflow": 0}))
+    monkeypatch.setattr(cli, "item_rows", lambda *_a, **_k: (rows, [], None, {"agent": 0, "stale": 0, "overflow": 0, "unowned": 0}))
     cli.rows_json(REGISTRY["repositories"], False)
     assert not (state.parent / "next-glance").exists()
     assert shell.write_glance("x", 1) is True
@@ -509,7 +509,7 @@ def test_queen_rows_are_read_from_a_real_file_labeled_queen_and_ranked_last(tmp_
     ]
     assert [r["project"] for r in rows if r["project"] != "queen"] == ["p", "p"]
     assert rows[-2:] == queen and [r["n"] for r in rows] == [1, 2, 3, 4]
-    assert hidden == {"agent": 3, "stale": 0, "overflow": 0}
+    assert hidden == {"agent": 3, "stale": 0, "overflow": 0, "unowned": 0}
 
 
 def test_queen_rows_are_absent_unless_asked_for(tmp_path, monkeypatch):
@@ -553,3 +553,26 @@ def test_queen_owned_swallows_a_reader_failure(monkeypatch):
 
     monkeypatch.setattr(shell.link_shell, "read_latest_checkpoint", boom)
     assert shell.queen_owned() == {}
+
+
+def test_item_rows_with_next_reads_the_first_row_before_the_cap_from_a_real_file(tmp_path):
+    registry = {"repositories": {"p": _repo(tmp_path, "p", ("2026-10-01-0900.md", NEW_FORM))}}
+    rows, _degraded, hidden, first = cli.item_rows_with_next(registry["repositories"], True)
+    assert [r["owner"] for r in rows] == ["YOU", "YOU"]
+    assert hidden == {"agent": 2, "stale": 0, "overflow": 0, "unowned": 0}
+    assert first is not None and first["owner"] == "YOU" and first["project"] == "p"
+    no_wait = "## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n\n1. Go\n"
+    only_next = {"q": _repo(tmp_path, "q", ("2026-10-01-0900.md", no_wait))}
+    rows, _degraded, hidden, first = cli.item_rows_with_next(only_next, True)
+    assert rows == [] and hidden["agent"] == 1
+    assert first == {"project": "q", "next_step": "Go", "detail": "Go", "owner": "AGENT"}
+
+
+def test_unowned_pull_request_rows_are_counted_apart_from_agent_tasks(tmp_path):
+    registry = {"repositories": {"p": _repo(tmp_path, "p")}}
+    waiting = {**PR_ITEM, "ref": "o/r#5", "review_decision": "REVIEW_REQUIRED"}
+    rows, _quiet, _degraded, hidden = cli.item_rows(
+        registry["repositories"], True, swept=({"p": [waiting]}, None), queen=False
+    )
+    assert rows == [] and hidden["unowned"] == 1 and hidden["agent"] == 0
+    assert core.hidden_lines(hidden) == ["+1 unowned"]

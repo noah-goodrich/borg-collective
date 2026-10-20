@@ -604,34 +604,63 @@ def _you_rows(count):
 def test_cap_rows_shows_at_most_five_you_rows_in_existing_order():
     shown, hidden = core.cap_rows(_you_rows(8))
     assert [r["ref"] for r in shown] == [f"o/r#{n}" for n in range(5)]
-    assert hidden == {"agent": 0, "stale": 0, "overflow": 3}
+    assert hidden == {"agent": 0, "stale": 0, "overflow": 3, "unowned": 0}
 
 
 def test_cap_rows_collapses_agent_and_unowned_rows_into_a_count():
     work = [{"owner": "AGENT", "stale": False}, {"owner": "—", "stale": False}, *_you_rows(2)]
     shown, hidden = core.cap_rows(work)
     assert [r["owner"] for r in shown] == ["YOU", "YOU"]
-    assert hidden == {"agent": 2, "stale": 0, "overflow": 0}
+    assert hidden == {"agent": 1, "stale": 0, "overflow": 0, "unowned": 1}
+
+
+def test_cap_rows_counts_a_blank_owner_as_unowned_and_a_stale_draft_as_stale_only():
+    work = [{"owner": "", "stale": False}, {"owner": "—", "stale": True}, {"owner": "AGENT", "stale": False}]
+    shown, hidden = core.cap_rows(work)
+    assert shown == [] and hidden == {"agent": 1, "stale": 1, "overflow": 0, "unowned": 1}
 
 
 def test_cap_rows_all_returns_everything_uncounted():
     work = [{"owner": "AGENT", "stale": True}, *_you_rows(7)]
     shown, hidden = core.cap_rows(work, show_all=True)
-    assert shown == work and hidden == {"agent": 0, "stale": 0, "overflow": 0}
+    assert shown == work and hidden == {"agent": 0, "stale": 0, "overflow": 0, "unowned": 0}
 
 
 def test_hidden_lines_fixed_order_and_no_zeros():
+    assert core.hidden_lines({"agent": 4, "stale": 2, "overflow": 1, "unowned": 3}) == [
+        "+1 more decisions",
+        "+4 agent tasks",
+        "+3 unowned",
+        "+2 stale drafts",
+    ]
+    assert core.hidden_lines({"agent": 0, "stale": 0, "overflow": 0, "unowned": 0}) == []
     assert core.hidden_lines({"agent": 4, "stale": 2, "overflow": 1}) == [
         "+1 more decisions",
         "+4 agent tasks",
         "+2 stale drafts",
     ]
-    assert core.hidden_lines({"agent": 0, "stale": 0, "overflow": 0}) == []
+
+
+def test_first_next_is_the_first_row_that_is_not_a_stale_draft_with_its_full_text():
+    work = [
+        {"project": "p", "next_step": "old draft", "owner": "AGENT", "stale": True},
+        {"project": "p", "next_step": "cut step", "detail": "the whole step text", "owner": "—", "stale": False},
+        {"project": "p", "next_step": "later", "owner": "AGENT", "stale": False},
+    ]
+    assert core.first_next(work) == {
+        "project": "p",
+        "next_step": "cut step",
+        "detail": "the whole step text",
+        "owner": "—",
+    }
+    assert core.first_next([{"project": "p", "next_step": "x", "owner": "AGENT"}])["detail"] == "x"
+    assert core.first_next([{"owner": "AGENT", "stale": True}]) is None
+    assert core.first_next([]) is None
 
 
 def test_render_chooser_prints_the_summary_lines_before_the_rule():
     rows = [{"n": 1, "project": "a", "item": "x", "next_step": "merge #1", "owner": "YOU", "ready": "✔ now"}]
-    lines = core.render_chooser(rows, suggestion=None, hidden={"agent": 3, "stale": 1, "overflow": 0})
+    lines = core.render_chooser(rows, suggestion=None, hidden={"agent": 3, "stale": 1, "overflow": 0, "unowned": 0})
     assert lines[2 + 1 + 1 : 2 + 1 + 3] == ["+3 agent tasks", "+1 stale drafts"]
 
 
