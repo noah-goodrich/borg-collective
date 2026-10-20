@@ -2,7 +2,7 @@
 
 Reference moved verbatim from the top-level CLAUDE.md.
 
-## Current State (v2, release v0.9.10)
+## Current State (v2, release v0.9.11)
 
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
@@ -43,6 +43,11 @@ Reference moved verbatim from the top-level CLAUDE.md.
   opt-in Claude Code status line (`--statusline=off` removes it); a tmux `status-right` string is in
   `docs/agents/commands.md`; `/borg-next` shows preview cards (additive `card` field in `--json`). `borg next` no
   longer marks a PR stacked on an open PR as mergeable now
+- Arrival brief (v0.9.11): `hooks/borg-arrival-brief.sh` is a SessionStart hook that prints a four-line brief (last
+  time, next, watch out, since then) as a visible message when a session starts or resumes in a repository; the Queen
+  session gets one line, the same as `borg next --line`; a repository session gets the directory name as its title,
+  only when it has none. It is built from the same document as `borg link`, plus one additive `--json` key,
+  `focus.since.head_moves`. Directive: `docs/plans/directives/2026-10-18-arrival-brief-on-sessionstart.md`
 - `borg-sync` (lib/borg-sync.zsh): mtime-based file sync helpers shared by the CLI and hooks
 - Auto-memory read instrumentation: `borg-memory-read-log.sh` (PostToolUse/Read) logs every read
   of a Claude Code project-memory file to `$BORG_DIR/memory-hits.log`; `bin/memory-hits-report`
