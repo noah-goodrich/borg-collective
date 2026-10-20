@@ -303,8 +303,9 @@ _log_count() {
     _write_registry ", \"has-cp\": {\"path\":\"$proj\",\"status\":\"idle\",\"last_activity\":\"2026-10-05T08:00:00Z\"}"
     run bash -c "zsh \"$BORG\" next --rows --json --local --all 2>/dev/null"
     [ "$status" -eq 0 ]
-    printf "%s" "$output" | jq -e "(.rows[] | select(.project == \"has-cp\")) as \$r
-        | \$r.next_step == \"Ship the chooser rows\" and \$r.status == \"idle\" and (\$r.age | length) > 0
+    printf "%s" "$output" | jq -e "([.rows[] | select(.project == \"has-cp\")]) as \$rs
+        | (\$rs | map(.next_step)) == [\"Ship the chooser rows\", \"Later\"] and (\$rs | map(.owner) | unique) == [\"AGENT\"]
+        and \$rs[0].status == \"idle\" and (\$rs[0].age | length) > 0
         and (.quiet | index(\"has-cp\")) == null and (.quiet | index(\"never\")) != null"
 }
 

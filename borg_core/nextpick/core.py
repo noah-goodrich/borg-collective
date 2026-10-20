@@ -162,42 +162,11 @@ def _repository_ready(path: str, manifests: list[dict[str, Any]]) -> dict[str, s
     return dict(_BLANK)
 
 
-_NEXT_HEADING = re.compile(r"^##\s*5\.?\s*next\s+session\b", re.IGNORECASE)
-_ANY_H2 = re.compile(r"^##\s")
-_LIST_MARKER = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 NEXT_STEP_MAX = 80
 
 
 def _truncate(text: str, limit: int = NEXT_STEP_MAX) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
-
-
-def checkpoint_next_step(text: str) -> str:
-    """The first item of a checkpoint's `## 5. Next Session` section, or "" when there is none.
-
-    The first block after the heading: a list item (marker or number stripped, wrapped continuation lines joined)
-    or the first prose paragraph. Whitespace is collapsed and the result truncated to `NEXT_STEP_MAX` with an
-    ellipsis. Text before the heading (a tl;dr preamble) is never inspected.
-    """
-    lines = text.splitlines()
-    for index, line in enumerate(lines):
-        if _NEXT_HEADING.match(line.strip()):
-            body = lines[index + 1 :]
-            break
-    else:
-        return ""
-    block: list[str] = []
-    for line in body:
-        if _ANY_H2.match(line):
-            break
-        if not line.strip():
-            if block:
-                break
-            continue
-        if block and _LIST_MARKER.match(line):
-            break
-        block.append(_LIST_MARKER.sub("", line, count=1))
-    return _truncate(" ".join(" ".join(block).split()))
 
 
 def chooser_rows(
@@ -411,11 +380,43 @@ def _plan_rows(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
     ]
 
 
+def _checkpoint_row(item: dict[str, str]) -> dict[str, Any]:
+    """The row one checkpoint item earns: `next_step` is the text cut to NEXT_STEP_MAX, `detail` is all of it."""
+    return {
+        "item": "",
+        "next_step": _truncate(item["text"]),
+        "detail": item["text"],
+        "owner": item["owner"],
+        "ready": "",
+        "ref": None,
+    }
+
+
+def _newer(checkpoint_mtime: float | None, plan_mtime: float | None) -> bool:
+    """True when both mtimes are known and the checkpoint was written after the plan."""
+    return checkpoint_mtime is not None and plan_mtime is not None and checkpoint_mtime > plan_mtime
+
+
+def _checkpoint_rows(checkpoint: dict[str, Any], owner: str) -> list[dict[str, Any]]:
+    """The rows of one repository's checkpoint items that `owner` owns."""
+    return [_checkpoint_row(it) for it in checkpoint.get("items") or [] if it.get("owner") == owner]
+
+
+def _fallback_rows(checkpoint: dict[str, Any], plan: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """For a repository with no PR row: the plan row, else the checkpoint's AGENT items.
+
+    A checkpoint with items that is newer than the plan (`_newer`) replaces the plan row.
+    """
+    if checkpoint.get("items") and _newer(checkpoint.get("mtime"), (plan or {}).get("mtime")):
+        plan = None
+    return _plan_rows(plan) or _checkpoint_rows(checkpoint, "AGENT")
+
+
 def work_items(
     ranked: list[dict[str, Any]],
     recon_items_by_project: dict[str, list[dict[str, Any]]],
     plans_by_repository: dict[str, dict[str, Any]],
-    checkpoint_steps: dict[str, str],
+    checkpoints: dict[str, dict[str, Any]],
     now_epoch: int = 0,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """One row per actionable item, in ranked repository order, plus the `quiet` repository names.
@@ -423,7 +424,15 @@ def work_items(
     Row: `{project, item, next_step, owner, ready, ref, age}` (a waiting-session row also carries
     `waiting_reason`). Within a repository: waiting session; open PRs (YOU merges first, then AGENT rows by PR
     number); the active plan's first unchecked criterion when no PR row exists; else the checkpoint next step.
-    `plans_by_repository[p]` is `{"name": str, "text": <PROJECT_PLAN.md text>}`, parsed by planstate.parse_criteria.
+    `plans_by_repository[p]` is `{"name": str, "text": <PROJECT_PLAN.md text>, "mtime": number | None}`, parsed by
+    planstate.parse_criteria.
+
+    `checkpoints[p]` is `{"items": [{"text", "owner"}], "mtime": number | None}`, the items being what
+    `recon.core.checkpoint_owned_items` returns. Order inside one repository: the waiting session, the YOU merge
+    rows, the checkpoint's YOU wait items, the AGENT PR rows, then the plan row or, when neither a PR row nor a
+    surviving plan row exists, the checkpoint's AGENT Next Session items. The plan row does not survive a checkpoint
+    whose mtime is later than the plan's (both numbers known). Checkpoint rows also carry `detail`, the item's full
+    text; `next_step` is that text cut to NEXT_STEP_MAX.
     """
     rows: list[dict[str, Any]] = []
     quiet: list[str] = []
@@ -448,12 +457,12 @@ def work_items(
             (_pr_row(it, parents.get(str(it.get("ref") or ""))) for it in prs),
             key=lambda r: (r["owner"] != "YOU", _pr_number({"ref": r["ref"]})),
         )
-        mine.extend(pr_rows)
+        checkpoint = checkpoints.get(repository) or {}
+        mine.extend(r for r in pr_rows if r["owner"] == "YOU")
+        mine.extend(_checkpoint_rows(checkpoint, "YOU"))
+        mine.extend(r for r in pr_rows if r["owner"] != "YOU")
         if not pr_rows:
-            mine.extend(_plan_rows(plans_by_repository.get(repository)))
-        step = checkpoint_steps.get(repository, "")
-        if not mine and step:
-            mine.append({"item": "", "next_step": step, "owner": "—", "ready": "", "ref": None})
+            mine.extend(_fallback_rows(checkpoint, plans_by_repository.get(repository)))
         if not mine:
             quiet.append(repository)
         rows.extend({"project": repository, **row, "age": age} for row in mine)
@@ -481,7 +490,7 @@ def _dedupe_repo_groups(
     for row in rows:
         repo = repo_of.get(row["project"], "")
         if repo and row.get("item") != "session":
-            identity = row.get("ref") or (row.get("item"), row.get("next_step"))
+            identity = row.get("ref") or (row.get("item"), row.get("next_step"), row.get("detail"))
             key = (repo, str(identity))
             if key in seen:
                 continue
@@ -538,6 +547,7 @@ def numbered_rows(work: list[dict[str, Any]], ranked: list[dict[str, Any]]) -> l
             "age": row.get("age", ""),
             "status": status.get(row["project"], ""),
             "waiting_reason": row.get("waiting_reason", ""),
+            **({"detail": row["detail"]} if "detail" in row else {}),
         }
         for index, row in enumerate(work)
     ]

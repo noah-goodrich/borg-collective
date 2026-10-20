@@ -347,29 +347,6 @@ def test_split_quiet_partitions_idle_blank_rows_in_rank_order():
     assert quiet == ["b", "e"]
 
 
-def test_checkpoint_next_step_numbered_list():
-    text = "## 5. Next Session\n\n1. First  thing\n   wrapped\n2. Second\n"
-    assert core.checkpoint_next_step(text) == "First thing wrapped"
-
-
-def test_checkpoint_next_step_bullets_and_prose():
-    assert core.checkpoint_next_step("## 5. Next Session\n\n- [ ] do it\n- more\n") == "[ ] do it"
-    prose = "## 5. Next Session\nJust prose\nstill prose\n\nnext para\n"
-    assert core.checkpoint_next_step(prose) == "Just prose still prose"
-
-
-def test_checkpoint_next_step_missing_section_or_empty():
-    assert core.checkpoint_next_step("## 1. Goal\n\nx\n") == ""
-    assert core.checkpoint_next_step("") == ""
-    assert core.checkpoint_next_step("## 5. Next Session\n\n## Manifest Row\nx\n") == ""
-
-
-def test_checkpoint_next_step_ignores_tldr_preamble_and_truncates():
-    text = "tl;dr: 5. Next Session is later\n\n## 1. Goal\n\nx\n\n## 5. Next Session\n\n1. " + "w" * 120 + "\n"
-    step = core.checkpoint_next_step(text)
-    assert len(step) == 80 and step.endswith("…") and step.startswith("w")
-
-
 def _pr(num, title="feat(next): add the thing", **kw):
     base = {
         "ref": f"o/r#{num}",
@@ -507,10 +484,10 @@ PLAN = {"name": "next-chooser", "text": "- [x] **AC1 — done.** x\n- [ ] **AC5 
 
 
 def test_work_items_plan_row_and_suppression():
-    rows, _ = core.work_items([_rank("p")], {}, {"p": PLAN}, {"p": "step"})
+    rows, _ = core.work_items([_rank("p")], {}, {"p": PLAN}, {})
     assert len(rows) == 1
     assert (rows[0]["item"], rows[0]["owner"], rows[0]["ready"]) == ("next-chooser", "AGENT", "○")
-    assert rows[0]["next_step"].startswith("AC5 The sweep sees") and len(rows[0]["next_step"]) <= 22
+    assert rows[0]["next_step"].startswith(PLAN_STEP) and len(rows[0]["next_step"]) <= 22
     rows, _ = core.work_items([_rank("p")], {"p": [_pr(1)]}, {"p": PLAN}, {})
     assert [r["next_step"] for r in rows] == ["merge #1"]
     done = {"name": "x", "text": "- [x] **AC1 — done.**\n"}
@@ -518,12 +495,70 @@ def test_work_items_plan_row_and_suppression():
     assert rows == [] and quiet == ["p"]
 
 
+PLAN_STEP = "AC5 The sweep sees ev…"
+
+
+def _cp(*items, mtime=None):
+    return {"items": [{"text": t, "owner": o} for o, t in items], "mtime": mtime}
+
+
 def test_work_items_checkpoint_fallback_and_quiet_and_order():
     ranked = [_rank("a"), _rank("b"), _rank("c")]
-    rows, quiet = core.work_items(ranked, {"c": [_pr(1)]}, {}, {"a": "do the thing"})
+    rows, quiet = core.work_items(ranked, {"c": [_pr(1)]}, {}, {"a": _cp(("AGENT", "do the thing"))})
     assert quiet == ["b"]
     assert [r["project"] for r in rows] == ["a", "c"]
-    assert (rows[0]["item"], rows[0]["next_step"], rows[0]["owner"], rows[0]["ready"]) == ("", "do the thing", "—", "")
+    assert (rows[0]["item"], rows[0]["next_step"], rows[0]["owner"], rows[0]["ready"]) == ("", "do the thing", "AGENT", "")
+    assert rows[0]["detail"] == "do the thing" and rows[0]["ref"] is None
+
+
+def test_work_items_checkpoint_row_cuts_next_step_and_keeps_detail_whole():
+    text = "w" * 120
+    rows, _ = core.work_items([_rank("p")], {}, {}, {"p": _cp(("YOU", text))})
+    assert len(rows[0]["next_step"]) == core.NEXT_STEP_MAX and rows[0]["next_step"].endswith("…")
+    assert rows[0]["detail"] == text and rows[0]["owner"] == "YOU"
+
+
+def test_work_items_row_order_inside_one_repository():
+    waiting = {**_rank("p"), "status": "waiting", "waiting_reason": "needs input"}
+    prs = [_pr(3, mergeable="CONFLICTING"), _pr(2)]
+    checkpoint = _cp(("AGENT", "next one"), ("YOU", "wait one"), ("YOU", "wait two"))
+    rows, _ = core.work_items([waiting], {"p": prs}, {"p": PLAN}, {"p": checkpoint})
+    assert [(r["owner"], r["next_step"]) for r in rows] == [
+        ("YOU", "reply to session"),
+        ("YOU", "merge #2"),
+        ("YOU", "wait one"),
+        ("YOU", "wait two"),
+        ("AGENT", "resolve conflicts #3"),
+    ]
+
+
+def test_work_items_next_session_rows_follow_the_plan_row_or_stand_in_for_it():
+    checkpoint = _cp(("YOU", "wait"), ("AGENT", "first"), ("AGENT", "second"))
+    rows, _ = core.work_items([_rank("p")], {}, {"p": PLAN}, {"p": checkpoint})
+    assert [(r["owner"], r["next_step"]) for r in rows] == [("YOU", "wait"), ("AGENT", PLAN_STEP)]
+    rows, _ = core.work_items([_rank("p")], {}, {}, {"p": checkpoint})
+    assert [(r["owner"], r["next_step"]) for r in rows] == [("YOU", "wait"), ("AGENT", "first"), ("AGENT", "second")]
+    rows, _ = core.work_items([_rank("p")], {"p": [_pr(1)]}, {}, {"p": checkpoint})
+    assert [(r["owner"], r["next_step"]) for r in rows] == [("YOU", "merge #1"), ("YOU", "wait")]
+
+
+def test_work_items_a_checkpoint_newer_than_the_plan_replaces_the_plan_row():
+    plan = {**PLAN, "mtime": 100.0}
+    newer = _cp(("AGENT", "from the checkpoint"), mtime=200.0)
+    older = _cp(("AGENT", "from the checkpoint"), mtime=50.0)
+    rows, _ = core.work_items([_rank("p")], {}, {"p": plan}, {"p": newer})
+    assert [r["next_step"] for r in rows] == ["from the checkpoint"]
+    rows, _ = core.work_items([_rank("p")], {}, {"p": plan}, {"p": older})
+    assert [r["next_step"] for r in rows] == [PLAN_STEP]
+
+
+def test_work_items_freshness_needs_both_mtimes_and_a_tie_keeps_the_plan():
+    checkpoint = _cp(("AGENT", "from the checkpoint"), mtime=100.0)
+    for plan in ({**PLAN, "mtime": None}, PLAN, {**PLAN, "mtime": 100.0}):
+        rows, _ = core.work_items([_rank("p")], {}, {"p": plan}, {"p": checkpoint})
+        assert [r["next_step"] for r in rows] == [PLAN_STEP]
+    rows, _ = core.work_items([_rank("p")], {}, {"p": {**PLAN, "mtime": 1.0}}, {"p": {**checkpoint, "mtime": None}})
+    assert [r["next_step"] for r in rows] == [PLAN_STEP]
 
 
 def test_short_title_strips_prefix_and_truncates():

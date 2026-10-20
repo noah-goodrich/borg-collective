@@ -11,7 +11,6 @@ from typing import Any
 from borg_core import paths, retention
 from borg_core.link import core as link_core
 from borg_core.link import shell as link_shell
-from borg_core.nextpick import core
 from borg_core.planstate import shell as planstate_shell
 from borg_core.recon import core as recon_core
 
@@ -78,9 +77,12 @@ def plan_name(text: str, fallback: str) -> str:
     return fallback
 
 
-def read_plans(repositories: dict[str, Any], names: list[str]) -> dict[str, dict[str, str]]:
-    """`{repository: {"name", "text"}}` for each repository with a PROJECT_PLAN.md at its root or under docs/plans/."""
-    found: dict[str, dict[str, str]] = {}
+def read_plans(repositories: dict[str, Any], names: list[str]) -> dict[str, dict[str, Any]]:
+    """`{repository: {"name", "text", "mtime"}}` for each repository with a PROJECT_PLAN.md at its root or docs/plans/.
+
+    `mtime` is the plan file's modification time in seconds, or None when it cannot be stat-ed.
+    """
+    found: dict[str, dict[str, Any]] = {}
     for name in names:
         path = str((repositories.get(name) or {}).get("path") or "")
         if not path or path == "null":
@@ -90,31 +92,33 @@ def read_plans(repositories: dict[str, Any], names: list[str]) -> dict[str, dict
                 text = candidate.read_text(encoding="utf-8")
             except OSError:
                 continue
-            found[name] = {"name": plan_name(text, name), "text": text}
+            try:
+                mtime: float | None = candidate.stat().st_mtime
+            except OSError:
+                mtime = None
+            found[name] = {"name": plan_name(text, name), "text": text, "mtime": mtime}
             break
     return found
 
 
-_WHOLE_CHECKPOINT_LINES = 1_000_000
+def checkpoint_owned(repositories: dict[str, Any], names: list[str]) -> dict[str, dict[str, Any]]:
+    """`{repository: {"items": owned items, "mtime": float | None}}` of its newest checkpoint. Fail-open.
 
-
-def checkpoint_next_steps(repositories: dict[str, Any], names: list[str]) -> dict[str, str]:
-    """`{repository: first next-session item of its latest checkpoint}` for the names that have one. Fail-open.
-
-    Resolves the checkpoint through `link.shell` (repo-group union read, name-sorted, content-deduped), so the
-    "latest checkpoint" is the very document `borg link` shows. Any error for a repository omits that repository.
+    Reads the WHOLE checkpoint (Blockers sits past the first 20 lines) through `link.shell` (repo-group union read,
+    newest by name, content-deduped), so the "newest checkpoint" is the very document `borg link` shows. A repository
+    whose checkpoint yields no items, or cannot be read, is omitted.
     """
-    found: dict[str, str] = {}
+    found: dict[str, dict[str, Any]] = {}
     for name in names:
         try:
             sources = link_core.repo_sources(name, repositories)
-            text = link_shell.read_latest_checkpoint_head(sources, _WHOLE_CHECKPOINT_LINES)
-            step = core.checkpoint_next_step(text)
+            text, mtime = link_shell.read_latest_checkpoint(sources)
+            items = recon_core.checkpoint_owned_items(text)
         # JUSTIFICATION: a checkpoint that cannot be read must leave the cell blank, never fail the chooser.
         except Exception:  # pylint: disable=broad-exception-caught
             continue
-        if step:
-            found[name] = step
+        if items:
+            found[name] = {"items": items, "mtime": mtime}
     return found
 
 

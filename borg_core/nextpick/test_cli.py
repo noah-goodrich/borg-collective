@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -156,7 +157,7 @@ def test_rows_json_payload_has_you_and_agent_quiet_rows(state, monkeypatch, caps
     assert [(r["n"], r["project"], r["owner"]) for r in everything["rows"]] == [
         (1, "a", "YOU"),
         (2, "a", "YOU"),
-        (3, "c", "—"),
+        (3, "c", "AGENT"),
         (4, "b", "AGENT"),
     ]
     step, plan = everything["rows"][2:]
@@ -325,27 +326,33 @@ def _checkpointed_registry(tmp_path: Path) -> dict:
     }
 
 
-def test_checkpoint_next_steps_reads_the_latest_checkpoint(tmp_path):
+def test_checkpoint_owned_reads_the_whole_latest_checkpoint(tmp_path):
     reg = _checkpointed_registry(tmp_path)
-    assert shell.checkpoint_next_steps(reg["repositories"], ["p", "q"]) == {"p": "ship the chooser"}
+    got = shell.checkpoint_owned(reg["repositories"], ["p", "q"])
+    assert list(got) == ["p"]
+    assert got["p"]["items"] == [
+        {"text": "ship the chooser", "owner": "AGENT"},
+        {"text": "two", "owner": "AGENT"},
+    ]
+    assert got["p"]["mtime"] == (tmp_path / "proj" / ".borg" / "checkpoints" / "2026-10-02-0900.md").stat().st_mtime
 
 
-def test_checkpoint_next_steps_is_fail_open(monkeypatch):
+def test_checkpoint_owned_is_fail_open(monkeypatch):
     def boom(*_a, **_k):
         raise OSError("denied")
 
-    monkeypatch.setattr(shell.link_shell, "read_latest_checkpoint_head", boom)
-    assert shell.checkpoint_next_steps({"p": {"path": "/x"}}, ["p"]) == {}
+    monkeypatch.setattr(shell.link_shell, "read_latest_checkpoint", boom)
+    assert shell.checkpoint_owned({"p": {"path": "/x"}}, ["p"]) == {}
 
 
 def test_rows_json_checkpoint_fallback_keeps_a_row_out_of_quiet(state, monkeypatch, capsys, tmp_path):
     reg = _checkpointed_registry(tmp_path)
     payload, _ = _json_run(monkeypatch, capsys, reg, argv=("--rows", "--json", "--all"))
-    assert [r["project"] for r in payload["rows"]] == ["p"]
-    assert payload["rows"][0]["next_step"] == "ship the chooser"
+    assert [r["project"] for r in payload["rows"]] == ["p", "p"]
+    assert [r["next_step"] for r in payload["rows"]] == ["ship the chooser", "two"]
     assert payload["quiet"] == ["q"]
     capped, _ = _json_run(monkeypatch, capsys, reg)
-    assert capped["rows"] == [] and capped["hidden"]["agent"] == 1 and capped["quiet"] == ["q"]
+    assert capped["rows"] == [] and capped["hidden"]["agent"] == 2 and capped["quiet"] == ["q"]
 
 
 def _crowded(tmp_path: Path, count: int = 8) -> tuple[dict, dict]:
@@ -392,3 +399,76 @@ def test_nextpick_never_writes_the_glance_cache(state: Path, monkeypatch: pytest
     cli.rows_json(REGISTRY["repositories"], False)
     assert not (state.parent / "next-glance").exists()
     assert shell.write_glance("x", 1) is True
+
+
+NEW_FORM = (
+    "tl;dr nothing\n\n" + "## 1. Goal\n\n" + "filler\n" * 25 + "\n## 4. Blockers\n\n"
+    "Waits on you:\n- **Rotate the key.** Only the owner can.\n- Pick a name\n  for the thing\n\n"
+    "## 5. Next Session\n\n1. **Ship it.** Then verify.\n   - sub one\n2. Tidy up\n"
+)
+LEGACY_FORM = "## 4. Blockers\n\nNo blockers. These wait on Pat:\n\n- Approve the spend\n\n## 5. Next Session\n\n1. Go\n"
+
+
+def _repo(tmp_path: Path, name: str, *checkpoints: tuple[str, str]) -> dict:
+    store = tmp_path / name / ".borg" / "checkpoints"
+    store.mkdir(parents=True)
+    for filename, text in checkpoints:
+        (store / filename).write_text(text)
+    return {"status": "idle", "last_activity": "2026-10-01", "path": str(tmp_path / name)}
+
+
+def _item_rows(registry: dict) -> tuple[list[dict], list[str]]:
+    rows, quiet, _degraded, _hidden = cli.item_rows(registry["repositories"], True, show_all=True)
+    return rows, quiet
+
+
+def test_item_rows_reads_wait_items_past_line_20_from_real_checkpoint_files(tmp_path):
+    registry = {"repositories": {"p": _repo(tmp_path, "p", ("2026-10-01-0900.md", NEW_FORM))}}
+    rows, quiet = _item_rows(registry)
+    assert quiet == []
+    assert [(r["owner"], r["detail"]) for r in rows] == [
+        ("YOU", "**Rotate the key.** Only the owner can."),
+        ("YOU", "Pick a name for the thing"),
+        ("AGENT", "**Ship it.** Then verify. - sub one"),
+        ("AGENT", "Tidy up"),
+    ]
+    assert all(r["item"] == "" and r["ready"] == "" and r["ref"] is None for r in rows)
+
+
+def test_item_rows_legacy_form_and_no_blockers_prose(tmp_path):
+    registry = {
+        "repositories": {
+            "legacy": _repo(tmp_path, "legacy", ("2026-10-01-0900.md", LEGACY_FORM)),
+            "none": _repo(tmp_path, "none", ("2026-10-01-0900.md", "## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n")),
+        }
+    }
+    rows, quiet = _item_rows(registry)
+    assert [(r["project"], r["owner"], r["next_step"]) for r in rows] == [
+        ("legacy", "YOU", "Approve the spend"),
+        ("legacy", "AGENT", "Go"),
+    ]
+    assert quiet == ["none"]
+
+
+def test_item_rows_use_the_newest_checkpoint_by_name_not_by_mtime(tmp_path):
+    older_name_newer_file = ("2026-10-01-0900.md", "## 5. Next Session\n\n1. old step\n")
+    registry = {"repositories": {"p": _repo(tmp_path, "p", ("2026-10-02-0900.md", LEGACY_FORM), older_name_newer_file)}}
+    rows, _ = _item_rows(registry)
+    assert [r["detail"] for r in rows] == ["Approve the spend", "Go"]
+
+
+def _age(path: Path, seconds: int) -> None:
+    stat = path.stat()
+    os.utime(path, (stat.st_atime + seconds, stat.st_mtime + seconds))
+
+
+@pytest.mark.parametrize("checkpoint_is_newer", [True, False])
+def test_item_rows_a_newer_checkpoint_beats_the_plan(tmp_path, checkpoint_is_newer):
+    entry = _repo(tmp_path, "p", ("2026-10-01-0900.md", "## 5. Next Session\n\n1. from the checkpoint\n"))
+    plan = tmp_path / "p" / "PROJECT_PLAN.md"
+    plan.write_text(PLAN)
+    _age(tmp_path / "p" / ".borg" / "checkpoints" / "2026-10-01-0900.md", 100 if checkpoint_is_newer else -100)
+    rows, _ = _item_rows({"repositories": {"p": entry}})
+    expected = ["from the checkpoint"] if checkpoint_is_newer else [rows[0]["next_step"]]
+    assert [r["next_step"] for r in rows] == expected
+    assert (rows[0]["item"] == "") == checkpoint_is_newer

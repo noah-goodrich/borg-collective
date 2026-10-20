@@ -286,6 +286,85 @@ def extract_checkpoint_blockers(checkpoint_text: str) -> str:
     return "\n".join(lines)
 
 
+_NEXT_SESSION_HEADING = re.compile(r"^##\s*5\.?\s*next\s+session\b", re.IGNORECASE)
+_BLOCKERS_HEADING = re.compile(r"^##\s*4\.?\s*blockers\b", re.IGNORECASE)
+_ANY_H2 = re.compile(r"^##\s")
+_TOP_LEVEL_ITEM = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
+_WAIT_LEAD_IN = re.compile(
+    r"(?:^|[.!?]\s+)\**\s*(?:waits\s+on\s+you|these\s+wait\s+on\s+[^:]+?)\s*:\**\s*$", re.IGNORECASE
+)
+
+
+def _section_lines(text: str, heading: re.Pattern[str]) -> list[str]:
+    """The lines between the first line matching `heading` and the next `## ` heading ([] when there is none)."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if heading.match(line.strip()):
+            body: list[str] = []
+            for after in lines[index + 1 :]:
+                if _ANY_H2.match(after):
+                    break
+                body.append(after)
+            return body
+    return []
+
+
+def _collect_items(lines: list[str], start: int, stop_on_prose: bool) -> tuple[list[str], int]:
+    """Top-level list items from `lines[start:]` as `(item texts, index where the scan stopped)`.
+
+    An item is its first line (marker stripped) plus the indented lines that follow it, whitespace collapsed. Blank
+    lines are skipped. A non-blank, non-indented, non-list line ends the current item; with `stop_on_prose` it also
+    ends the scan (and is NOT consumed), otherwise the scan goes on to the next list item.
+    """
+    items: list[list[str]] = []
+    current: list[str] | None = None
+    index = start
+    while index < len(lines):
+        line = lines[index]
+        if not line.strip():
+            index += 1
+            continue
+        if _TOP_LEVEL_ITEM.match(line):
+            if current is not None:
+                items.append(current)
+            current = [_TOP_LEVEL_ITEM.sub("", line, count=1)]
+        elif line[0] in " \t":
+            if current is not None:
+                current.append(line)
+        else:
+            if stop_on_prose:
+                break
+            if current is not None:
+                items.append(current)
+                current = None
+        index += 1
+    if current is not None:
+        items.append(current)
+    return [text for text in (" ".join(" ".join(parts).split()) for parts in items) if text], index
+
+
+def checkpoint_owned_items(text: str) -> list[dict[str, str]]:
+    """The checkpoint's owned next items as `{"text", "owner"}`: `YOU` for waits, `AGENT` for Next Session.
+
+    YOU items are the top-level list items that follow a whole-line `Waits on you:` or `These wait on <name>:`
+    lead-in (case-insensitive) inside `## 4. Blockers`; `Waits on you: none`, `No blockers.` and any other prose
+    yield nothing. AGENT items are every top-level list item of `## 5. Next Session`. Item text keeps its markdown,
+    collapses whitespace and is never truncated. Pure: text in, dicts out.
+    """
+    owned: list[dict[str, str]] = []
+    blockers = _section_lines(text, _BLOCKERS_HEADING)
+    index = 0
+    while index < len(blockers):
+        if _WAIT_LEAD_IN.search(blockers[index].strip()):
+            found, index = _collect_items(blockers, index + 1, stop_on_prose=True)
+            owned.extend({"text": item, "owner": "YOU"} for item in found)
+        else:
+            index += 1
+    found, _ = _collect_items(_section_lines(text, _NEXT_SESSION_HEADING), 0, stop_on_prose=False)
+    owned.extend({"text": item, "owner": "AGENT"} for item in found)
+    return owned
+
+
 def repository_contradictions(repository: str, blockers_text: str, items: list[dict]) -> list[dict]:
     """Detect stale-blocker contradictions for one repository.
 

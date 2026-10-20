@@ -504,25 +504,27 @@ def read_checkpoints(sources: list[tuple[str, str]], limit: int = 3) -> list[str
     return core.label_checkpoints(window, limit)
 
 
-def read_latest_checkpoint_head(sources: list[tuple[str, str]], lines: int = 20) -> str:
-    """The first `lines` lines of the group's newest checkpoint, mirroring `head -20 "${cp_files[1]}"`.
+def read_latest_checkpoint(sources: list[tuple[str, str]]) -> tuple[str, float | None]:
+    """`(whole body, mtime)` of the group's newest checkpoint; `("", None)` when there is none.
 
-    "" when there is no checkpoint. The trailing newline behavior follows `head`: the joined lines
-    carry no trailing newline of their own.
-
-    RESOLVES THE WINNER'S OWN DIRECTORY, which is the half a union read is easy to get wrong. The
-    previous version derived the filename from `read_checkpoints` and then opened it under the
-    repository path it was handed. Once the list can span stores that becomes a genuine mismatch -- the
-    name from one worktree, the body from another -- so the ordering is consumed here as
-    `(filename, repository)` pairs and the repository is mapped back to its own path. The head is
-    therefore always the body of the row printed first, by construction rather than by coincidence.
+    RESOLVES THE WINNER'S OWN DIRECTORY: the ordering is consumed as `(filename, repository)` pairs and the
+    repository is mapped back to its own path, so with a union read the name and the body never come from
+    different worktrees. The mtime is the winner file's, None when it cannot be stat-ed.
     """
     window, stores = _checkpoint_window(sources, limit=1)
     if not window:
-        return ""
-    filename, repository_name = window[0]
-    text = _read_text(stores[repository_name] / filename)
-    return "\n".join(text.split("\n")[:lines])
+        return "", None
+    path = stores[window[0][1]] / window[0][0]
+    try:
+        mtime: float | None = path.stat().st_mtime
+    except OSError:
+        mtime = None
+    return _read_text(path), mtime
+
+
+def read_latest_checkpoint_head(sources: list[tuple[str, str]], lines: int = 20) -> str:
+    """The first `lines` lines of `read_latest_checkpoint`, as `head -20 "${cp_files[1]}"` (no trailing newline)."""
+    return "\n".join(read_latest_checkpoint(sources)[0].split("\n")[:lines])
 
 
 def read_checkpoint_summary(sources: list[tuple[str, str]]) -> str | None:

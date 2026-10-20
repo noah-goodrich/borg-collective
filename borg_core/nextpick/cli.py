@@ -119,7 +119,7 @@ def item_rows(
         ranked,
         by_repository,
         shell.read_plans(repositories, names),
-        shell.checkpoint_next_steps(repositories, names),
+        shell.checkpoint_owned(repositories, names),
         int(datetime.now(UTC).timestamp()),
     )
     shown, hidden = core.cap_rows(work, show_all)
