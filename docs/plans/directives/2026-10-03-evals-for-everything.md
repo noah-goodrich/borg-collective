@@ -3,6 +3,7 @@
 *Filed: 2026-10-03 · Status: in flight — Phase 0 (#251) and the ledger/selector (#253) shipped; Phase 1 evals next*
 *Decided by Noah 2026-10-04 (directive triage, #266): status line changed from PROPOSAL to in flight.*
 *Requested-via: Noah, 2026-10-03: "we need evals for everything."*
+*Amended 2026-10-20 (Noah locked the criteria): Phase 1b, skills that paint a page. See "Phase 1b" below.*
 
 **tl;dr** — "Everything" is smaller than it sounds. Of the 17 skills, 5 agents (plus ROUTING), 13 hooks and two CLIs,
 only the skills and agents are model behavior, and only 3 skills have any eval at all (one behavior each). Hooks and
@@ -12,6 +13,8 @@ eval nor a written waiver**, plus a three-eval first phase aimed at the places w
 `borg-link-up`, the `borg-nanoprobe` scope gate, and `borg-verify`. Keep the existing shell-oracle harness style for
 anything whose effect lands on disk; evaluate `claude plugin eval` as the runner for pure trigger/negative cases in a
 one-case spike before committing to it.
+
+- Plan-slug: `2026-10-03-evals-for-everything`
 
 ## Problem
 
@@ -219,6 +222,25 @@ skill arrive with its eval, and it is the only part of the directive that runs o
    or a listed exception.
    *Verify:* a table in `tests/README.md` (or the ledger) lists all 13 with two test names each.
 
+## Phase 1b — skills that paint a page (amendment 2026-10-20)
+
+**The waiver premise for `skills/borg-link` and `skills/borg-next` failed on 2026-10-20.** Both carry "thin wrapper over a deterministic CLI; its behaviour is bats-covered". That morning the borg-link skill painted a page whose checkpoint excerpt said "These wait on Noah", then wrote its closing line, "Nothing is waiting on you", from the page's WAITING ON YOU section. The borg-next skill told Noah it had "logged this as declined" when no row had been offered. Both defects sit in the lines the model writes after the CLI output, which bats cannot see. The CLI half is `2026-10-20-one-owned-next-list.md`.
+
+The real deadline is a different pair: the `agents/borg-nanoprobe` and `skills/borg-verify` waivers expire 2026-11-15, after which `tests/eval_ledger.bats` fails on main.
+
+**Fixtures are synthetic.** borg-collective is a public repository. The known-bad transcript and every fixture page reproduce the shape of the 2026-10-20 failure (a page listing two wait items, a reply saying nothing waits) with invented items, never the real session.
+
+- [ ] B1 — The 2026-11-15 waivers are renewed with a new date and reason, or replaced by evals.
+  - Verify: `bats tests/eval_ledger.bats` passes, and no `review_by` in `evals/ledger.json` falls on or before 2026-11-15.
+- [ ] B2 — The borg-link skill's closing lines restate the page's WAITING ON YOU and NEXT and add no verdict of their own; the borg-next skill never shows "declined" to the user.
+  - Verify: `tests/prose_contracts.bats` cases pin both sentences in `skills/borg-link/SKILL.md` and `skills/borg-next/SKILL.md`.
+- [ ] B3 — Two `claude plugin eval` pairs, run live once. `link-verdict-honest`: a page with two wait items gets a reply naming both; a page with none gets a reply saying none. `next-empty-no-declined`: empty rows get a reply without "declined"; a page with rows gets the normal chooser. The fixture page reaches the skill through the case's scaffold script; if a stub `borg` cannot reach PATH before the skill's load-time injection (the Phase 0 gotcha), the sandbox copy of the skill swaps only its injection line for the fixture page.
+  - Verify: `claude plugin eval --max-cost-usd 5` executes 4 cases, 0 failed, with the model id and date recorded in the report.
+- [ ] B4 — Graders discriminate offline, and the ledger points both skills at their evals.
+  - Verify: `make eval` grades the synthetic known-bad transcript FAIL and a known-good one PASS; blanking the grader's assertion turns `make eval` red; `evals/ledger.json` maps `skills/borg-link` and `skills/borg-next` to eval paths.
+
+Order: B1 and B2 in one PR, which can run beside the other directive's PR 1. B3 and B4 follow its page PR, so the evals grade the new page. Live spend is about $3 (4 cases × 3 runs at the measured $0.24 per run), about $5 with the baseline arm.
+
 ## Non-goals
 
 - Model evals for hooks or CLIs. They are deterministic; a model eval there is slower, dearer and weaker than the
@@ -255,6 +277,7 @@ Ranked by how often the thing runs times how bad it is when it silently fails.
    (empty branch, code pasted into the orchestrator's context) is invisible until paid for; `borg-verify` is a gate,
    and a gate that always says PASS is the most expensive silent failure in the list. The ledger ships first because
    it makes every later phase visible and costs nothing per run.
+1b. **Skills that paint a page** (amendment 2026-10-20): the 2026-11-15 waivers, then `borg-link` and `borg-next`. See "Phase 1b".
 2. **Orchestrator-facing:** `ROUTING` table, then `borg-plan` and `borg-assimilate` trigger and refusal cases
    (assimilate must refuse when child directives are open), then `break-glass` (negative-heavy: a permission mutation
    that fires unprompted is the worst outcome), `borg-review`, `borg-resume`.
