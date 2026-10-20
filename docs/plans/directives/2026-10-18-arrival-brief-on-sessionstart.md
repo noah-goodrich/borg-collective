@@ -54,7 +54,7 @@ A new SessionStart hook emits a top-level `systemMessage` carrying the brief. Ev
   - Verify: a case where the mock `borg` exits 1 asserts `.systemMessage` is a non-empty single line containing the word `unavailable`, exit 0.
 - [x] AC7 — The plugin build ships and registers the hook.
   - Verify: after `scripts/build-plugin.sh`, `jq -e '[.hooks.SessionStart[] | select(.hooks[].command | test("borg-arrival-brief"))] | length == 1 and .[0].matcher == "startup|resume"'` on the claude-plugins checkout's `borg-collective/hooks/hooks.json` exits 0, and `test -x` accepts `borg-collective/hooks/borg-arrival-brief.sh` beside it.
-- [ ] AC8 — It renders live (manual, once, Noah).
-  - Verify: start a new `claude` in a repository with a checkpoint and see "SessionStart:startup says:" with the four lines before typing; resume it and see "SessionStart:resume says:" with the title unchanged.
+- [x] AC8 — It renders live (manual, once, Noah).
+  - Verify: start a new `claude` in a repository with a checkpoint and see "SessionStart:startup says:" with the four lines before typing; resume it and see "SessionStart:resume says:" with the title unchanged. Confirmed 2026-10-20: the startup brief rendered in the Queen window and in the ingle drone, and Noah confirmed "SessionStart:resume says:" on resume (relayed by the Queen session).
 - [x] AC9 — Suite green.
   - Verify: `make test && make test-bats && make lint`.
