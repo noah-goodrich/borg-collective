@@ -39,3 +39,7 @@ Rules moved verbatim from the top-level CLAUDE.md. They guard _borg_print_briefi
   `tests/briefing.bats`'s "in repository scope the prompt's QUEUED/SHIPPED match the page's".
   Sweep parity is asserted by **subprocess count** in
   `tests/link_sweep.bats`, never by reading the arm.
+
+## The arrival brief (SessionStart, `arrival.py`)
+
+`render.next_action` is `_waiting_facts` plus `_next_action_line` with a `reserve` of columns for the owner tag, so the brief's `next` and `/borg-link`'s last line cannot disagree (`test_arrival.py` compares them on one fixture). The renderer is pure and on the Domain list; `arrival_hook.py` is the only impure part. The additive `focus.since.head_moves` (commit, merge or pull entries in the git dir's `logs/HEAD` after the newest checkpoint's filename stamp, read by `headlog.py`, no fork) is the one key added; `DOCUMENT_VERSION` stays 2. It counts moves of HEAD, not commits: one pull is one move. The hook's own rules are in `hooks/CLAUDE.md`.
