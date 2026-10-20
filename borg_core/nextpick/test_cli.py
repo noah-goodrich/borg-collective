@@ -19,6 +19,12 @@ REGISTRY = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _no_real_queen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the Queen root at an empty directory so the developer's real Queen checkpoint never joins a test."""
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(tmp_path / "no-queen"))
+
+
 @pytest.fixture(name="state")
 def _state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
@@ -472,3 +478,78 @@ def test_item_rows_a_newer_checkpoint_beats_the_plan(tmp_path, checkpoint_is_new
     expected = ["from the checkpoint"] if checkpoint_is_newer else [rows[0]["next_step"]]
     assert [r["next_step"] for r in rows] == expected
     assert (rows[0]["item"] == "") == checkpoint_is_newer
+
+
+# ── the Queen's checkpoint (directive one-owned-next-list, AC2) ──────────────────────────────────────
+
+QUEEN_CHECKPOINT = (
+    "tl;dr synthetic\n\n## 4. Blockers\n\nWaits on you:\n- Approve the invented budget\n- Copy the demo file over\n\n"
+    "## 5. Next Session\n\n1. Draft the invented memo\n"
+)
+
+
+def _queen_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *checkpoints: tuple[str, str]) -> Path:
+    root = tmp_path / "queen-root"
+    store = root / ".borg" / "checkpoints"
+    store.mkdir(parents=True)
+    for filename, text in checkpoints:
+        (store / filename).write_text(text)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(root))
+    return root
+
+
+def test_queen_rows_are_read_from_a_real_file_labeled_queen_and_ranked_last(tmp_path, monkeypatch):
+    _queen_root(tmp_path, monkeypatch, ("2026-10-02-0900.md", QUEEN_CHECKPOINT))
+    registry = {"repositories": {"p": _repo(tmp_path, "p", ("2026-10-01-0900.md", NEW_FORM))}}
+    rows, _quiet, _degraded, hidden = cli.item_rows(registry["repositories"], True, queen=True)
+    queen = [r for r in rows if r["project"] == "queen"]
+    assert [(r["owner"], r["detail"]) for r in queen] == [
+        ("YOU", "Approve the invented budget"),
+        ("YOU", "Copy the demo file over"),
+    ]
+    assert [r["project"] for r in rows if r["project"] != "queen"] == ["p", "p"]
+    assert rows[-2:] == queen and [r["n"] for r in rows] == [1, 2, 3, 4]
+    assert hidden == {"agent": 3, "stale": 0, "overflow": 0}
+
+
+def test_queen_rows_are_absent_unless_asked_for(tmp_path, monkeypatch):
+    _queen_root(tmp_path, monkeypatch, ("2026-10-02-0900.md", QUEEN_CHECKPOINT))
+    registry = {"repositories": {"p": _repo(tmp_path, "p", ("2026-10-01-0900.md", NEW_FORM))}}
+    rows, _quiet, _degraded, _hidden = cli.item_rows(registry["repositories"], True)
+    assert "queen" not in {r["project"] for r in rows}
+
+
+def test_queen_rows_reach_rows_json_and_leave_the_registry_untouched(tmp_path, monkeypatch, capsys):
+    _queen_root(tmp_path, monkeypatch, ("2026-10-02-0900.md", QUEEN_CHECKPOINT))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    registry_file = tmp_path / "registry.json"
+    registry_file.write_text(json.dumps({"repositories": {"p": _repo(tmp_path, "p")}}))
+    before = registry_file.read_bytes()
+    monkeypatch.setattr("sys.stdin", io.StringIO(registry_file.read_text()))
+    assert cli.main(["--rows", "--json", "--local"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    queen = [r for r in payload["rows"] if r["project"] == "queen"]
+    assert [(r["owner"], r["detail"]) for r in queen] == [
+        ("YOU", "Approve the invented budget"),
+        ("YOU", "Copy the demo file over"),
+    ]
+    assert registry_file.read_bytes() == before
+
+
+@pytest.mark.parametrize("make_root", ["missing", "empty", "unreadable_text"])
+def test_queen_owned_is_fail_open(tmp_path, monkeypatch, make_root):
+    if make_root == "missing":
+        monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(tmp_path / "nowhere"))
+    elif make_root == "empty":
+        _queen_root(tmp_path, monkeypatch)
+    else:
+        _queen_root(tmp_path, monkeypatch, ("2026-10-02-0900.md", "nothing structured here\n"))
+    assert shell.queen_owned() == {}
+
+
+def test_queen_owned_swallows_a_reader_failure(monkeypatch):
+    def boom(*_a, **_k):
+        raise OSError("denied")
+
+    monkeypatch.setattr(shell.link_shell, "read_latest_checkpoint", boom)
+    assert shell.queen_owned() == {}

@@ -929,6 +929,12 @@ _borg_next_surface() {
         open)
             (( chosen )) || die "next --open needs --chosen"
             [[ -n "$repository" ]] || die "next --open needs a repository"
+            if [[ "$repository" == queen ]] &&
+                ! printf '%s' "$registry" | jq -e '.repositories.queen != null' >/dev/null 2>&1; then
+                _borg_next_log "$registry" 0 "" "${base[@]}" --opened queen --unmeasured
+                printf 'queen: these items are yours to do; nothing to open\n'
+                return 0
+            fi
             printf '%s' "$registry" | jq -e --arg p "$repository" '.repositories[$p] != null' >/dev/null 2>&1 ||
                 die "next --open: unknown repository '$repository'"
             _borg_next_log "$registry" 0 "" "${base[@]}" --opened "$repository" --unmeasured

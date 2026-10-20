@@ -278,6 +278,21 @@ _log_count() {
     [ "$(_log_count)" = "0" ]
 }
 
+@test "next --open queen --chosen: says nothing to open, logs the choice, never switches, leaves the registry alone" {
+    _write_registry ""
+    local before
+    before=$(cat "$BORG_REGISTRY")
+    run zsh "$BORG" next --open queen --chosen
+    [ "$status" -eq 0 ]
+    [ "$output" = "queen: these items are yours to do; nothing to open" ]
+    [ -z "$(_selected)" ]
+    [ "$(_log_count)" = "1" ]
+    _last_row | jq -e ".chooser == true and .opened == \"queen\" and .opened_after_s == null"
+    [ "$(cat "$BORG_REGISTRY")" = "$before" ]
+    run zsh "$BORG" next --open nonesuch --chosen
+    [ "$status" -ne 0 ]
+}
+
 @test "next --declined: logs opened null, rec is the top, and does not switch" {
     _write_registry ""
     run zsh "$BORG" next --declined
