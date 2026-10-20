@@ -92,6 +92,28 @@ def _opened_after(args: argparse.Namespace, opened: str | None) -> float | None:
 NAMES_PREFIX = "names\t"
 
 
+def _with_queen(
+    repositories: dict[str, Any],
+    ranked: list[dict[str, Any]],
+    checkpoints: dict[str, dict[str, Any]],
+    queen: bool,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """`(ranked, checkpoints)` to build rows from: the Queen's entry appended LAST when asked for and it has items.
+
+    Skipped when a registered repository is itself named `queen` (its own rows win) and when the Queen's newest
+    checkpoint yields no items, so the `queen` label never lands in `quiet`.
+    """
+    queen_cp = shell.queen_owned() if queen and shell.QUEEN not in repositories else {}
+    if not queen_cp:
+        return ranked, checkpoints
+    entry = {"name": shell.QUEEN, "status": "", "last_activity": None, "repo": ""}
+    return [*ranked, entry], {**checkpoints, **queen_cp}
+
+
+# JUSTIFICATION (too-many-arguments / too-many-positional-arguments): six independent inputs of one assembly step;
+# every production caller passes at most the first three positionally and the rest by keyword, so a container would
+# only relocate the names.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
 def item_rows(
     repositories: dict[str, Any],
     local: bool,
@@ -120,11 +142,7 @@ def item_rows(
     ranked = core.rank(repositories, compass)
     names = [item["name"] for item in ranked]
     by_repository, degraded = swept if swept is not None else shell.recon_items(repositories, local)
-    checkpoints = shell.checkpoint_owned(repositories, names)
-    queen_cp = shell.queen_owned() if queen and shell.QUEEN not in repositories else {}
-    if queen_cp:
-        ranked = [*ranked, {"name": shell.QUEEN, "status": "", "last_activity": None, "repo": ""}]
-        checkpoints.update(queen_cp)
+    ranked, checkpoints = _with_queen(repositories, ranked, shell.checkpoint_owned(repositories, names), queen)
     work, quiet = core.work_items(
         ranked,
         by_repository,
