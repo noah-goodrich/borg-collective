@@ -121,7 +121,8 @@ def test_render_exposes_exactly_one_human_entry_point():
         if not name.startswith("_") and callable(value) and getattr(value, "__module__", "") == render.__name__
     }
     # route_kind is a routing seam for borg_core.nextpick, not a second way to render the page.
-    assert public == {"document", "porcelain", "route_kind", "glance_line"}  # glance_line: the board's own items, one line
+    # glance_line: the board's own items, one line. next_action and clip: the arrival brief reads the page's own `next` line.
+    assert public == {"document", "porcelain", "route_kind", "glance_line", "next_action", "clip"}
 
 
 def test_the_human_arm_names_render_document_exactly_once():

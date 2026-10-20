@@ -359,6 +359,15 @@ if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-resume-hook.sh" ]]; then
     chmod +x "$HOOKS_DST/borg-resume-hook.sh"
 fi
 
+# borg-arrival-brief.sh (SessionStart, matcher startup|resume) is a thin wrapper that finds borg_core and execs it. Copied
+# as-is and WITHOUT the "borg on PATH" guard the lifecycle hooks get: a missing borg must print one loud `unavailable`
+# line, and the guard would exit silently before the hook could say so. It never inlines the lib: session mode is
+# ported into borg_core/link/arrival.py (tests/arrival_brief.bats runs both on one table).
+_copy_if_changed "$HOOKS_SRC/borg-arrival-brief.sh" "$HOOKS_DST/borg-arrival-brief.sh" "hooks/borg-arrival-brief.sh"
+if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-arrival-brief.sh" ]]; then
+    chmod +x "$HOOKS_DST/borg-arrival-brief.sh"
+fi
+
 # ── Phase 3: Agent definition ─────────────────────────────────────────────────
 
 _info "Phase 3: Agents"
@@ -412,6 +421,16 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-link-down.sh",
             "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-arrival-brief.sh",
+            "timeout": 10
           }
         ]
       },

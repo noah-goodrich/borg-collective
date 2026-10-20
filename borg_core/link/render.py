@@ -1512,7 +1512,7 @@ def _first_mine(doc: dict) -> tuple[str, str] | None:
     return None
 
 
-def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
+def _next_action_line(doc: dict, items: list[dict], unlooked: bool, reserve: int = 0) -> str:
     """THE LAST LINE OF THE PAGE (link-unification L3: the answer in the final lines before the prompt).
 
     ONE recommended next action and a command, derived only from data the document already carries, by
@@ -1520,7 +1520,8 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
     first agent (`mine`) ready row; else a sentence saying nothing is ready (or that nobody looked,
     when no manifest was resolved) followed by `borg next`, so the line always carries a runnable
     command. It reads `doc` and nothing else, and both pages print the same SHAPE of line; what differs by
-    scope is only which items it can see (`_waiting`, `_first_mine`).
+    scope is only which items it can see (`_waiting`, `_first_mine`). `reserve` (the arrival brief) is the number of
+    columns the caller will append after the line; it only narrows the label and repository, never the command.
     """
     if items:
         top = items[0]
@@ -1539,11 +1540,25 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
     # both ends of each stay readable.
     # JUSTIFICATION: str.partition on a plain string; the Demeter rule reads it as a chain on a stranger.
     label = f"#{ref.partition('#')[2]}" if _GH_REF.match(ref) else ref  # pylint: disable=clean-arch-demeter
-    room = PAGE_COLUMNS - len("  next  ") - 2 - len(command)
+    room = PAGE_COLUMNS - reserve - len("  next  ") - 2 - len(command)
     repository = _middle(repository, max(room - len(label) - 3, 4)) if repository else ""
     label = _middle(label, room - (len(repository) + 3 if repository else 0))
     where = f" {DIM}({repository}){NC}" if repository else ""
     return f"  {BOLD}next{NC}  {label}{where}  {CYAN}{command}{NC}\n"
+
+
+def next_action(doc: dict, reserve: int = 0) -> tuple[str, str]:
+    """`(line, owner)`: the page's `next` line, plain, and who moves it (the arrival brief reads this).
+
+    THE SAME DERIVATION AS THE PAGE: the same `_waiting_facts` items and the same `_next_action_line`, so the brief
+    and `/borg-link` cannot disagree about what is next. `owner` is `yours` when a decision waits on the reader,
+    `mine` when the first ready row is an agent's, and "" when nothing is ready. The line is stripped of colour and
+    of its indent (it starts `next  `); `reserve` columns are left free after it for the caller's owner tag.
+    """
+    facts = _waiting_facts(doc)
+    line = picture.plain(_next_action_line(doc, facts.items, facts.unlooked, reserve)).strip()
+    owner = "yours" if facts.items else ("mine" if _first_mine(doc) else "")
+    return line, owner
 
 
 def _middle(text: str, room: int) -> str:
@@ -1675,6 +1690,11 @@ def _clip(text: str, room: int) -> str:
     """`text` cut to `room` characters, ending a cut in `…`."""
     room = max(room, 1)
     return text if len(text) <= room else text[: room - 1] + "…"
+
+
+def clip(text: str, room: int) -> str:
+    """`_clip`, public for the arrival brief (`borg_core/link/arrival.py`), which cuts its free text the same way."""
+    return _clip(text, room)
 
 
 def glance_line(doc: dict, local: bool) -> str | None:

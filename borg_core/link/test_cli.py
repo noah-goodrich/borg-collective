@@ -1338,6 +1338,7 @@ def test_json_keeps_every_key_the_directory_page_stopped_rendering(isolated_env,
         "checkpoint_head",
         "directives",
         "assimilated",
+            "since",
     }
 
 
