@@ -383,6 +383,40 @@ _shim_section() {
     [[ "$output" == *'every table row and every fenced-block line'* ]]
 }
 
+# ── link and next restate the page and the data, never a verdict of their own (evals Phase 1b B2) ──
+@test "borg-link skill: lines below the block only restate WAITING ON YOU and NEXT" {
+    local f="${REPO_ROOT}/skills/borg-link/SKILL.md"
+    grep -qF "Below the block write plain lines that only restate the page." "$f"
+    grep -qF "Line 1 states what the page's WAITING ON YOU section lists (each row by name, or that it lists nothing)." "$f"
+    grep -qF "Line 2 states the page's NEXT line." "$f"
+    run grep -qF 'the verdict and the one next step' "$f"
+    [ "$status" -ne 0 ]
+}
+
+@test "borg-link skill: no verdict of its own, and a checkpoint/WAITING disagreement is named" {
+    local f="${REPO_ROOT}/skills/borg-link/SKILL.md"
+    grep -qF 'Add no verdict of your own: never write that nothing waits on the user or that nothing is ready unless that exact section of the page says so, and then attribute it to the page ("the page lists nothing waiting").' "$f"
+    grep -qF "If a line of the page's own checkpoint text names something that waits on the user and WAITING ON YOU omits it, add one line saying the two disagree and naming the item." "$f"
+    grep -qF 'Inside the block never fix, shorten, reorder or annotate a line' "$f"
+}
+
+@test "borg-next skill: the empty case restates the data and never claims nothing needs the user" {
+    local f="${REPO_ROOT}/skills/borg-next/SKILL.md"
+    grep -qF 'lists no decisions for you' "$f"
+    grep -qF 'Never state that nothing needs the user' "$f"
+    run grep -qF 'Nothing registered needs you' "$f"
+    [ "$status" -ne 0 ]
+}
+
+@test "borg-next skill: the reply never says declined or that an outcome was logged" {
+    local f="${REPO_ROOT}/skills/borg-next/SKILL.md"
+    grep -qF 'The reply to the user never contains the word "declined" and never mentions that an outcome was logged.' "$f"
+    grep -qF 'is a silent bookkeeping call' "$f"
+    # strip the command itself and the one rule sentence that names the word; nothing else may say it
+    run bash -c 'sed -e "s/borg next --declined//g" -e "/never contains the word/d" "$1" | grep -i declined' _ "$f"
+    [ "$status" -ne 0 ]
+}
+
 # ── borg-resume skill: watcher first, CronCreate only as fallback (directive S15) ─────────────────
 # Negations are written as `run grep` + status check: a bare `! cmd` that is not the last command of
 # a bats test is exempt from errexit and never fails.
