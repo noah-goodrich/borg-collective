@@ -7,6 +7,13 @@
       "order": "1",
       "ref": "noah-goodrich/borg-collective#447",
       "why": "the arrival brief on SessionStart"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#448",
+      "status": "open",
+      "why": "VERSION 0.9.11, release notes, then tag"
     }
   ]
 }
