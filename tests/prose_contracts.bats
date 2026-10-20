@@ -418,6 +418,12 @@ _shim_section() {
     [ "$status" -ne 0 ]
 }
 
+@test "borg-next skill: the hidden summary lists unowned rows between agent tasks and stale drafts" {
+    local f="${REPO_ROOT}/skills/borg-next/SKILL.md"
+    grep -qF '`hidden` (`{agent, stale, overflow, unowned}`' "$f"
+    grep -qF '`+N agent tasks` (agent), `+N unowned` (unowned), `+N stale drafts` (stale)' "$f"
+}
+
 @test "borg-next skill: the reply never says declined or that an outcome was logged" {
     local f="${REPO_ROOT}/skills/borg-next/SKILL.md"
     grep -qF 'The reply to the user never contains the word "declined" and never mentions that an outcome was logged.' "$f"

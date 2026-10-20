@@ -80,7 +80,9 @@ mean paying for a network round trip and then rendering the same overview as bef
   share one router for "what's mine"). `.waiting.rows[]` are the rows the chooser shows (at most 5, each
   `{project, item, next_step, owner:"YOU", ref, url, age, waiting_reason}`; `url` is the PR's address, empty
   on session rows); `.waiting.hidden_lines` is the chooser's own `+N more decisions` / `+N agent tasks` /
-  `+N stale drafts` text; `.waiting.degraded` is a note when the sweep or rows failed (say it once). Under
+  `+N unowned` / `+N stale drafts` text; `.waiting.next` is the first row of the work list before the cap
+  (`{project, next_step, detail, owner}`, or null), which the page's NEXT line and the arrival brief fall back to;
+  `.waiting.degraded` is a note when the sweep or rows failed (say it once). Under
   `--local` there is no sweep, so no PR rows. Then add every `yours` manifest decision (the
   `gates[].kind == "decision"` routing above) whose ref is not already a row. Print the block LAST, one line
   per item: the repository, the `next_step` (as a markdown link to `url` when it is non-empty, e.g.
