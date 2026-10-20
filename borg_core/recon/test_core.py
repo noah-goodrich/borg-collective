@@ -208,6 +208,77 @@ def test_extract_checkpoint_blockers_no_heading():
     assert core.extract_checkpoint_blockers("# checkpoint\nnothing here\n") == ""
 
 
+# ── owned items ─────────────────────────────────────────────────────────────
+
+NEXT_SESSION = (
+    "## 5. Next Session\n\n"
+    "1. **First task.** Do the thing\n"
+    "   wrapped onto a second line.\n"
+    "   - sub-bullet one\n"
+    "   - sub-bullet two\n\n"
+    "2. Second task\n"
+)
+
+
+def test_owned_items_new_form_waits_on_you():
+    text = "## 4. Blockers\n\nWaits on you:\n- **Rotate key.** by Friday\n- Pick a name\n\n## 5. Next Session\n"
+    assert core.checkpoint_owned_items(text) == [
+        {"text": "**Rotate key.** by Friday", "owner": "YOU"},
+        {"text": "Pick a name", "owner": "YOU"},
+    ]
+
+
+def test_owned_items_legacy_form_after_a_sentence_and_numbered():
+    text = (
+        "## 4 Blockers\nNo blockers for the Queen. These wait on Pat:\n\n1. one\n2. two\n   more\n## 5. Next Session\n"
+    )
+    assert core.checkpoint_owned_items(text) == [
+        {"text": "one", "owner": "YOU"},
+        {"text": "two more", "owner": "YOU"},
+    ]
+
+
+def test_owned_items_lead_in_is_case_insensitive():
+    assert core.checkpoint_owned_items("## 4. Blockers\nWAITS ON YOU:\n- x\n") == [{"text": "x", "owner": "YOU"}]
+
+
+def test_owned_items_no_blockers_prose_yields_nothing():
+    assert core.checkpoint_owned_items("## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n") == []
+
+
+def test_owned_items_waits_on_you_none_yields_nothing():
+    assert core.checkpoint_owned_items("## 4. Blockers\n\nWaits on you: none\n- stray bullet\n") == []
+
+
+def test_owned_items_bullets_without_a_lead_in_are_not_waits():
+    assert core.checkpoint_owned_items("## 4. Blockers\n- Noah must copy the file\n") == []
+
+
+def test_owned_items_stop_at_the_first_prose_line():
+    text = "## 4. Blockers\nWaits on you:\n- one\nBack to prose.\n- not a wait\n"
+    assert core.checkpoint_owned_items(text) == [{"text": "one", "owner": "YOU"}]
+
+
+def test_owned_items_next_session_numbered_with_nested_sub_bullets():
+    assert core.checkpoint_owned_items("## 4. Blockers\nNo blockers.\n\n" + NEXT_SESSION) == [
+        {
+            "text": "**First task.** Do the thing wrapped onto a second line. - sub-bullet one - sub-bullet two",
+            "owner": "AGENT",
+        },
+        {"text": "Second task", "owner": "AGENT"},
+    ]
+
+
+def test_owned_items_never_truncates():
+    long = "word " * 100
+    assert core.checkpoint_owned_items(f"## 5. Next Session\n1. {long}\n") == [{"text": long.strip(), "owner": "AGENT"}]
+
+
+def test_owned_items_without_either_section():
+    assert core.checkpoint_owned_items("# checkpoint\n## 1. Goal\n- a bullet\n") == []
+    assert core.checkpoint_owned_items("") == []
+
+
 # ── contradiction detection ─────────────────────────────────────────────────
 
 
