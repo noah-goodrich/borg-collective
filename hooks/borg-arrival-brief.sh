@@ -9,7 +9,9 @@
 # prints one `unavailable` line (printf, no parser needed) and exits 0, because silence reads as "nothing to say".
 # No `set -e`: every path ends in exit 0.
 
-PATH="${HOME}/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin${PATH:+:$PATH}"
+# APPENDED, not prepended like borg-link-down.sh: this hook shadows nothing, and a caller's own PATH (a test's mock
+# borg, a project-local one) must win over the defaults.
+PATH="${PATH:+$PATH:}${HOME}/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 
 [ "${BORG_NO_SESSION_HOOKS:-}" = "1" ] && exit 0
