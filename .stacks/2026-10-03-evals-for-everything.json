@@ -1,5 +1,41 @@
 {
   "desc": "Every skill and agent has an eval or a dated waiver; Phase 1b covers the skills that paint a page",
   "program": "2026-10-03-evals-for-everything",
-  "rows": []
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#249",
+      "status": "merged",
+      "why": "Files the evals-for-everything directive"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#251",
+      "status": "merged",
+      "why": "Phase 0 spike: runner chosen and per-case cost measured"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#253",
+      "status": "merged",
+      "why": "Coverage ledger and changed-files eval selector"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#450",
+      "status": "merged",
+      "why": "Amends the directive with Phase 1b, skills that paint a page"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#451",
+      "status": "merged",
+      "why": "Phase 1b B1 and B2: link and next restate the page, waivers renewed"
+    }
+  ]
 }

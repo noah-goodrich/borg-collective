@@ -1,5 +1,97 @@
 {
   "desc": "Give every borg state store a mandatory code-path reader and a collision-proof key, and collapse the two machine-local roots into one with retention.",
   "program": "2026-09-28-state-hygiene-reader-census",
-  "rows": []
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#235",
+      "status": "merged",
+      "why": "AC1: the checkpoint name comes from code, not prose"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#236",
+      "status": "merged",
+      "why": "AC2: the reader census, a store must name a reader"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#244",
+      "status": "merged",
+      "why": "AC3: cairn-leftover cleanup and the ten-store decisions"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#246",
+      "status": "merged",
+      "why": "AC4 part A: one machine-local root for operational state"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#248",
+      "status": "merged",
+      "why": "AC4 part C: log retention, one rotated generation at 1 MiB"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#247",
+      "status": "merged",
+      "why": "AC4 part B: borg tidy --migrate-state"
+    },
+    {
+      "lane": "_default",
+      "order": "7",
+      "ref": "noah-goodrich/borg-collective#250",
+      "status": "merged",
+      "why": "Migrates briefing-stderr.log too"
+    },
+    {
+      "lane": "_default",
+      "order": "8",
+      "ref": "noah-goodrich/borg-collective#254",
+      "status": "merged",
+      "why": "AC5: per-project state.json moves to the state root"
+    },
+    {
+      "lane": "_default",
+      "order": "9",
+      "ref": "noah-goodrich/borg-collective#255",
+      "status": "merged",
+      "why": "Discovers briefing-stderr.log and tests through discovery"
+    },
+    {
+      "lane": "_default",
+      "order": "10",
+      "ref": "noah-goodrich/borg-collective#256",
+      "status": "merged",
+      "why": "Ticks AC3 to AC5 with live evidence"
+    },
+    {
+      "lane": "_default",
+      "order": "11",
+      "ref": "noah-goodrich/borg-collective#264",
+      "status": "merged",
+      "why": "Ticks AC6 with live evidence"
+    },
+    {
+      "lane": "_default",
+      "order": "12",
+      "ref": "noah-goodrich/borg-collective#269",
+      "status": "merged",
+      "why": "Isolates dispatch-guard test cases from an armed environment"
+    },
+    {
+      "lane": "_default",
+      "order": "13",
+      "ref": "noah-goodrich/borg-collective#270",
+      "status": "merged",
+      "why": "Assimilates the plan into the archive"
+    }
+  ]
 }
