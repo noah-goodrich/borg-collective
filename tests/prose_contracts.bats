@@ -394,19 +394,21 @@ _shim_section() {
 }
 
 # ── link and next restate the page and the data, never a verdict of their own (evals Phase 1b B2) ──
-@test "borg-link skill: lines below the block only restate WAITING ON YOU and NEXT" {
+@test "borg-link skill: lines below the block restate the Waits on you list, WAITING ON YOU and the next line" {
     local f="${REPO_ROOT}/skills/borg-link/SKILL.md"
     grep -qF "Below the block write plain lines that only restate the page." "$f"
-    grep -qF "Line 1 states what the page's WAITING ON YOU section lists (each row by name, or that it lists nothing)." "$f"
-    grep -qF "Line 2 states the page's NEXT line." "$f"
+    grep -qF "Line 1 restates the page's Waits on you list (under IN FOCUS) and its WAITING ON YOU section: each item by name, or that the page lists nothing." "$f"
+    grep -qF "Line 2 restates the page's closing next line." "$f"
     run grep -qF 'the verdict and the one next step' "$f"
     [ "$status" -ne 0 ]
 }
 
-@test "borg-link skill: no verdict of its own, and a checkpoint/WAITING disagreement is named" {
+@test "borg-link skill: no verdict of its own, and a listed-above pointer means the Waits on you list" {
     local f="${REPO_ROOT}/skills/borg-link/SKILL.md"
-    grep -qF 'Add no verdict of your own: never write that nothing waits on the user or that nothing is ready unless that exact section of the page says so, and then attribute it to the page ("the page lists nothing waiting").' "$f"
-    grep -qF "If a line of the page's own checkpoint text names something that waits on the user and WAITING ON YOU omits it, add one line saying the two disagree and naming the item." "$f"
+    grep -qF 'Add no verdict of your own: never write that nothing waits on the user or that nothing is ready unless the WAITING ON YOU section of the page says so, and then attribute it to the page ("the page lists nothing waiting").' "$f"
+    grep -qF 'When WAITING ON YOU reads "what waits on you is listed above", it points at that list, so name the items from it.' "$f"
+    run grep -qF "page's own checkpoint text" "$f"
+    [ "$status" -ne 0 ]
     grep -qF 'Inside the block never fix, shorten, reorder or annotate a line' "$f"
 }
 

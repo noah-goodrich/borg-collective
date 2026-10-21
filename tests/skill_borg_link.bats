@@ -551,6 +551,7 @@ _injection_line() {
     [ "$status" -eq 0 ]
     [[ "$output" == *'into ONE fenced block'* ]] || false
     [[ "$output" == *'plain lines that only restate the page'* ]] || false
+    [[ "$output" == *'Line 1 restates the page'\''s Waits on you list (under IN FOCUS) and its WAITING ON YOU section'* ]] || false
     [[ "$output" == *'No other tool call: no Bash, no jq, no Read.'* ]] || false
     [[ "$output" == *'byte for byte into ONE fenced block'* ]] || false
     [[ "$output" == *'never fix, shorten, reorder or annotate a line; comments go only in these lines'* ]] || false
