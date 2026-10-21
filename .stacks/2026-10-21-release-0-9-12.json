@@ -64,6 +64,13 @@
       "ref": "noah-goodrich/borg-collective#459",
       "status": "merged",
       "why": "evals/link-next replaces the link and next waivers"
+    },
+    {
+      "lane": "_default",
+      "order": "10",
+      "ref": "noah-goodrich/borg-collective#460",
+      "status": "open",
+      "why": "VERSION 0.9.12, release notes, then tag"
     }
   ]
 }
