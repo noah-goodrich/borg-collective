@@ -44,6 +44,7 @@ for casedir in "$HERE"/cases/*/; do
     [ -z "$ONLY" ] || [ "$ONLY" = "$c" ] || continue
     bash "$HERE/sandbox.sh" "$c" "$OUT/$c/plugin" || { echo "sandbox failed: $c" >&2; rc=1; continue; }
     allow="$(sed -n 's/^allow_tools=//p' "$casedir/sandbox.conf")"
+    allow="${allow//@STUB@/$OUT/$c/plugin/bin/borg}"
     ANTHROPIC_API_KEY= claude plugin eval "$OUT/$c/plugin" ${allow:+--allow-tools "$allow"} \
         --model "$MODEL" --runs "$RUNS" --ablation none \
         --max-cost-usd "$CEILING" --trust-plugin --no-publish --output-dir "$OUT/$c/result" \

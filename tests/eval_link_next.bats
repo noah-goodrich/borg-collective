@@ -29,7 +29,7 @@ harness() {
 @test "link-next: the incident reply (nothing waits above a page listing items) fails the verdict graders" {
     local bad="$COPY/transcripts/link-verdict-honest-waits.bad-nothing-waits.md"
     grep -qF 'Nothing is waiting on you.' "$bad"
-    grep -qF 'Approve the invented vendor quote' "$bad"
+    grep -qF 'Approve the Acme vendor quote' "$bad"
     local pat
     pat="$(awk '/^---$/{n++; next} n>=2 && NF{print; exit}' "$COPY/cases/link-verdict-honest-waits/graders/no-nothing-waits.md")"
     run env "PAT=$pat" python3 -I -c 'import os, re, sys; sys.exit(0 if re.search(os.environ["PAT"], open(sys.argv[1]).read()) else 1)' "$bad"
@@ -101,7 +101,12 @@ harness() {
     [[ "$output" == *"next-empty-no-declined: sandbox build failed"* ]] || false
 }
 
-@test "link-next: fixtures and cases carry only invented names" {
+@test "link-next: fixtures and cases carry only synthetic names" {
+    run jq -r '[.rows[].project, .quiet[]] | unique | join(",")' "${REPO_ROOT}/evals/link-next/fixtures/next-rows.json" "${REPO_ROOT}/evals/link-next/fixtures/next-empty.json"
+    [ "${lines[0]}" = "demo-api,demo-app" ]
+    [ "${lines[1]}" = "demo-api,demo-app" ]
+    run grep -rhoE '▸ IN FOCUS  [^ ]+' "${REPO_ROOT}/evals/link-next/fixtures"
+    [ "$(printf '%s\n' "$output" | sort -u)" = '▸ IN FOCUS  demo-app' ]
     run grep -rEl '/Users/|@gmail|sk-[A-Za-z0-9]{10}|ghp_' "${REPO_ROOT}/evals/link-next" --exclude-dir=out
     [ "$status" -eq 1 ]
 }
@@ -112,4 +117,19 @@ harness() {
     [ "${lines[0]}" = "evals/link-next" ]
     [ "${lines[1]}" = "evals/link-next" ]
     [ -x "${REPO_ROOT}/evals/link-next/run.sh" ] || [ -f "${REPO_ROOT}/evals/link-next/run.sh" ]
+}
+
+@test "link-next: the borg-next sandbox points every borg call at a stub that exits 0, once" {
+    local sb="${BATS_TEST_TMPDIR}/sb"
+    run bash "${REPO_ROOT}/evals/link-next/sandbox.sh" next-empty-no-declined "$sb"
+    [ "$status" -eq 0 ]
+    [ -x "$sb/bin/borg" ]
+    run "$sb/bin/borg" next --declined
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    run grep -cF "the executable at $sb/bin/borg," "$sb/skills/borg-next/SKILL.md"
+    [ "$output" = "1" ]
+    run grep -c 'declined' "$sb/skills/borg-next/SKILL.md"
+    run grep -cF 'The reply to the user never contains the word "declined"' "$sb/skills/borg-next/SKILL.md"
+    [ "$output" = "1" ]
 }

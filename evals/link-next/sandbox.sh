@@ -11,8 +11,10 @@
 #
 #   borg-link  the single injected-command line between the PAGE markers becomes the fixture page.
 #   borg-next  it has no injection line; its one sentence "Run `borg next --rows --json` with the Bash tool (it
-#              logs nothing). It prints" becomes "The command already ran and printed ... That is". Everything
-#              after it, including the rule that the reply never says "declined", is untouched.
+#              logs nothing). It prints" becomes "The command already ran and printed ... That is", plus one
+#              added sentence pointing every borg call at stub/borg (exits 0; copied into the sandbox and called
+#              by absolute path, because the real borg cannot run in the hermetic run). Everything else, including
+#              the rule that the reply never says "declined", is untouched.
 #
 # The swap is a literal match that must hit EXACTLY ONCE. If the skill text drifts so the span is gone (or
 # doubles), this exits 1 instead of grading a skill that no longer matches the fixture; the offline harness
@@ -52,13 +54,17 @@ case "$skill" in
         ' "$src" > "$dst"
         ;;
     borg-next)
-        awk -v fx="$fixture" '
+        mkdir -p "$OUT/bin"
+        cp -p "$HERE/stub/borg" "$OUT/bin/borg"
+        stub="$(cd "$OUT" && pwd)/bin/borg"
+        awk -v fx="$fixture" -v stub="$stub" '
             BEGIN { old = "Run `borg next --rows --json` with the Bash tool (it logs nothing). It prints"
                     getline json < fx; close(fx) }
             { i = index($0, old)
               if (i) { hits++
                        $0 = substr($0, 1, i - 1) "The command `borg next --rows --json` already ran and printed:\n\n" json \
-                            "\n\nThat is" substr($0, i + length(old)) }
+                            "\n\nThe borg command for every call below is the executable at " stub ",\n" \
+                            "so run it by that path wherever this skill says `borg`.\n\nThat is" substr($0, i + length(old)) }
               print }
             END { if (hits != 1) { print "command sentence matched " hits+0 " times, want 1" > "/dev/stderr"; exit 1 } }
         ' "$src" > "$dst"
