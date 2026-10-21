@@ -397,11 +397,12 @@ def test_chooser_screen_and_json_agree_and_all_lists_everything(state, monkeypat
     assert "o/r#2" in [r["ref"] for r in full["rows"]]
 
 
-
 def test_nextpick_never_writes_the_glance_cache(state: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`borg link` is the glance cache's only writer (it alone sees manifest decisions); `--rows` must not touch it."""
     rows = [{"project": "a", "item": "", "next_step": "merge #9", "owner": "YOU", "ready": "", "ref": "o/a#9"}]
-    monkeypatch.setattr(cli, "item_rows", lambda *_a, **_k: (rows, [], None, {"agent": 0, "stale": 0, "overflow": 0, "unowned": 0}))
+    monkeypatch.setattr(
+        cli, "item_rows", lambda *_a, **_k: (rows, [], None, {"agent": 0, "stale": 0, "overflow": 0, "unowned": 0})
+    )
     cli.rows_json(REGISTRY["repositories"], False)
     assert not (state.parent / "next-glance").exists()
     assert shell.write_glance("x", 1) is True
@@ -412,7 +413,9 @@ NEW_FORM = (
     "Waits on you:\n- **Rotate the key.** Only the owner can.\n- Pick a name\n  for the thing\n\n"
     "## 5. Next Session\n\n1. **Ship it.** Then verify.\n   - sub one\n2. Tidy up\n"
 )
-LEGACY_FORM = "## 4. Blockers\n\nNo blockers. These wait on Pat:\n\n- Approve the spend\n\n## 5. Next Session\n\n1. Go\n"
+LEGACY_FORM = (
+    "## 4. Blockers\n\nNo blockers. These wait on Pat:\n\n- Approve the spend\n\n## 5. Next Session\n\n1. Go\n"
+)
 
 
 def _repo(tmp_path: Path, name: str, *checkpoints: tuple[str, str]) -> dict:
@@ -445,7 +448,9 @@ def test_item_rows_legacy_form_and_no_blockers_prose(tmp_path):
     registry = {
         "repositories": {
             "legacy": _repo(tmp_path, "legacy", ("2026-10-01-0900.md", LEGACY_FORM)),
-            "none": _repo(tmp_path, "none", ("2026-10-01-0900.md", "## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n")),
+            "none": _repo(
+                tmp_path, "none", ("2026-10-01-0900.md", "## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n")
+            ),
         }
     }
     rows, quiet = _item_rows(registry)
@@ -510,6 +515,30 @@ def test_queen_rows_are_read_from_a_real_file_labeled_queen_and_ranked_last(tmp_
     assert [r["project"] for r in rows if r["project"] != "queen"] == ["p", "p"]
     assert rows[-2:] == queen and [r["n"] for r in rows] == [1, 2, 3, 4]
     assert hidden == {"agent": 3, "stale": 0, "overflow": 0, "unowned": 0}
+
+
+def _six_waits() -> str:
+    waits = "".join(f"- Decide invented thing {n}\n" for n in range(1, 7))
+    return f"tl;dr synthetic\n\n## 4. Blockers\n\nWaits on you:\n{waits}\n## 5. Next Session\n\n1. Go\n"
+
+
+def test_queen_rows_show_when_one_repository_has_six_you_rows_ac7(tmp_path, monkeypatch, capsys):
+    _queen_root(tmp_path, monkeypatch, ("2026-10-02-0900.md", QUEEN_CHECKPOINT))
+    registry = {"repositories": {"p": _repo(tmp_path, "p", ("2026-10-01-0900.md", _six_waits()))}}
+    rows, _quiet, _degraded, hidden = cli.item_rows(registry["repositories"], True, queen=True)
+    assert [(r["project"], r["detail"]) for r in rows] == [
+        ("p", "Decide invented thing 1"),
+        ("p", "Decide invented thing 2"),
+        ("p", "Decide invented thing 3"),
+        ("queen", "Approve the invented budget"),
+        ("queen", "Copy the demo file over"),
+    ]
+    assert hidden["overflow"] == 3
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(registry)))
+    assert cli.main(["--rows", "--json", "--local"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [r["project"] for r in payload["rows"]] == ["p", "p", "p", "queen", "queen"]
 
 
 def test_queen_rows_are_absent_unless_asked_for(tmp_path, monkeypatch):

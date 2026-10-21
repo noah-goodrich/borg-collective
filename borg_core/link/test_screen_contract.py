@@ -268,10 +268,10 @@ def test_the_compact_page_is_the_full_page_with_the_same_sections_in_the_same_or
     document = _queen(stacks=5)
     titles = [title for title, _ in render.SECTIONS]
     assert titles == [title for title, _ in render.FULL_SECTIONS]
+
     def heads(page):
-        return [
-            line.split("  ")[0] for line in plain(page).split("\n") if line.startswith(render.SECTION_MARK)
-        ]
+        return [line.split("  ")[0] for line in plain(page).split("\n") if line.startswith(render.SECTION_MARK)]
+
     assert heads(render.document(document)) == heads(render.document(document, full=True))
 
 
@@ -490,7 +490,9 @@ _YOU_CHECKPOINT = (
     "tl;dr synthetic\n\n## 4. Blockers\n\nWaits on you:\n- Approve the invented budget\n\n"
     "## 5. Next Session\n\n1. Build the synthetic widget\n"
 )
-_NEXT_ONLY_CHECKPOINT = "tl;dr synthetic\n\n## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n\n1. Build the synthetic widget\n"
+_NEXT_ONLY_CHECKPOINT = (
+    "tl;dr synthetic\n\n## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n\n1. Build the synthetic widget\n"
+)
 
 
 def _checkpoint_documents(tmp_path, monkeypatch, text: str) -> tuple[dict, dict]:
@@ -513,7 +515,9 @@ def _checkpoint_documents(tmp_path, monkeypatch, text: str) -> tuple[dict, dict]
     shown = {**entry, "relative_activity": "3h ago", "summary": "synthetic"}
     focus = _focus(name="p", entry=shown, checkpoints=[name], checkpoint_head=text)
     repository_doc = _repository_doc(
-        focus=focus, projects={"p": shown}, waiting=cli._waiting(repositories, repo_scope, True, [])  # pylint: disable=protected-access
+        focus=focus,
+        projects={"p": shown},
+        waiting=cli._waiting(repositories, repo_scope, True, []),  # pylint: disable=protected-access
     )
     queen_doc = _doc(projects={"p": shown}, waiting=cli._waiting(repositories, queen_scope, True, []))  # pylint: disable=protected-access
     return repository_doc, queen_doc
@@ -694,3 +698,29 @@ def test_checkpoint_rows_on_the_queen_page_are_named_by_their_repository_not_ses
     row = next(line for line in page.split("\n") if "Pick the synthetic colour" in line and "▶" in line)
     assert "queen" in row and "session" not in row
     assert "session" not in page
+||||||| parent of b916b507 (fix(next): the 5-row cap shares its slots across repositories (AC7))
+
+
+
+
+def test_the_queen_page_waiting_on_you_shows_queen_rows_when_one_repository_has_six_you_rows(tmp_path, monkeypatch):
+    """AC7. MUTATION: take the first five YOU rows in rank order again and the Queen's two rows vanish from the page."""
+    root = tmp_path / "queen-root"
+    (root / ".borg" / "checkpoints").mkdir(parents=True)
+    queen_text = "tl;dr synthetic\n\n## 4. Blockers\n\nWaits on you:\n- Rotate the invented credential\n\n## 5. Next Session\n\n1. Go\n"
+    (root / ".borg" / "checkpoints" / "2026-10-20-090000-abcdef.md").write_text(queen_text)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(root))
+    store = tmp_path / "p" / ".borg" / "checkpoints"
+    store.mkdir(parents=True)
+    waits = "".join(f"- Decide invented thing {n}\n" for n in range(1, 7))
+    (store / "2026-10-19-162310-abcdef.md").write_text(
+        f"tl;dr synthetic\n\n## 4. Blockers\n\nWaits on you:\n{waits}\n## 5. Next Session\n\n1. Go\n"
+    )
+    entry = {"status": "idle", "last_activity": "2026-10-19", "path": str(tmp_path / "p")}
+    queen_scope = {"kind": "orchestrator", "repository": None, "local": True}
+    waiting = cli._waiting({"p": entry}, queen_scope, True, [])  # pylint: disable=protected-access
+    assert [r["project"] for r in waiting["rows"]] == ["p", "p", "p", "p", "queen"]
+    page = plain(
+        render.document(_doc(projects={"p": {**entry, "relative_activity": "3h ago", "summary": "s"}}, waiting=waiting))
+    )
+    assert "Rotate the invented credential" in page
