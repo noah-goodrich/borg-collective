@@ -1,0 +1,69 @@
+{
+  "desc": "borg 0.9.12: the one owned next list release",
+  "program": "2026-10-21-release-0-9-12",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#450",
+      "status": "merged",
+      "why": "files the one-owned-next-list directive"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#451",
+      "status": "merged",
+      "why": "link and next skill text restates the page, waivers renewed"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#452",
+      "status": "merged",
+      "why": "checkpoint wait items become YOU rows, Next Session items AGENT rows"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#453",
+      "status": "merged",
+      "why": "Queen checkpoint feeds the Queen scope, Waits on you template"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#455",
+      "status": "merged",
+      "why": "unowned rows and a next item with its owner on every surface"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#456",
+      "status": "merged",
+      "why": "stack manifest backfill and the add-row rule"
+    },
+    {
+      "lane": "_default",
+      "order": "7",
+      "ref": "noah-goodrich/borg-collective#457",
+      "status": "merged",
+      "why": "the page shows Last time, Waits on you and Next whole"
+    },
+    {
+      "lane": "_default",
+      "order": "8",
+      "ref": "noah-goodrich/borg-collective#458",
+      "status": "merged",
+      "why": "the 5-row cap shares its slots across repositories"
+    },
+    {
+      "lane": "_default",
+      "order": "9",
+      "ref": "noah-goodrich/borg-collective#459",
+      "status": "merged",
+      "why": "evals/link-next replaces the link and next waivers"
+    }
+  ]
+}
