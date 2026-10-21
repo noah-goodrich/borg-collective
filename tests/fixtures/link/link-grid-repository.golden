@@ -1,25 +1,10 @@
 [1m▸ IN FOCUS[0m  [2mplatform — main checkout[0m
-  [2mSource:[0m       cli
-  [2mPath:[0m         <TMP>/ws/platform
   [2mBranch:[0m       trunk
   [2mStatus:[0m       active
   [2mLast active:[0m  <TS>
-  [2mtmux window:[0m  platform
-  [2mSession ID:[0m   sess-platform-0007
   Compass: no map at <TMP>/map
 
-  [1mSummary[0m
-  Scoped keypair auth rollout.
-
-  [1mRecent Checkpoints[0m
-    [0;36m2026-08-01-0900.md[0m
-
-  [1mLatest Checkpoint[0m
-  **tl;dr** — Scoped keypair auth rollout.
-  
-  ## 1. Goal
-  
-  Seeded by the fixture.
+  [2mLast time:[0m Scoped keypair auth rollout.
 
   [2mEvery repository and worktree:[0m [0;36mborg link --overview[0m  [2m(the Queen view)[0m
 

@@ -282,14 +282,15 @@ def short_title(title: str, limit: int = ITEM_MAX) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def _criterion_name(text: str) -> str:
-    """ "**AC5 — The sweep sees every open PR.** ..." -> "AC5 The sweep sees every…"."""
+def _criterion_name(text: str, limit: int | None = STEP_MAX) -> str:
+    """ "**AC5 — The sweep sees every open PR.** ..." -> "AC5 The sweep sees every…"; `limit` None keeps it whole."""
     found = _AC_HEAD.findall(text.strip())
-    if not found:
-        return _truncate(text.replace("*", "").strip(), STEP_MAX)
-    ident, rest = found[0]
-    title = rest.split("**", 1)[0].strip().rstrip(".")
-    return _truncate(f"{ident} {title}".strip(), STEP_MAX)
+    if found:
+        ident, rest = found[0]
+        name = f"{ident} {rest.split('**', 1)[0].strip().rstrip('.')}".strip()
+    else:
+        name = text.replace("*", "").strip()
+    return name if limit is None else _truncate(name, limit)
 
 
 def _pr_number(item: dict[str, Any]) -> int:
@@ -373,6 +374,7 @@ def _plan_rows(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
         {
             "item": _truncate(str(plan.get("name") or ""), ITEM_MAX),
             "next_step": _criterion_name(unchecked[0]["text"]),
+            "detail": _criterion_name(unchecked[0]["text"], None),
             "owner": "AGENT",
             "ready": "○",
             "ref": None,

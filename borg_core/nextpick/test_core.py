@@ -820,3 +820,12 @@ def test_upcoming_lists_every_non_you_row_whole_before_the_cap():
         {"project": "p", "item": "", "next_step": "cut…", "detail": long, "owner": "AGENT"},
         {"project": "p", "item": "", "next_step": "no owner", "detail": "no owner", "owner": "—"},
     ]
+
+
+def test_plan_rows_carry_the_whole_criterion_as_detail_beside_the_cut_next_step():
+    rows, _ = core.work_items([_rank("p")], {}, {"p": PLAN}, {})
+    assert rows[0]["next_step"] == PLAN_STEP
+    assert rows[0]["detail"] == "AC5 The sweep sees every open PR"
+    free = {"name": "x", "text": "- [ ] a plain criterion that is quite a bit longer than twenty-two characters\n"}
+    rows, _ = core.work_items([_rank("p")], {}, {"p": free}, {})
+    assert rows[0]["next_step"].endswith("…") and rows[0]["detail"].endswith("twenty-two characters")

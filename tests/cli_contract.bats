@@ -179,7 +179,7 @@ EOF
     local plain
     plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
     local block
-    block=$(printf '%s\n' "$plain" | sed -n '/^  Summary$/,/^$/p')
+    block=$(printf '%s\n' "$plain" | sed -n '/^  Last time:/,/^$/p')
     [[ "$block" == *"Shipped the summary change; next is the contract step."* ]] || false
     [[ "$block" != *"**"* ]] || false
     [[ "$plain" != *"buttercup"* ]] || false
@@ -201,7 +201,7 @@ EOF
     local plain
     plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
     local block
-    block=$(printf '%s\n' "$plain" | sed -n '/^  Summary$/,/^$/p')
+    block=$(printf '%s\n' "$plain" | sed -n '/^  Last time:/,/^$/p')
     [[ "$block" == *"Landed the reader."* ]] || false
     [[ "$block" != *"Second thing."* ]] || false
     [[ "$block" != *"Not this one."* ]] || false
@@ -2690,7 +2690,8 @@ _assert_link_grid_golden() {
     # ...and that column-1 name must be something `borg link {1}` can render.
     run_zsh_borg link echo
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Session ID:"* ]] || false
+    [[ "$output" == *"Status:"* ]] || false
+    [[ "$output" != *"Session ID:"* ]] || false
 }
 
 # THE PICKER FEED VS THE THREE CONTROL CHARACTERS THAT REACH A REGISTRY.
@@ -3102,12 +3103,13 @@ EOF
 
     local plain
     plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
-    [[ "$plain" == *"Source:       desktop"* ]] || false
     [[ "$plain" == *"Last active:  (never)"* ]] || false
-    [[ "$plain" == *"tmux window:  (none)"* ]] || false
-    [[ "$plain" == *"Session ID:   (unknown)"* ]] || false
+    [[ "$plain" != *"Source:"* ]] || false
+    [[ "$plain" != *"tmux window:"* ]] || false
+    [[ "$plain" != *"Session ID:"* ]] || false
     [[ "$plain" != *"(no summary)"* ]] || false
     [[ "$plain" != *"Summary"* ]] || false
+    [[ "$plain" != *"Last time:"* ]] || false
     [[ "$plain" != *"Path:"* ]] || false
     [[ "$plain" != *"Active Plan"* ]] || false
     [[ "$plain" != *"Recent Checkpoints"* ]] || false
@@ -3115,41 +3117,34 @@ EOF
     [[ "$plain" != *"Recently assimilated"* ]] || false
 }
 
-# `fold -s -w 70` plus `sed '1!s/^/  /'` (borg.zsh:448) wraps a long summary and indents every
-# continuation line. The golden fixture's summary is 41 chars precisely so fold is a no-op there,
-# which left the wrap and the indent pinned by nothing at all.
-#
-# CORRECTED (see docs/plans/assimilated/2026-08-12-port-borg-link-to-the-python-core.md, A4): GNU
-# and BSD `fold -s` do NOT disagree on ASCII — measured 1000/1000 agreement, and `_fold_s`'s PR
-# #140 fix matches both. The real reason a byte-exact golden is the wrong tool here is that there
-# are three DIFFERENT counting algorithms in play, not two disagreeing vendors: `_fold_s` counts
-# codepoints, BSD `fold` counts display columns, GNU `fold` counts bytes (splitting a UTF-8
-# sequence mid-codepoint). They diverge on non-ASCII — an em dash, the single most likely
-# non-ASCII character in an LLM-written summary — so pinning wrap output byte-for-byte would work
-# today (this fixture is ASCII) but silently stop holding the moment a summary carries a non-ASCII
-# character, and would do so differently depending on the CI/dev-host userland. Asserted
-# structurally instead, so it holds regardless of which fold implementation runs it: more than one
-# line, and every line after the first indented.
-@test "contract: link <repository> deep dive wraps and indents a summary longer than 70 columns" {
+# AC5 of 2026-10-20-one-owned-next-list: the summary is `Last time:`, laid out WHOLE at the page width (98 columns) with
+# a 4-column hanging indent, and no line ends in an ellipsis. It used to be folded at 70 by `fold -s` and re-indented
+# with sed; those are gone, so the wrap is pinned structurally and by content: more than one line, every line after the
+# first indented exactly four columns, no line wider than the page, and the words come back in order.
+@test "contract: link <repository> deep dive wraps a long summary whole under Last time with a hanging indent" {
     _link_mock_tmux ""
-    printf '%s' '{"repositories":{"wordy":{"path":null,"source":"cli","status":"idle","summary":"This summary is deliberately far longer than seventy columns so that the fold pipeline has to break it across at least three separate rendered lines."}}}' \
+    local words="" n
+    for n in $(seq 1 40); do words="${words}word${n} "; done
+    printf '{"repositories":{"wordy":{"path":null,"source":"cli","status":"idle","summary":"%s"}}}' "${words% }" \
         > "$BORG_REGISTRY"
     _link_seed_checkpoints
 
     run_zsh_borg link wordy
     [ "$status" -eq 0 ]
 
-    printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g' | sed -n '/^  Summary$/,/^$/p' \
-        | sed '1d;/^$/d' > "${BATS_TEST_TMPDIR}/summary.txt"
+    printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g' | sed -n '/^  Last time:/,/^$/p' \
+        | sed '/^$/d' > "${BATS_TEST_TMPDIR}/summary.txt"
 
     run bash -c "cat '${BATS_TEST_TMPDIR}/summary.txt' | wc -l | tr -d ' '"
     [ "$output" -ge 2 ]
-
-    # `fold -s` breaks after a blank and keeps it on the previous line, so continuation lines start
-    # at column 0 until `sed '1!s/^/  /'` indents them to match the first line's two spaces. Drop the
-    # sed and every line after the first starts flush left, which this catches.
-    run bash -c "tail -n +2 '${BATS_TEST_TMPDIR}/summary.txt' | grep -cv '^  [^ ]'"
+    run bash -c "tail -n +2 '${BATS_TEST_TMPDIR}/summary.txt' | grep -cv '^    [^ ]'"
     [ "$output" = "0" ]
+    run bash -c "awk 'length > 98' '${BATS_TEST_TMPDIR}/summary.txt' | wc -l | tr -d ' '"
+    [ "$output" = "0" ]
+    run grep -c '…' "${BATS_TEST_TMPDIR}/summary.txt"
+    [ "$output" = "0" ]
+    run bash -c "tr -s ' \n' '  ' < '${BATS_TEST_TMPDIR}/summary.txt'"
+    [[ "$output" == *"word1 word2 word3"*"word39 word40"* ]] || false
 }
 
 # FIXED BY THE PORT, as PROJECT_PLAN.md's signed Phase 1 deviation list records.
@@ -3337,13 +3332,13 @@ EOF
     _link_grid_seams
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform-feat" "${BATS_TEST_TMPDIR}/feat.txt" link
-    run grep -c '2026-07-30-0900.md' "${BATS_TEST_TMPDIR}/feat.txt"
+    run grep -c 'Scope rotation lives on the feature branch' "${BATS_TEST_TMPDIR}/feat.txt"
     [ "$output" -ge 1 ]
     run bash -c "grep -c '2026-08-01-0900.md\|Scoped keypair auth rollout' '${BATS_TEST_TMPDIR}/feat.txt' || true"
     [ "$output" = "0" ]
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform" "${BATS_TEST_TMPDIR}/main.txt" link
-    run grep -c '2026-08-01-0900.md' "${BATS_TEST_TMPDIR}/main.txt"
+    run grep -c 'Scoped keypair auth rollout' "${BATS_TEST_TMPDIR}/main.txt"
     [ "$output" -ge 1 ]
     run bash -c "grep -c '2026-07-30-0900.md\|Scope rotation lives on the feature branch' '${BATS_TEST_TMPDIR}/main.txt' || true"
     [ "$output" = "0" ]
