@@ -50,6 +50,13 @@
       "ref": "noah-goodrich/borg-collective#458",
       "status": "open",
       "why": "PR 4: the cap shares its slots across repositories (AC7)"
+    },
+    {
+      "lane": "_default",
+      "order": "8",
+      "ref": "noah-goodrich/borg-collective#459",
+      "status": "open",
+      "why": "Evals Phase 1b B3 and B4: the model half, link and next eval pairs plus the borg-link closing-lines fix"
     }
   ]
 }
