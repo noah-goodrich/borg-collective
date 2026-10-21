@@ -36,6 +36,13 @@
       "ref": "noah-goodrich/borg-collective#451",
       "status": "merged",
       "why": "Phase 1b B1 and B2: link and next restate the page, waivers renewed"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#459",
+      "status": "open",
+      "why": "Phase 1b B3 and B4: link and next eval pairs replace the borg-link and borg-next waivers"
     }
   ]
 }
