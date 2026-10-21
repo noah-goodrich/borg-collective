@@ -698,9 +698,6 @@ def test_checkpoint_rows_on_the_queen_page_are_named_by_their_repository_not_ses
     row = next(line for line in page.split("\n") if "Pick the synthetic colour" in line and "▶" in line)
     assert "queen" in row and "session" not in row
     assert "session" not in page
-||||||| parent of b916b507 (fix(next): the 5-row cap shares its slots across repositories (AC7))
-
-
 
 
 def test_the_queen_page_waiting_on_you_shows_queen_rows_when_one_repository_has_six_you_rows(tmp_path, monkeypatch):
