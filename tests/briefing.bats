@@ -772,3 +772,29 @@ EOF
     # And the page really is absent — this is not a warning printed alongside a rendered document.
     [[ "$brief_stdout" != *"THE BORG COLLECTIVE"* ]] || false
 }
+
+# The prompt's NEXT ACTION reads `waiting.next`, the first row of the work list before the cap, so a checkpoint that
+# holds a Next Session item is never called "nothing is ready" and the item carries its owner.
+@test "briefing: a checkpoint next session item is the prompt's NEXT ACTION, with an owner" {
+    local ws="${BATS_TEST_TMPDIR}/ws"
+    mkdir -p "$ws/beta/.borg/checkpoints"
+    printf '**tl;dr** — Synthetic.\n\n## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n\n1. Build the synthetic widget\n' \
+        > "$ws/beta/.borg/checkpoints/2026-08-02-0900.md"
+    cat > "$BORG_REGISTRY" <<REG
+{"repositories": {"beta": {"path": "$ws/beta", "status": "idle", "source": "cli",
+  "last_activity": "2026-08-02T00:00:00Z", "summary": "Beta."}}}
+REG
+    export PROMPT_FILE="${BATS_TEST_TMPDIR}/prompt.txt"
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "-p" ] && printf '%s' "$2" > "$PROMPT_FILE"
+echo "NARRATIVE"
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    run bash -c "cd '$ws/beta' && '$BORG_CMD' link --brief --local"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run cat "$PROMPT_FILE"
+    [[ "$output" == *"NEXT ACTION: Build the synthetic widget (owner: mine)"* ]] || false
+    [[ "$output" != *"nothing is ready"* ]] || false
+}

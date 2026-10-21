@@ -1908,18 +1908,18 @@ def test_a_directorys_waiting_section_holds_its_own_session_row_only():
     doc = _door_doc(
         waiting={
             "rows": [session, pull_request],
-            "hidden": {"agent": 2, "stale": 0, "overflow": 0},
-            "hidden_lines": ["+2 agent tasks"],
+            "hidden": {"agent": 2, "stale": 0, "overflow": 0, "unowned": 1},
+            "hidden_lines": ["+2 agent tasks", "+1 unowned"],
             "degraded": None,
         }
     )
     out = plain(render.document(doc))
     assert "▶ session" in out and "reply to session" in out
     assert "o/r#9" not in out and "Fix the thing" not in out
-    assert "agent tasks" not in out
+    assert "agent tasks" not in out and "unowned" not in out
 
     queen = plain(render.document({**doc, "focus": None, "scope": {"kind": "orchestrator"}}))
-    assert "Fix the thing" in queen and "+2 agent tasks" in queen
+    assert "Fix the thing" in queen and "+2 agent tasks" in queen and "+1 unowned" in queen
 
 
 def test_a_directory_with_nothing_waiting_says_so_and_still_gives_a_runnable_next_action():

@@ -162,7 +162,8 @@ def _last_time(doc: dict) -> str:
 
 def _next(doc: dict) -> str:
     # The owner tag is appended AFTER the line, so the line is told how many columns to leave free for it, and its
-    # indent difference (the page indents `next` by 2; the brief's value column is _PREFIX wide).
+    # indent difference (the page indents `next` by 2; the brief's value column is _PREFIX wide). The owner is
+    # `yours`, `mine` or `unowned` (a checkpoint item nobody owns), and is present whenever the line names a next.
     _, owner = render.next_action(doc)
     tag = f"  owner: {owner}" if owner else ""
     line, _ = render.next_action(doc, reserve=_PREFIX - len("  next  ") + len(tag))

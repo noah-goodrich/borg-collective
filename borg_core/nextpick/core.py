@@ -471,6 +471,7 @@ def work_items(
 
 STALE_DRAFT_DAYS = 30
 SHOWN_MAX = 5
+NO_HIDDEN = {"agent": 0, "stale": 0, "overflow": 0, "unowned": 0}
 
 
 def _dedupe_repo_groups(
@@ -501,23 +502,29 @@ def _dedupe_repo_groups(
     return kept
 
 
+def _is_unowned(row: dict[str, Any]) -> bool:
+    """True for a row nobody owns: owner `—` or blank. Such a row is not an agent's task."""
+    return str(row.get("owner") or "").strip() in ("", "—")
+
+
 def cap_rows(
     work: list[dict[str, Any]], show_all: bool = False, limit: int = SHOWN_MAX
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """`(shown, hidden)`: at most `limit` YOU rows in existing order; everything else is only counted.
 
-    `hidden` is `{agent, stale, overflow}`: stale drafts first (whoever owns them), then every other non-YOU row
-    as `agent`, then YOU rows beyond `limit` as `overflow`. `show_all` returns every row and zero counts.
+    `hidden` is `{agent, stale, overflow, unowned}`: stale drafts first (whoever owns them), then non-YOU rows with
+    no owner (`—` or blank) as `unowned`, every other non-YOU row as `agent`, then YOU rows beyond `limit` as
+    `overflow`. `show_all` returns every row and zero counts.
     """
     if show_all:
-        return list(work), {"agent": 0, "stale": 0, "overflow": 0}
-    hidden = {"agent": 0, "stale": 0, "overflow": 0}
+        return list(work), dict(NO_HIDDEN)
+    hidden = dict(NO_HIDDEN)
     shown: list[dict[str, Any]] = []
     for row in work:
         if row.get("stale"):
             hidden["stale"] += 1
         elif row.get("owner") != "YOU":
-            hidden["agent"] += 1
+            hidden["unowned" if _is_unowned(row) else "agent"] += 1
         elif len(shown) < limit:
             shown.append(row)
         else:
@@ -525,9 +532,33 @@ def cap_rows(
     return shown, hidden
 
 
+def first_next(work: list[dict[str, Any]]) -> dict[str, str] | None:
+    """The first row of `work` that is not a stale draft, as `{project, next_step, detail, owner}`, or None.
+
+    The carrier behind every "next" surface's fallback: `cap_rows` drops non-YOU rows from the page, so the
+    first AGENT or unowned row has to be read BEFORE the cap. `detail` is the item's full text when the row has
+    one (checkpoint rows), else the cut `next_step`.
+    """
+    for row in work:
+        if not row.get("stale"):
+            step = str(row.get("next_step") or "")
+            return {
+                "project": str(row.get("project") or ""),
+                "next_step": step,
+                "detail": str(row.get("detail") or step),
+                "owner": str(row.get("owner") or "—"),
+            }
+    return None
+
+
 def hidden_lines(hidden: dict[str, int]) -> list[str]:
     """The summary lines for the counts `cap_rows` hid, in a fixed order, omitting zeros."""
-    labels = (("overflow", "more decisions"), ("agent", "agent tasks"), ("stale", "stale drafts"))
+    labels = (
+        ("overflow", "more decisions"),
+        ("agent", "agent tasks"),
+        ("unowned", "unowned"),
+        ("stale", "stale drafts"),
+    )
     return [f"+{hidden[key]} {text}" for key, text in labels if hidden.get(key)]
 
 

@@ -110,21 +110,15 @@ def _with_queen(
     return [*ranked, entry], {**checkpoints, **queen_cp}
 
 
-# JUSTIFICATION (too-many-arguments / too-many-positional-arguments): six independent inputs of one assembly step;
-# every production caller passes at most the first three positionally and the rest by keyword, so a container would
-# only relocate the names.
-# pylint: disable-next=too-many-arguments,too-many-positional-arguments
-def item_rows(
+def _gather(
     repositories: dict[str, Any],
     local: bool,
-    show_all: bool = False,
     swept: tuple[dict[str, list[dict[str, Any]]], str | None] | None = None,
     compass: dict[str, Any] | None = None,
     queen: bool = False,
-) -> tuple[list[dict[str, Any]], list[str], str | None, dict[str, int]]:
-    """`(rows, quiet, degraded, hidden)`: work items from the recon sweep, plans, sessions and checkpoints.
-
-    Capped by `core.cap_rows` (at most 5 YOU rows; the rest only counted in `hidden`) unless `show_all`.
+) -> tuple[list[dict[str, Any]], list[str], str | None, list[dict[str, Any]]]:
+    """`(work, quiet, degraded, ranked)`: every work item, UNCAPPED, from the recon sweep, plans, sessions and
+    checkpoints. `item_rows` and `item_rows_with_next` cap it.
 
     `compass` is the map's block, when the caller has one: it reorders the repositories (`core.rank`) and so the
     rows, and the caller that shows these rows on a page hands in the same block it renders.
@@ -150,6 +144,44 @@ def item_rows(
         checkpoints,
         int(datetime.now(UTC).timestamp()),
     )
+    return work, quiet, degraded, ranked
+
+
+def item_rows_with_next(
+    repositories: dict[str, Any],
+    local: bool,
+    swept: tuple[dict[str, list[dict[str, Any]]], str | None] | None = None,
+    compass: dict[str, Any] | None = None,
+    queen: bool = False,
+) -> tuple[list[dict[str, Any]], str | None, dict[str, int], dict[str, str] | None]:
+    """`(rows, degraded, hidden, first)`: `item_rows`' capped rows plus the first row BEFORE the cap.
+
+    `first` is `core.first_next` over the same uncapped work the rows were cut from, so a page that shows only the
+    YOU rows can still name the first AGENT or unowned item without a second sweep.
+    """
+    work, _quiet, degraded, ranked = _gather(repositories, local, swept=swept, compass=compass, queen=queen)
+    shown, hidden = core.cap_rows(work)
+    return core.numbered_rows(shown, ranked), degraded, hidden, core.first_next(work)
+
+
+# JUSTIFICATION (too-many-arguments / too-many-positional-arguments): six independent inputs of one assembly step;
+# every production caller passes at most the first three positionally and the rest by keyword, so a container would
+# only relocate the names.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+def item_rows(
+    repositories: dict[str, Any],
+    local: bool,
+    show_all: bool = False,
+    swept: tuple[dict[str, list[dict[str, Any]]], str | None] | None = None,
+    compass: dict[str, Any] | None = None,
+    queen: bool = False,
+) -> tuple[list[dict[str, Any]], list[str], str | None, dict[str, int]]:
+    """`(rows, quiet, degraded, hidden)`: work items from the recon sweep, plans, sessions and checkpoints.
+
+    Capped by `core.cap_rows` (at most 5 YOU rows; the rest only counted in `hidden`) unless `show_all`. See
+    `_gather` for the sources, `swept`, `compass` and `queen`.
+    """
+    work, quiet, degraded, ranked = _gather(repositories, local, swept=swept, compass=compass, queen=queen)
     shown, hidden = core.cap_rows(work, show_all)
     return core.numbered_rows(shown, ranked), quiet, degraded, hidden
 
@@ -169,7 +201,7 @@ def rows_json(
 ) -> dict[str, Any]:
     """The `--rows --json` payload: item rows, the first row's repository, the earned suggestion's row number or None.
 
-    `hidden` is `{agent, stale, overflow}`: how many rows the cap left out (all zero under `--all`).
+    `hidden` is `{agent, stale, overflow, unowned}`: how many rows the cap left out (all zero under `--all`).
 
     Each row also carries `card`, the preview lines `/borg-next` passes verbatim (`core.chooser_card`); additive.
     """
@@ -199,7 +231,7 @@ def _rows_json_failopen(
             "suggestion": None,
             "quiet": [],
             "degraded": f"rows failed: {exc}",
-            "hidden": {"agent": 0, "stale": 0, "overflow": 0},
+            "hidden": dict(core.NO_HIDDEN),
         }
 
 

@@ -924,7 +924,7 @@ _borg_next_surface() {
             (( local_flag )) && rows_args+=(--local)
             (( all_flag )) && rows_args+=(--all)
             printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null ||
-                printf '{"rows":[],"rec":null,"suggestion":null,"quiet":[],"degraded":"rows failed","hidden":{"agent":0,"stale":0,"overflow":0}}\n'
+                printf '{"rows":[],"rec":null,"suggestion":null,"quiet":[],"degraded":"rows failed","hidden":{"agent":0,"stale":0,"overflow":0,"unowned":0}}\n'
             ;;
         open)
             (( chosen )) || die "next --open needs --chosen"
@@ -1621,6 +1621,7 @@ _borg_print_briefing() {
         | ($f.entry // {}) as $e
         | ($f.identity // {}) as $i
         | (($d.waiting.rows // []) | map(select(.item == "session" and ((.ref // "") == ""))) | first // null) as $row
+        | ($d.waiting.next // null) as $next
         | [
             "SCOPE: repository — \($f.name // $d.scope.repository // "unknown")",
             "THIS DOCUMENT DESCRIBES ONE DIRECTORY AND NOTHING ELSE. There is no other repository here: do not name or guess at one.",
@@ -1645,6 +1646,10 @@ _borg_print_briefing() {
              then ["--- latest checkpoint for \($f.name) ---", $f.checkpoint_head, "--- end checkpoint ---", ""]
              else [] end)
           + ["NEXT ACTION: " + (if $row != null then "waiting on you — \($row.next_step // "a session needs input")"
+                                elif $next != null
+                                then "\($next.next_step) (owner: \(if $next.owner == "YOU" then "yours"
+                                                                       elif $next.owner == "AGENT" then "mine"
+                                                                       else "unowned" end))"
                                 else "nothing is ready" end)]
           | join("\n")
     '
