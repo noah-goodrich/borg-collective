@@ -52,8 +52,8 @@ Reference moved verbatim from the top-level CLAUDE.md.
   checkpoint whole. The items under `Waits on you:` become YOU rows, the `Next Session` items become AGENT rows (a
   checkpoint older than 30 days adds none), and a checkpoint newer than `PROJECT_PLAN.md` replaces the plan row. The
   Queen's own checkpoint feeds the Queen scope, and `/borg-link-up` writes the `Waits on you:` list. A row with no
-  owner shows as `unowned` and is counted apart (`+N unowned`), and every surface names a next item with its owner
-  instead of saying nothing is ready. The repository page shows Last time, Waits on you and Next whole, wrapped, capped
+  owner shows as `unowned` and is counted apart (`+N unowned`), and when a checkpoint holds a Next Session item,
+  every surface names it with its owner instead of saying nothing is ready. The repository page shows Last time, Waits on you and Next whole, wrapped, capped
   by whole items with `+N more  borg link --full`; the 5-row cap on decisions that are yours shares its slots across
   repositories so the Queen's rows are not pushed out. `--json` gains additive keys only (`hidden.unowned`,
   `waiting.next`, `waiting.next_items`; `DOCUMENT_VERSION` stays 2). `evals/link-next` replaces the `borg-link` and
