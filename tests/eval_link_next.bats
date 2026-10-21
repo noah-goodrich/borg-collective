@@ -32,7 +32,7 @@ harness() {
     grep -qF 'Approve the invented vendor quote' "$bad"
     local pat
     pat="$(awk '/^---$/{n++; next} n>=2 && NF{print; exit}' "$COPY/cases/link-verdict-honest-waits/graders/no-nothing-waits.md")"
-    run env "PAT=$pat" perl -0777 -ne 'exit(/$ENV{PAT}/ ? 0 : 1)' "$bad"
+    run env "PAT=$pat" python3 -I -c 'import os, re, sys; sys.exit(0 if re.search(os.environ["PAT"], open(sys.argv[1]).read()) else 1)' "$bad"
     [ "$status" -eq 1 ]
 }
 

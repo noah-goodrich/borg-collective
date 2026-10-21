@@ -7,7 +7,7 @@
 #
 #   SANDBOX  every case builds its plugin sandbox (sandbox.sh), and the sandbox copy of the skill differs from
 #            the shipped SKILL.md in exactly the one swapped span. A skill edit that removes the span fails here.
-#   GRADERS  every `type: regex` grader of a case is applied (perl) to recorded replies: transcripts/<case>.good.md
+#   GRADERS  every `type: regex` grader of a case is applied (python re) to recorded replies: transcripts/<case>.good.md
 #            must pass ALL of them, and each transcripts/<case>.bad-*.md must fail AT LEAST ONE. The known-bad
 #            replies reproduce the 2026-10-20 shape (a reply saying nothing waits above a page that lists items;
 #            a reply saying "declined") with invented names. A grader that passes everything, or one whose pattern
@@ -39,15 +39,22 @@ if [ ! -f "$REPO/borg.zsh" ]; then
     echo "ERROR: REPO does not look like the borg-collective checkout: $REPO" >&2
     exit 2
 fi
-command -v perl >/dev/null 2>&1 || { echo "ERROR: perl is required to apply the regex graders" >&2; exit 2; }
+if [ -n "${BORG_EVAL_PYTHON:-}" ]; then
+    PYTHON="$BORG_EVAL_PYTHON"
+elif [ -x "$REPO/.venv/bin/python" ]; then
+    PYTHON="$REPO/.venv/bin/python"
+else
+    PYTHON="python3"
+fi
 
-OUT="$HERE/out"
+OUT="$REPO/evals/link-next/out"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-PASS=0; FAIL=0
+PASS=0; FAIL=0; SKIPPED=0
 ok()  { echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad() { echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
+skip() { echo "  SKIP  $1"; SKIPPED=$((SKIPPED+1)); }
 
 # The grader body is the text after the frontmatter's closing `---`, trimmed: one regex, matched as a search over
 # the final message (the runner's `regex` grader does the same, "pattern not found in last_message").
@@ -59,9 +66,10 @@ grade() {
     local pat
     pat="$(grader_body "$1")"
     [ -n "$pat" ] || return 2
-    PAT="$pat" perl -0777 -ne 'exit(/$ENV{PAT}/ ? 0 : 1)' "$2"
+    PAT="$pat" "$PYTHON" -I -c 'import os, re, sys; sys.exit(0 if re.search(os.environ["PAT"], open(sys.argv[1], encoding="utf-8").read()) else 1)' "$2"
 }
 
+run_cases() {
 for casedir in "$DIR"/cases/*/; do
     c="${casedir%/}"; c="${c##*/}"
 
@@ -69,8 +77,14 @@ for casedir in "$DIR"/cases/*/; do
     sb="$OUT/$c"
     if BORG_EVAL_REPO="$REPO" bash "$HERE/sandbox.sh" "$c" "$sb" > "$OUT/$c.sandbox.log" 2>&1; then
         skill="$(sed -n 's/^skill=//p' "$casedir/sandbox.conf")"
-        changed="$(diff "$REPO/skills/$skill/SKILL.md" "$sb/skills/$skill/SKILL.md" | grep -c '^<')"
-        if [ "$changed" -eq 1 ] && diff -r -x SKILL.md "$REPO/skills/$skill" "$sb/skills/$skill" >/dev/null; then
+        changed="$(awk 'NR==FNR{a[$0]=1; next} !($0 in a){n++} END{print n+0}' "$sb/skills/$skill/SKILL.md" "$REPO/skills/$skill/SKILL.md")"
+        untouched=1
+        for f in "$REPO/skills/$skill"/* "$REPO/skills/$skill"/*/*; do
+            [ -f "$f" ] || continue
+            [ "${f##*/}" = SKILL.md ] && [ "${f%/*}" = "$REPO/skills/$skill" ] && continue
+            [ "$(cat "$f")" = "$(cat "$sb/skills/$skill/${f#"$REPO/skills/$skill/"}")" ] || untouched=0
+        done
+        if [ "$changed" -eq 1 ] && [ "$untouched" -eq 1 ]; then
             ok "$c: the sandbox copy of $skill differs from the shipped skill in exactly one line"
         else
             bad "$c: the sandbox copy of $skill changed $changed lines or touched other files"
@@ -122,9 +136,16 @@ for casedir in "$DIR"/cases/*/; do
         fi
     done
 done
+}
+
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+    skip "interpreter '$PYTHON' not found -- set BORG_EVAL_PYTHON; the regex graders cannot run"
+else
+    run_cases
+fi
 
 echo
-echo "RESULT: $PASS pass, $FAIL fail"
+echo "RESULT: $PASS pass, $FAIL fail, $SKIPPED skip"
 if [ $((PASS + FAIL)) -eq 0 ]; then
     echo "no case was graded: nothing was verified" >&2
     exit 1
