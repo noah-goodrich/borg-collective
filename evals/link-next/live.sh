@@ -5,7 +5,7 @@
 #   usage: evals/link-next/live.sh [--runs N] [--model M] [--max-cost-usd USD] [--case NAME]
 #
 #   --runs N            runs per case (default 3, the directive's figure)
-#   --model M           the model the runner uses for every case (default haiku, the cheapest the runner allows)
+#   --model M           the model the runner uses for every case (default sonnet; haiku is flaky here, see directive)
 #   --max-cost-usd USD  hard ceiling for EACH case's invocation (default 1); the runner checks it before each run
 #   --case NAME         one case only (default: all four)
 #
@@ -19,7 +19,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${BORG_EVAL_REPO:-$(cd "$HERE/../.." && pwd)}"
-RUNS=3; MODEL=haiku; CEILING=1; ONLY=""
+RUNS=3; MODEL=sonnet; CEILING=1; ONLY=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --runs) RUNS="$2"; shift ;;
