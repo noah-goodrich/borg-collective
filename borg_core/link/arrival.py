@@ -12,9 +12,9 @@ The four lines (the screen-4 mock of `2026-10-05-board-chooser-and-trains-ux.md`
   watch out   derived facts first (STALE checkpoint, dirty tree, clock skew, ...), else `nothing flagged`
   since then  HEAD moves since the checkpoint (`focus.since`, additive), directives shipped since, last activity
 
-Every line is at most `render.PAGE_COLUMNS` visible columns. A command is never cut: `next` narrows its own label
-and repository to make room (`render._next_action_line`), and every other line is made of facts that are clipped at
-part boundaries or free text that may end in `…`.
+Every line is at most `render.PAGE_COLUMNS` visible columns, and NOTHING IS CUT: a row that does not fit wraps onto
+continuation lines indented under its text (`_row`), so a label, a repository, a command or a tl;dr is never ended in
+`…`. The derived-fact rows still keep a fact whole or count it (`+2 more`) rather than let the brief grow.
 """
 
 from __future__ import annotations
@@ -116,7 +116,8 @@ def _age(days: int) -> str:
 
 
 def _row(label: str, text: str) -> str:
-    return f" {label:<11} {text}"
+    """` label       text`, wrapped at `PAGE_COLUMNS` with continuation lines indented to the text's column."""
+    return render.wrap(text, f" {label:<11} ", " " * _PREFIX)
 
 
 def _facts_row(label: str, facts: list[str], empty: str) -> str:
@@ -132,7 +133,7 @@ def _facts_row(label: str, facts: list[str], empty: str) -> str:
         kept.append(fact)
     left = len(facts) - len(kept)
     text = _SEP.join(kept) + (f"{_SEP}+{left} more" if left else "")
-    return _row(label, render.clip(text or empty, room))
+    return _row(label, text or empty)
 
 
 def _tldr(head: str) -> str:
@@ -156,18 +157,15 @@ def _last_time(doc: dict) -> str:
     days = _checkpoint_days(doc)
     said = _tldr(str(focus.get("checkpoint_head") or "")) or str((focus.get("entry") or {}).get("summary") or "")
     lead = f"{_age(days)}" if days is not None else "checkpoint"
-    room = render.PAGE_COLUMNS - _PREFIX - len(lead) - len(_SEP)
-    return _row("last time", f"{lead}{_SEP}{render.clip(said, room)}" if said else lead)
+    return _row("last time", f"{lead}{_SEP}{said}" if said else lead)
 
 
 def _next(doc: dict) -> str:
-    # The owner tag is appended AFTER the line, so the line is told how many columns to leave free for it, and its
-    # indent difference (the page indents `next` by 2; the brief's value column is _PREFIX wide). The owner is
-    # `yours`, `mine` or `unowned` (a checkpoint item nobody owns), and is present whenever the line names a next.
-    _, owner = render.next_action(doc)
-    tag = f"  owner: {owner}" if owner else ""
-    line, _ = render.next_action(doc, reserve=_PREFIX - len("  next  ") + len(tag))
-    return _row("next", line[len("next  ") :] + tag)
+    # The owner tag rides as the LAST atom of the body, so it wraps with it and is never cut. The owner is `yours`,
+    # `mine` or `unowned` (a checkpoint item nobody owns), and is present whenever the line names a next.
+    body, _ = render.next_action(doc, width=render.PAGE_COLUMNS - _PREFIX, owner_tag=True)
+    first, *rest = body.split("\n")
+    return "\n".join([f" {'next':<11} {first}", *(" " * _PREFIX + line for line in rest)])
 
 
 def _watch_out(doc: dict) -> str:

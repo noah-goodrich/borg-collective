@@ -36,6 +36,13 @@
       "ref": "noah-goodrich/borg-collective#455",
       "status": "merged",
       "why": "PR 2: unowned rows and a next item on every surface (AC4)"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#457",
+      "status": "open",
+      "why": "PR 3: the page shows fewer things, whole (AC5), and checkpoint-row fixes"
     }
   ]
 }

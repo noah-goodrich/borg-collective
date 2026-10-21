@@ -17,7 +17,7 @@ break any consumer that splits it. IT DOES NOT FEED `borg switch`: this paragrap
 canonical statement of the retraction and names who actually feeds the picker. Read it first.
 
 `overview()` AND `deep()` ARE GONE. Their bodies survive, transcribed statement by statement, as
-`_board_section` and `_focus_section`; `_summary_block`, `_fold_s`, `_label`, `_overview_row` and
+`_board_section` and `_focus_section`; `_label`, `_overview_row` and
 every `_COL_*` width are the untouched parity surface underneath them. What used to be two modes of
 one command answering the same question with different data is now two ROW SETS of one document.
 
@@ -77,7 +77,7 @@ so it does not surprise anyone later.
 #
 # THIS IS A DEFERRAL, NOT A VERDICT. The real fix is splitting the module along the seam that already
 # exists -- the SECTIONS spine and its section builders on one side, the shared text primitives
-# (`_fold_s`, `_label`, `_summary_block`) on the other. That is an architecture
+# (`_label`, `_clean`, the wrapping helpers) on the other. That is an architecture
 # change and was deliberately not made inside a merge fix; it is filed as its own directive. The
 # duplication this merge DID create (two branches each writing the same argument) was collapsed
 # first, AST-verified as behavior-identical, which took the file from 1133 to 1108.
@@ -218,9 +218,9 @@ _ESCAPES = re.compile(r"\033\[[0-9;]*m|\033\]8;;[^\033]*\033\\")
 _OSC8_CLOSE = "\033]8;;\033\\"
 
 
-# The IN FOCUS lines whose value is a path (the directory, its parent, the map directory), which is a ref: never cut,
-# even past `PAGE_COLUMNS`.
-_UNCUT_LABELS = ("Path:", "Worktree of:", "Compass: no map at")
+# The IN FOCUS lines whose value is a path (the parent repository, the map directory), which is a ref: never cut, even
+# past `PAGE_COLUMNS`.
+_UNCUT_LABELS = ("Worktree of:", "Compass: no map at")
 
 
 def _fit_text(text: str, limit: int = PAGE_COLUMNS, keep: tuple[str, ...] = ()) -> str:
@@ -266,6 +266,52 @@ def _fit_line(line: str, limit: int = PAGE_COLUMNS) -> str:
     return "".join(out).rstrip() + f"…{NC}{_OSC8_CLOSE if link_open else ''}{newline}"
 
 
+# One piece of a wrapped line: the separator that precedes it when it is not first on its line, its plain text, and the
+# colour it is painted in ("" for none). `_wrap_atoms` never breaks inside an atom.
+_Atom = tuple[str, str, str]
+
+
+def _words(text: object, room: int, color: str = "") -> list[_Atom]:
+    """`text` as one atom per word (control characters flattened), a word wider than `room` split into pieces.
+
+    The split is the one place free text is cut mid-word, and only for a word that could not fit on a line of its
+    own; no `…` is added, so nothing is lost. Commands and refs are never passed through here.
+    """
+    atoms: list[_Atom] = []
+    for word in _clean(text).split():
+        while len(word) > room > 0:
+            atoms.append((" ", word[:room], color))
+            word = word[room:]
+        atoms.append((" ", word, color))
+    return atoms
+
+
+def _wrap_atoms(atoms: list[_Atom], width: int, first: str, hang: str) -> list[str]:
+    """`atoms` laid out in lines of at most `width` visible columns (an atom wider than that keeps a line to itself).
+
+    The first line starts with `first` and every later one with `hang` (the hanging indent). An atom moves to a new
+    line whole, so a command is never broken. Colour is emitted per RUN: neighbours of one colour share one escape,
+    and a separator between two colours sits outside both, so a line that fits is byte-for-byte what it was when it
+    was built by hand. A line closes any colour it opened, so nothing bleeds onto the next.
+    """
+    lines: list[str] = []
+    line, used, color, fresh = first, picture.visible_len(first), "", True
+    for sep, text, paint in atoms:
+        if not fresh and used + len(sep) + len(text) > width:
+            lines.append(line + (NC if color else ""))
+            line, used, color, fresh = hang, len(hang), "", True
+        gap = "" if fresh else sep
+        if paint == color:
+            line += gap + text
+        else:
+            line += (NC if color else "") + gap + paint + text
+            color = paint
+        used += len(gap) + len(text)
+        fresh = False
+    lines.append(line + (NC if color else ""))
+    return lines
+
+
 # `summary` ARRIVES ALREADY FLAT. `core.flatten_summary` is applied once at document assembly
 # (`core.assemble`'s projects map), so no renderer here defends itself and a new consumer inherits
 # the guarantee instead of repeating the bug. The helper that used to live here was OPT-IN, and the
@@ -275,76 +321,6 @@ def _label(text: str, value: str, col: int = _DEEP_LABEL_COL) -> str:
     rather than six separately hand-counted space literals (borg.zsh:440-445)."""
     pad = " " * max(col - len(text), 1)
     return f"  {DIM}{text}{NC}{pad}{value}\n"
-
-
-def _fold_s(text: str, width: int = 70) -> list[str]:
-    """Reproduce `fold -s -w <width>`'s break points: break AFTER the last space at or before
-    `width` (the space stays on the emitted line); hard-break at exactly `width` when the window
-    contains no space at all.
-
-    Pinned by cli_contract.bats's "link <repository> deep dive wraps and indents a summary longer than
-    70 columns": every continuation line must match `^  [^ ]` -- a continuation must never begin
-    with a space. (Anchored by TEST NAME, not by line number. A 90-line insertion at the top of
-    cli_contract.bats silently invalidated every `cli_contract.bats:<N>` pointer in this tree once
-    already; names survive insertions.)
-
-    GNU-vs-BSD, measured not assumed: a 1000-case randomized differential (varied word lengths,
-    runs of spaces, leading/trailing spaces, words longer than the width, empty strings, widths
-    1-70) run against BSD `fold` (macOS host) and GNU coreutils 9.4 `fold` (ubuntu:24.04 via
-    Docker) produced ZERO disagreements between the two vendors, and this implementation matched
-    both exactly. There is no known real divergence for this module's inputs; the differential
-    test at test_render.py::TestFoldS::test_matches_real_fold_s_binary shells out to whichever
-    `fold` is on PATH rather than hardcoding either vendor's output, so a future real divergence
-    would surface as a platform-specific test failure instead of silently shipping wrong bytes.
-    """
-    lines: list[str] = []
-    remaining = text
-    while len(remaining) > width:
-        window = remaining[:width]
-        break_at = window.rfind(" ")
-        if break_at == -1:
-            lines.append(remaining[:width])
-            remaining = remaining[width:]
-        else:
-            lines.append(remaining[: break_at + 1])
-            remaining = remaining[break_at + 1 :]
-    lines.append(remaining)
-    return lines
-
-
-def _summary_block(summary: str) -> str:
-    """IN FOCUS's unconditional Summary block (borg.zsh:447-448):
-    `echo -e "  ${BOLD}Summary${NC}"` then `echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'`.
-
-    The two leading spaces on the first line COUNT against the 70-column fold budget; lines 2..n are
-    re-indented to two spaces (NOT folded with the indent already applied).
-
-    EMBEDDED WHITESPACE CONTROL CHARACTERS ARE FLATTENED TO SPACES HERE (F1), because the `^  [^ ]`
-    continuation contract is this function's OWN invariant. See `core.flatten_summary` for the character
-    set, the altitude argument, and why the one-for-one replacement moves no golden.
-    """
-    out = [f"  {BOLD}Summary{NC}\n"]
-    folded = _fold_s("  " + summary, width=70)
-    for i, line in enumerate(folded):
-        if i == 0:
-            out.append(f"{line}\n")
-        else:
-            out.append(f"  {line}\n")
-    return "".join(out)
-
-
-def _checkpoint_head_block(head: str) -> str:
-    """Indent every line of a checkpoint head to two spaces, INCLUDING blank ones (borg.zsh:476's
-    `head -20 "$f" | sed 's/^/  /'`, whose `^` anchor matches an empty line too).
-
-    Drops a spurious trailing empty element: shell.read_latest_checkpoint_head encodes the file's
-    trailing newline as an empty FINAL element after split("\\n"); a naive per-element loop would
-    therefore emit one extra "  " line that `head -20` piped through `sed` never produces.
-    """
-    lines = head.split("\n")
-    if lines and lines[-1] == "":
-        lines.pop()
-    return "".join(f"  {line}\n" for line in lines)
 
 
 def porcelain(doc: dict) -> str:
@@ -427,8 +403,7 @@ def _overview_summary_cut(summary: str) -> str:
     repository name. `core.flatten_summary` is the canonical statement of the character set, of all three
     call sites and how each breaks, and of the retraction that none of this is about the picker.
 
-    FLATTEN BEFORE CUTTING, NOT AFTER -- the same ordering `_summary_block` uses, pinned there by
-    test_render.py::TestSummaryBlock::test_summary_block_flattens_newlines_before_folding_not_after.
+    FLATTEN BEFORE CUTTING, NOT AFTER -- the same ordering the page's `_words` uses (`_clean` first).
     Stated honestly: TODAY the two orderings are behaviourally identical, because the replacement is
     one character for one character, so `flat[:50]` and `summary[:50].replace(...)` are the same
     string and `len()` is the same number either way. Before-cut is nonetheless the correct
@@ -704,7 +679,9 @@ def _compass_lines(doc: dict, names: list[str] | None = None) -> list[str]:
     """IN FOCUS's compass lines. `names` are the repositories of the card they follow; None means no card (the Queen).
 
     No map: the one `Compass: no map at <dir>` line. Queen: the leg (or `no leg chosen`) and the tally of active
-    destinations by state. A card: the leg, then `off route: <repository> is not on today's leg` when the map
+    destinations by state. A card: nothing when no leg was chosen (a line saying so is noise on a page about one
+    directory, and with no route nothing is off it), else the leg, then `off route: <repository> is not on today's
+    leg` when the map
     assigns this repository a destination the leg does not name. Unlabelled-column text on purpose
     (`Compass: ...`, no padding): the lines are the contract and a reader greps them.
     """
@@ -713,9 +690,11 @@ def _compass_lines(doc: dict, names: list[str] | None = None) -> list[str]:
         return []
     if not compass.get("found"):
         return [f"  Compass: no map at {_clean(compass.get('map_dir'))}\n"]
-    leg = _clean((compass.get("leg") or {}).get("text")) or "no leg chosen"
+    leg = _clean((compass.get("leg") or {}).get("text"))
     if names is None:
-        return [f"  Compass: {leg}{_compass_tally(compass)}\n"]
+        return [f"  Compass: {leg or 'no leg chosen'}{_compass_tally(compass)}\n"]
+    if not leg:
+        return []
     lines = [f"  Compass: {leg}\n"]
     off = _off_route(compass, names)
     if off:
@@ -762,18 +741,116 @@ def _parking_line(item: dict) -> str:
     return f"  {YELLOW}▶{NC} parking: {text} (look again {item.get('look')}, seen {int(item.get('seen') or 0)})\n"
 
 
-# JUSTIFICATION: transcribes borg.zsh:415-508 statement by statement for one golden-diffable section.
-def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-many-locals
-    """IN FOCUS: the page of repository scope -- ONE directory's card, transcribed from the retired `deep()`.
+# The most item lines the repository page prints under `Waits on you` and `Next` together, before it counts the rest
+# (`+N more  borg link --full`). Whole items only: an item that would pass the budget is counted, never cut. The first
+# item of each list is always kept, so the page never has a heading with nothing under it or hides the first thing
+# that waits on the reader because a long item came before it.
+PAGE_ITEM_LINES = 8
+
+_MORE_COMMAND = f"borg link {FULL_FLAG}"
+
+
+def _is_checkpoint_wait(row: dict) -> bool:
+    """A `borg next` YOU row that is a checkpoint's wait item: no ref and no item of its own (not a PR, not a
+    session)."""
+    return row.get("owner") == "YOU" and not row.get("ref") and not row.get("item")
+
+
+def _checkpoint_waits(doc: dict) -> list[str]:
+    """The texts of this directory's checkpoint wait items, whole: `borg next`'s YOU rows that are not PRs or a session.
+
+    A checkpoint row has no ref and no item of its own (`nextpick.core._checkpoint_row`); `detail` is its full text.
+    """
+    rows = (doc.get("waiting") or {}).get("rows") or []
+    return [
+        text
+        for row in rows
+        if _is_checkpoint_wait(row)
+        if (text := _clean(row.get("detail") or row.get("next_step")))
+    ]
+
+
+def _next_items(doc: dict) -> list[tuple[str, str]]:
+    """`(owner label, text)` of the Next list, whole: the non-YOU rows `borg next` holds for this directory."""
+    rows = (doc.get("waiting") or {}).get("next_items") or []
+    return [
+        ("AGENT" if row.get("owner") == "AGENT" else "unowned", text)
+        for row in rows
+        if (text := _clean(row.get("detail") or row.get("next_step")))
+    ]
+
+
+def _numbered(number: int, text: str) -> list[str]:
+    """One item, `N text`, wrapped at `PAGE_COLUMNS` with a hanging indent under its text."""
+    prefix = f"  {number} "
+    return _wrap_atoms(_words(text, PAGE_COLUMNS - len(prefix)), PAGE_COLUMNS, prefix, " " * len(prefix))
+
+
+def _item_blocks(texts: list[str]) -> list[list[str]]:
+    """The wrapped lines of each item of one list, numbered from 1."""
+    return [_numbered(number, text) for number, text in enumerate(texts, start=1)]
+
+
+def _whole_items(blocks: list[list[str]], room: int) -> int:
+    """How many of `blocks` fit in `room` lines, counting from the first: whole items, and at least one if any."""
+    kept, used = 0, 0
+    for block in blocks:
+        if kept and used + len(block) > room:
+            break
+        kept += 1
+        used += len(block)
+    return kept
+
+
+def _item_lists(doc: dict, full: bool) -> list[str]:
+    """The `Waits on you` and `Next` lists of the repository page: whole items, capped by whole items.
+
+    The budget is `PAGE_ITEM_LINES` for both lists together (every item with `full`); what it leaves out is counted on
+    one line that names the command that prints it. An empty list prints nothing, not a heading.
+    """
+    waits = _item_blocks(_checkpoint_waits(doc))
+    nexts = _next_items(doc)
+    owners = list(dict.fromkeys(owner for owner, _ in nexts))
+    upcoming = _item_blocks([text for _, text in nexts])
+    keep_waits = len(waits) if full else _whole_items(waits, PAGE_ITEM_LINES)
+    used = sum(len(block) for block in waits[:keep_waits])
+    keep_next = len(upcoming) if full else _whole_items(upcoming, max(PAGE_ITEM_LINES - used, 0))
+    out: list[str] = []
+    for heading, blocks, keep in (
+        ("Waits on you", waits, keep_waits),
+        (f"Next · {' / '.join(owners)}", upcoming, keep_next),
+    ):
+        if blocks:
+            out.extend(["\n", f"  {BOLD}{heading}{NC}\n"])
+            out.extend(f"{line}\n" for block in blocks[:keep] for line in block)
+    left = len(waits) - keep_waits + len(upcoming) - keep_next
+    if left:
+        out.append(f"  {DIM}+{left} more{NC}  {CYAN}{_MORE_COMMAND}{NC}\n")
+    return out
+
+
+def _last_time(summary: str) -> list[str]:
+    """`Last time: <summary>` wrapped at `PAGE_COLUMNS` with a hanging indent; nothing when there is no summary."""
+    if not summary:
+        return []
+    atoms: list[_Atom] = [("", "Last time:", DIM), *_words(summary, PAGE_COLUMNS - 4)]
+    return ["\n", *(f"{line}\n" for line in _wrap_atoms(atoms, PAGE_COLUMNS, "  ", "    "))]
+
+
+def _focus_section(doc: dict, full: bool = False) -> tuple[str, list[str]]:
+    """IN FOCUS: the page of repository scope -- ONE directory's card, held to fewer things, whole.
 
     The header note is the one-line SCOPE LABEL (`worktree.scope_label`): the directory and what it is to its
-    repository. The card states the directory's identity (path, branch, worktree-of), its live session and
-    status, and its OWN checkpoints (summary, recent, latest); `cli._focus` read every one of those from that
-    directory alone. There is no Active Plan block: since 2026-10-13 the repository-scope page is strictly the
-    directory, and the plan is a repository-level section (still in `--json` as `focus.plan`).
+    repository. The card states the directory's identity (branch, worktree-of), its status and last activity, the
+    compass leg when one was chosen, `Last time` (the checkpoint's own summary), then the two lists that answer "what
+    now": `Waits on you` and `Next` (`_item_lists`). The registry-only fields (Source, Path, tmux window, Session ID),
+    the checkpoint filenames and the checkpoint excerpt are NOT on the page; `--json` carries every one of them
+    (`focus.entry`, `focus.checkpoints`, `focus.checkpoint_head`). There is no Active Plan block: since 2026-10-13
+    the repository-scope page is strictly the directory, and the plan is a repository-level section (still in
+    `--json` as `focus.plan`).
 
     Its Directives and Recently-assimilated blocks are NOT here either -- they are the QUEUED and
-    SHIPPED sections, which only the Queen's page renders.
+    SHIPPED sections, which only the Queen's page renders. `full` prints every item of both lists.
     """
     focus = doc.get("focus") or {}
     if not focus:
@@ -786,19 +863,11 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     name = focus.get("name", "")
     entry = focus.get("entry") or {}
     identity = focus.get("identity") or {}
-    source = core.jq_default(entry.get("source"), "cli")
-    path = core.jq_default(entry.get("path"), "null")
     status = core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS)
     last_activity = core.jq_default(entry.get("last_activity"), "(never)")
     summary = str(core.jq_default(entry.get("summary"), ""))
-    session_id = core.jq_default(entry.get("claude_session_id"), "(unknown)")
-    tmux_window = core.jq_default(entry.get("tmux_window"), "(none)")
 
-    out = [_label("Source:", str(source))]
-    # `Path:` is the ONLY conditional header line -- omitted entirely, not blanked, when path is
-    # the sentinel string "null".
-    if path != "null":
-        out.append(_label("Path:", str(path)))
+    out: list[str] = []
     # Absent, not blanked, when git did not state them: a non-git directory has no branch, and only a linked
     # worktree has a repository it is a worktree of. A detached HEAD has no branch NAME but is not unstated:
     # the row says where it is detached.
@@ -812,28 +881,13 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     # docstring for why that ordering is the invariant rather than a scrubbing rule.
     out.append(_label("Status:", str(status)))
     out.append(_label("Last active:", str(last_activity)))
-    out.append(_label("tmux window:", str(tmux_window)))
-    out.append(_label("Session ID:", str(session_id)))
     # AFTER the `Status:` line, never before it: the leg is text from the owner's map and the `grep -m1 'Status:'`
     # invariant (module docstring) holds only while nothing the renderer does not control precedes that line.
     # The names offered are this directory's own and the repository it is a worktree of: the map speaks of the
     # repository, a worktree is registered under a name of its own.
     out.extend(_compass_lines(doc, [str(name), str(identity.get("worktree_of") or "")]))
-    # No checkpoint states a summary => the block is OMITTED, not filled with a placeholder.
-    if summary:
-        out.append("\n")
-        out.append(_summary_block(summary))
-
-    checkpoints = focus.get("checkpoints") or []
-    if checkpoints:
-        out.append("\n")
-        out.append(f"  {BOLD}Recent Checkpoints{NC}\n")
-        for filename in checkpoints:
-            out.append(f"    {CYAN}{filename}{NC}\n")
-        out.append("\n")
-        out.append(f"  {BOLD}Latest Checkpoint{NC}\n")
-        out.append(_checkpoint_head_block(focus.get("checkpoint_head") or ""))
-
+    out.extend(_last_time(summary))
+    out.extend(_item_lists(doc, full))
     return worktree.scope_label(name, identity), out
 
 
@@ -1414,9 +1468,13 @@ def _chooser_item(row: dict) -> dict:
     ref = str(row.get("ref") or "")
     # JUSTIFICATION: str.partition on a plain string; the Demeter rule reads it as a chain on a stranger.
     _, hash_mark, number = ref.partition("#")  # pylint: disable=clean-arch-demeter
-    label = hash_mark + number if hash_mark else str(row.get("item") or "session")
+    # A row with no ref and no item is a checkpoint's wait item: it has no label of its own, and its repository
+    # column (`queen`, a repository) says what it is. Only the waiting session row is called `session`.
+    label = hash_mark + number if hash_mark else str(row.get("item") or "")
     detail = str(row.get("item") or "")
-    text = f"{row.get('next_step') or ''}  {detail}".strip() if ref else str(row.get("next_step") or "")
+    text = str(row.get("detail") or row.get("next_step") or "")
+    if ref:
+        text = f"{row.get('next_step') or ''}  {detail}".strip()
     return {
         "ref": ref or label,
         "label": label,
@@ -1534,17 +1592,23 @@ def _next_fallback(doc: dict) -> tuple[str, str, str] | None:
     return text, str(row.get("project") or ""), _NEXT_OWNER.get(str(row.get("owner") or ""), "unowned")
 
 
-def _next_action_line(doc: dict, items: list[dict], unlooked: bool, reserve: int = 0) -> str:
-    """THE LAST LINE OF THE PAGE (link-unification L3: the answer in the final lines before the prompt).
+_NEXT_LABEL = "  next  "
 
-    ONE recommended next action and a command, derived only from data the document already carries, by
-    this rule: the first WAITING ON YOU item (a decision only the reader can make) if any; else the
-    first agent (`mine`) ready row; else the document's first next item (`_next_fallback`, a checkpoint's Next
-    Session item); else a sentence saying nothing is ready (or that nobody looked, when no manifest was resolved)
-    followed by `borg next`, so the line always carries a runnable command. It reads `doc` and nothing else, and
-    both pages print the same SHAPE of line; what differs by
-    scope is only which items it can see (`_waiting`, `_first_mine`). `reserve` (the arrival brief) is the number of
-    columns the caller will append after the line; it only narrows the label and repository, never the command.
+
+def _next_atoms(doc: dict, items: list[dict], unlooked: bool, room: int) -> list[_Atom]:
+    """THE ATOMS OF THE NEXT ACTION (link-unification L3: the answer in the final lines before the prompt), after
+    `next`.
+
+    ONE recommended next action and a command, derived only from data the document already carries, by this rule: the
+    first WAITING ON YOU item (a decision only the reader can make) if any; else the first agent (`mine`) ready row;
+    else the document's first next item (`_next_fallback`, a checkpoint's Next Session item); else a sentence saying
+    nothing is ready (or that nobody looked, when no manifest was resolved) followed by `borg next`, so the line
+    always carries a runnable command. It reads `doc` and nothing else, and both pages print the same SHAPE of line;
+    what differs by scope is only which items it can see (`_waiting`, `_first_mine`).
+
+    `room` is the widest a word may be (the line's width less what the caller puts before it). NOTHING IS CUT: the
+    label and the repository are laid out whole (`_wrap_atoms` wraps them), and the command is one
+    atom that is never broken. A GitHub ref shows as `#N`, since the command and the repository name the rest.
     """
     if items:
         top = items[0]
@@ -1556,41 +1620,51 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool, reserve: int
             ref, repository = fallback[0], fallback[1]
         elif mine is None:
             if unlooked:
-                looked = f"nobody looked; run {CYAN}borg link{NC} without --local"
-                return f"  {BOLD}next{NC}  {looked}  {CYAN}borg next{NC}\n"
-            return f"  {BOLD}next{NC}  {DIM}nothing is ready{NC}  {CYAN}borg next{NC}\n"
+                looked = [("  ", "nobody", ""), (" ", "looked;", ""), (" ", "run", ""), (" ", "borg link", CYAN)]
+                return [*looked, (" ", "without", ""), (" ", "--local", ""), ("  ", "borg next", CYAN)]
+            nothing = [("  ", "nothing", DIM), (" ", "is", DIM), (" ", "ready", DIM)]
+            return [*nothing, ("  ", "borg next", CYAN)]
         else:
             ref, repository = mine
-    command = _next_action_command(ref)
-    # THE COMMAND IS THE LINE: it is never cut. A GitHub ref shows as `#N` (the command and the repository name the
-    # rest); what still does not fit is cut in the MIDDLE with `…`, the repository name first and then the label, so
-    # both ends of each stay readable.
     # JUSTIFICATION: str.partition on a plain string; the Demeter rule reads it as a chain on a stranger.
     label = f"#{ref.partition('#')[2]}" if _GH_REF.match(ref) else ref  # pylint: disable=clean-arch-demeter
-    room = PAGE_COLUMNS - reserve - len("  next  ") - 2 - len(command)
-    repository = _middle(repository, max(room - len(label) - 3, 4)) if repository else ""
-    label = _middle(label, room - (len(repository) + 3 if repository else 0))
-    where = f" {DIM}({repository}){NC}" if repository else ""
-    return f"  {BOLD}next{NC}  {label}{where}  {CYAN}{command}{NC}\n"
+    words = _words(label, room)
+    atoms = [("  " if index == 0 else sep, text, color) for index, (sep, text, color) in enumerate(words)]
+    where = _words(repository, room - 2, DIM) if repository else []
+    if where:
+        where[0] = (" ", f"({where[0][1]}", DIM)
+        where[-1] = (where[-1][0], f"{where[-1][1]})", DIM)
+    return [*atoms, *where, ("  ", _next_action_command(ref), CYAN)]
 
 
-def next_action(doc: dict, reserve: int = 0) -> tuple[str, str]:
-    """`(line, owner)`: the page's `next` line, plain, and who moves it (the arrival brief reads this).
+def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
+    """The page's last lines: `next`, then `_next_atoms` wrapped at `PAGE_COLUMNS` with a hanging indent."""
+    atoms = [("", "next", BOLD), *_next_atoms(doc, items, unlooked, PAGE_COLUMNS - len(_NEXT_LABEL))]
+    return "".join(f"{line}\n" for line in _wrap_atoms(atoms, PAGE_COLUMNS, "  ", " " * len(_NEXT_LABEL)))
 
-    THE SAME DERIVATION AS THE PAGE: the same `_waiting_facts` items and the same `_next_action_line`, so the brief
-    and `/borg-link` cannot disagree about what is next. `owner` is `yours` when a decision waits on the reader,
-    `mine` when the first ready row is an agent's, the fallback item's own (`yours`, `mine` or `unowned`) when only
-    a checkpoint item is next, and "" when nothing is ready. The line is stripped of colour and
-    of its indent (it starts `next  `); `reserve` columns are left free after it for the caller's owner tag.
+
+def next_action(doc: dict, width: int = PAGE_COLUMNS - len(_NEXT_LABEL), owner_tag: bool = False) -> tuple[str, str]:
+    """`(body, owner)`: what follows `next` on the page's last line, plain, and who moves it.
+
+    THE SAME DERIVATION AS THE PAGE: the same `_waiting_facts` items and the same `_next_atoms`, so the brief and
+    `/borg-link` cannot disagree about what is next. `body` is laid out in lines of at most `width` columns joined by
+    newlines, continuation lines unindented (the caller indents them); with `owner_tag` its last atom is
+    `owner: <owner>`, kept whole. `owner` is `yours` when a decision waits on the reader, `mine` when the first ready
+    row is an agent's, the fallback item's own (`yours`, `mine` or `unowned`) when only a checkpoint item is next,
+    and "" when nothing is ready.
     """
     facts = _waiting_facts(doc)
-    line = picture.plain(_next_action_line(doc, facts.items, facts.unlooked, reserve)).strip()
     if facts.items:
-        return line, "yours"
-    if _first_mine(doc):
-        return line, "mine"
-    fallback = _next_fallback(doc)
-    return line, fallback[2] if fallback else ""
+        owner = "yours"
+    elif _first_mine(doc):
+        owner = "mine"
+    else:
+        fallback = _next_fallback(doc)
+        owner = fallback[2] if fallback else ""
+    atoms = [(sep, text, "") for sep, text, _ in _next_atoms(doc, facts.items, facts.unlooked, width)]
+    if owner_tag and owner:
+        atoms.append(("  ", f"owner: {owner}", ""))
+    return "\n".join(_wrap_atoms(atoms, width, "", "")), owner
 
 
 def _middle(text: str, room: int) -> str:
@@ -1609,8 +1683,9 @@ def _repository_you_count(doc: dict) -> tuple[str, int]:
     `borg next --rows --json` holds for the same repository was a false statement (live 2026-10-18: two). The count
     keeps the page about its own directory and stops it lying, and `borg next` is the one place the rows are listed.
 
-    These are exactly the rows `_waiting` drops in repository scope: everything but the directory's own session
-    row. The repository is the one a worktree is `worktree_of`, else the directory's own registry name; a row for
+    These are the rows `_waiting` drops in repository scope, less the checkpoint wait items, which IN FOCUS lists
+    whole (`_checkpoint_waits`): everything but the directory's own session row and those. The repository is the
+    one a worktree is `worktree_of`, else the directory's own registry name; a row for
     any other project is not counted. Returns `("", 0)` on the Queen's page, which lists every row itself.
     """
     if not _is_repository_scope(doc):
@@ -1619,8 +1694,13 @@ def _repository_you_count(doc: dict) -> tuple[str, int]:
     repository = str((focus.get("identity") or {}).get("worktree_of") or focus.get("name") or "")
     owned = {repository, str(focus.get("name") or "")} - {""}
     rows = (doc.get("waiting") or {}).get("rows") or []
+    listed = {id(row) for row in rows if _is_checkpoint_wait(row)}
     count = sum(
-        1 for row in rows if row.get("project") in owned and not (row.get("item") == "session" and not row.get("ref"))
+        1
+        for row in rows
+        if row.get("project") in owned
+        and id(row) not in listed
+        and not (row.get("item") == "session" and not row.get("ref"))
     )
     return repository, count
 
@@ -1724,6 +1804,15 @@ def _clip(text: str, room: int) -> str:
     return text if len(text) <= room else text[: room - 1] + "…"
 
 
+def wrap(text: str, first: str, hang: str) -> str:
+    """`text` laid out in lines of at most `PAGE_COLUMNS` columns, joined by newlines; nothing is cut.
+
+    The first line starts with `first` and every later one with `hang` (the hanging indent), public for the arrival
+    brief (`borg_core/link/arrival.py`), which wraps its rows the way the page wraps its items.
+    """
+    return "\n".join(_wrap_atoms(_words(text, PAGE_COLUMNS - len(hang)), PAGE_COLUMNS, first, hang))
+
+
 def clip(text: str, room: int) -> str:
     """`_clip`, public for the arrival brief (`borg_core/link/arrival.py`), which cuts its free text the same way."""
     return _clip(text, room)
@@ -1768,6 +1857,8 @@ def _nothing_line(doc: dict, unlooked: bool) -> tuple[str, str]:
     if unlooked:
         return "nobody looked", _placeholder("no state on this page was resolved; run without --local.")
     repository, count = _repository_you_count(doc)
+    if _is_repository_scope(doc) and _checkpoint_waits(doc):
+        return "", _placeholder("what waits on you is listed above")
     if count:
         return "", _placeholder(f"nothing here waits on you · {count} for {repository}: borg next")
     return "", _placeholder("nothing waits on you")
@@ -1967,6 +2058,11 @@ REPOSITORY_SECTIONS: tuple[tuple[str, Builder], ...] = (
     ("", _queen_pointer_section),
     ("WAITING ON YOU", _waiting_section),  # LAST -- L3
 )
+# `borg link --full` on a directory's page: the same spine, every item of `Waits on you` and `Next` printed.
+REPOSITORY_FULL_SECTIONS: tuple[tuple[str, Builder], ...] = (
+    ("IN FOCUS", partial(_focus_section, full=True)),
+    *REPOSITORY_SECTIONS[1:],
+)
 
 
 def _unregistered_section(_doc: dict) -> tuple[str, list[str]]:
@@ -2001,14 +2097,15 @@ def _sections_for(doc: dict, full: bool = False) -> tuple[tuple[tuple[str, Build
     """`(sections, fit)` for this document's scope: one directory's page, the hint, or the Queen's overview.
 
     A document with no `scope` (one built before S1) is the Queen's, as it always rendered. `full` picks the Queen's
-    unbudgeted list and means nothing to the other two pages, which have no budgeted section. `fit` is how `document`
+    unbudgeted list, and a directory's list that prints every item; the hint page has no budget to lift. `fit` is
+    how `document`
     cuts the page: the Queen's compact page whole (`_FIT_PAGE`), a directory's IN FOCUS only (`_FIT_FOCUS`), and the
     hint and `--full` not at all.
     """
     if _is_unregistered(doc):
         return UNREGISTERED_SECTIONS, _FIT_NONE
     if _is_repository_scope(doc):
-        return REPOSITORY_SECTIONS, _FIT_FOCUS
+        return (REPOSITORY_FULL_SECTIONS if full else REPOSITORY_SECTIONS), _FIT_FOCUS
     return (FULL_SECTIONS, _FIT_NONE) if full else (SECTIONS, _FIT_PAGE)
 
 

@@ -226,7 +226,7 @@ NEXT_SESSION = (
 def test_owned_items_new_form_waits_on_you():
     text = "## 4. Blockers\n\nWaits on you:\n- **Rotate key.** by Friday\n- Pick a name\n\n## 5. Next Session\n"
     assert core.checkpoint_owned_items(text) == [
-        {"text": "**Rotate key.** by Friday", "owner": "YOU"},
+        {"text": "Rotate key. by Friday", "owner": "YOU"},
         {"text": "Pick a name", "owner": "YOU"},
     ]
 
@@ -265,10 +265,24 @@ def test_owned_items_stop_at_the_first_prose_line():
 def test_owned_items_next_session_numbered_with_nested_sub_bullets():
     assert core.checkpoint_owned_items("## 4. Blockers\nNo blockers.\n\n" + NEXT_SESSION) == [
         {
-            "text": "**First task.** Do the thing wrapped onto a second line. - sub-bullet one - sub-bullet two",
+            "text": "First task. Do the thing wrapped onto a second line. - sub-bullet one - sub-bullet two",
             "owner": "AGENT",
         },
         {"text": "Second task", "owner": "AGENT"},
+    ]
+
+
+def test_owned_items_strip_emphasis_markers_and_keep_the_words():
+    text = (
+        "## 4. Blockers\nWaits on you:\n"
+        "- **Rotate key** by __Friday__, then *confirm* and _file_ it\n"
+        "- Keep snake_case_names and 2 * 3 intact\n"
+        "## 5. Next Session\n1. ***Ship*** the `a*b*c` thing\n"
+    )
+    assert [item["text"] for item in core.checkpoint_owned_items(text)] == [
+        "Rotate key by Friday, then confirm and file it",
+        "Keep snake_case_names and 2 * 3 intact",
+        "Ship the `a*b*c` thing",
     ]
 
 

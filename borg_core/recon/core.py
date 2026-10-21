@@ -343,13 +343,37 @@ def _collect_items(lines: list[str], start: int, stop_on_prose: bool) -> tuple[l
     return [text for text in (" ".join(" ".join(parts).split()) for parts in items) if text], index
 
 
+_CODE_SPAN = re.compile(r"(`[^`]*`)")
+_EMPHASIS = (
+    re.compile(r"\*\*\*(.+?)\*\*\*"),
+    re.compile(r"\*\*(.+?)\*\*"),
+    re.compile(r"(?<![\w*])\*(?=\S)(.+?)(?<=\S)\*(?![\w*])"),
+    re.compile(r"(?<![\w_])__(?=\S)(.+?)(?<=\S)__(?![\w_])"),
+    re.compile(r"(?<![\w_])_(?=\S)(.+?)(?<=\S)_(?![\w_])"),
+)
+
+
+def _strip_emphasis(text: str) -> str:
+    """`text` without markdown emphasis markers (`**bold**`, `*em*`, `__bold__`, `_em_`), the words kept.
+
+    Code spans are left alone, and a marker inside a word (`snake_case`) or followed by a space (`2 * 3`) is not
+    emphasis, so it stays.
+    """
+    parts = _CODE_SPAN.split(text)
+    for index in range(0, len(parts), 2):
+        for pattern in _EMPHASIS:
+            parts[index] = pattern.sub(r"\1", parts[index])
+    return "".join(parts)
+
+
 def checkpoint_owned_items(text: str) -> list[dict[str, str]]:
     """The checkpoint's owned next items as `{"text", "owner"}`: `YOU` for waits, `AGENT` for Next Session.
 
     YOU items are the top-level list items that follow a whole-line `Waits on you:` or `These wait on <name>:`
     lead-in (case-insensitive) inside `## 4. Blockers`; `Waits on you: none`, `No blockers.` and any other prose
-    yield nothing. AGENT items are every top-level list item of `## 5. Next Session`. Item text keeps its markdown,
-    collapses whitespace and is never truncated. Pure: text in, dicts out.
+    yield nothing. AGENT items are every top-level list item of `## 5. Next Session`. Item text loses its emphasis
+    markers
+    (`_strip_emphasis`; the words stay), collapses whitespace and is never truncated. Pure: text in, dicts out.
     """
     owned: list[dict[str, str]] = []
     blockers = _section_lines(text, _BLOCKERS_HEADING)
@@ -357,11 +381,11 @@ def checkpoint_owned_items(text: str) -> list[dict[str, str]]:
     while index < len(blockers):
         if _WAIT_LEAD_IN.search(blockers[index].strip()):
             found, index = _collect_items(blockers, index + 1, stop_on_prose=True)
-            owned.extend({"text": item, "owner": "YOU"} for item in found)
+            owned.extend({"text": _strip_emphasis(item), "owner": "YOU"} for item in found)
         else:
             index += 1
     found, _ = _collect_items(_section_lines(text, _NEXT_SESSION_HEADING), 0, stop_on_prose=False)
-    owned.extend({"text": item, "owner": "AGENT"} for item in found)
+    owned.extend({"text": _strip_emphasis(item), "owner": "AGENT"} for item in found)
     return owned
 
 

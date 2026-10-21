@@ -465,7 +465,7 @@ def test_main_porcelain_and_deep_render_through_render_py(isolated_env, capsys):
         cli.main(["--deep", "--", "delta"])
     assert exc_info.value.code == 0
     out = capsys.readouterr().out
-    assert "Session ID:" in out
+    assert "Status:" in out and "Session ID:" not in out, "the registry-only fields left the page (AC5)"
 
 
 # ── --render-document: one document, two consumers ────────────────────────────────────────────────
@@ -1290,7 +1290,7 @@ def test_the_human_page_in_a_worktree_is_strictly_that_worktree(isolated_env, mo
     assert cli._run("", False, "human", local=True) == 0  # pylint: disable=protected-access
     out = capsys.readouterr().out
     assert "IN FOCUS" in out and "door — worktree of borg" in out
-    assert "Door summary." in out and "2026-10-12-0900.md" in out
+    assert "Last time:" in out and "Door summary." in out
     assert "Main summary." not in out and "2026-10-13-1200.md" not in out
     assert "REPOSITORIES" not in out and "THE BORG COLLECTIVE" not in out
     assert "borg link --overview" in out

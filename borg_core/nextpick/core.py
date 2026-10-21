@@ -282,14 +282,15 @@ def short_title(title: str, limit: int = ITEM_MAX) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def _criterion_name(text: str) -> str:
-    """ "**AC5 — The sweep sees every open PR.** ..." -> "AC5 The sweep sees every…"."""
+def _criterion_name(text: str, limit: int | None = STEP_MAX) -> str:
+    """ "**AC5 — The sweep sees every open PR.** ..." -> "AC5 The sweep sees every…"; `limit` None keeps it whole."""
     found = _AC_HEAD.findall(text.strip())
-    if not found:
-        return _truncate(text.replace("*", "").strip(), STEP_MAX)
-    ident, rest = found[0]
-    title = rest.split("**", 1)[0].strip().rstrip(".")
-    return _truncate(f"{ident} {title}".strip(), STEP_MAX)
+    if found:
+        ident, rest = found[0]
+        name = f"{ident} {rest.split('**', 1)[0].strip().rstrip('.')}".strip()
+    else:
+        name = text.replace("*", "").strip()
+    return name if limit is None else _truncate(name, limit)
 
 
 def _pr_number(item: dict[str, Any]) -> int:
@@ -373,6 +374,7 @@ def _plan_rows(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
         {
             "item": _truncate(str(plan.get("name") or ""), ITEM_MAX),
             "next_step": _criterion_name(unchecked[0]["text"]),
+            "detail": _criterion_name(unchecked[0]["text"], None),
             "owner": "AGENT",
             "ready": "○",
             "ref": None,
@@ -397,16 +399,33 @@ def _newer(checkpoint_mtime: float | None, plan_mtime: float | None) -> bool:
     return checkpoint_mtime is not None and plan_mtime is not None and checkpoint_mtime > plan_mtime
 
 
+NEXT_AGE_DAYS = 30
+
+
+def _aged(checkpoint: dict[str, Any], now_epoch: int) -> bool:
+    """True when the checkpoint is older than `NEXT_AGE_DAYS` at `now_epoch`; False when either time is unknown.
+
+    The clock is the caller's (`work_items`' `now_epoch`): nothing here reads one.
+    """
+    mtime = checkpoint.get("mtime")
+    return bool(now_epoch and mtime is not None and now_epoch - mtime > NEXT_AGE_DAYS * 86400)
+
+
 def _checkpoint_rows(checkpoint: dict[str, Any], owner: str) -> list[dict[str, Any]]:
     """The rows of one repository's checkpoint items that `owner` owns."""
     return [_checkpoint_row(it) for it in checkpoint.get("items") or [] if it.get("owner") == owner]
 
 
-def _fallback_rows(checkpoint: dict[str, Any], plan: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _fallback_rows(
+    checkpoint: dict[str, Any], plan: dict[str, Any] | None, now_epoch: int
+) -> list[dict[str, Any]]:
     """For a repository with no PR row: the plan row, else the checkpoint's AGENT items.
 
-    A checkpoint with items that is newer than the plan (`_newer`) replaces the plan row.
+    A checkpoint with items that is newer than the plan (`_newer`) replaces the plan row. A checkpoint older than
+    `NEXT_AGE_DAYS` (`_aged`) does neither: a month-old next step is not what is next. Its YOU items still stand.
     """
+    if _aged(checkpoint, now_epoch):
+        return _plan_rows(plan)
     if checkpoint.get("items") and _newer(checkpoint.get("mtime"), (plan or {}).get("mtime")):
         plan = None
     return _plan_rows(plan) or _checkpoint_rows(checkpoint, "AGENT")
@@ -431,7 +450,9 @@ def work_items(
     `recon.core.checkpoint_owned_items` returns. Order inside one repository: the waiting session, the YOU merge
     rows, the checkpoint's YOU wait items, the AGENT PR rows, then the plan row or, when neither a PR row nor a
     surviving plan row exists, the checkpoint's AGENT Next Session items. The plan row does not survive a checkpoint
-    whose mtime is later than the plan's (both numbers known). Checkpoint rows also carry `detail`, the item's full
+    whose mtime is later than the plan's (both numbers known). A checkpoint older than `NEXT_AGE_DAYS` at `now_epoch`
+    feeds no AGENT row and no plan replacement; its YOU wait items never age out. Checkpoint rows also carry
+    `detail`, the item's full
     text; `next_step` is that text cut to NEXT_STEP_MAX.
     """
     rows: list[dict[str, Any]] = []
@@ -462,7 +483,7 @@ def work_items(
         mine.extend(_checkpoint_rows(checkpoint, "YOU"))
         mine.extend(r for r in pr_rows if r["owner"] != "YOU")
         if not pr_rows:
-            mine.extend(_fallback_rows(checkpoint, plans_by_repository.get(repository)))
+            mine.extend(_fallback_rows(checkpoint, plans_by_repository.get(repository), now_epoch))
         if not mine:
             quiet.append(repository)
         rows.extend({"project": repository, **row, "age": age} for row in mine)
@@ -549,6 +570,26 @@ def first_next(work: list[dict[str, Any]]) -> dict[str, str] | None:
                 "owner": str(row.get("owner") or "—"),
             }
     return None
+
+
+def upcoming(work: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Every non-YOU, non-stale row of `work`, in order, as `{project, item, next_step, detail, owner}`.
+
+    The repository page's `Next` list: `cap_rows` only counts these rows, so the page reads them from here, BEFORE the
+    cap, whole (`detail` is the full text when the row has one, else the cut `next_step`). A row with no owner reads
+    `—`.
+    """
+    return [
+        {
+            "project": str(row.get("project") or ""),
+            "item": str(row.get("item") or ""),
+            "next_step": str(row.get("next_step") or ""),
+            "detail": str(row.get("detail") or row.get("next_step") or ""),
+            "owner": str(row.get("owner") or "—"),
+        }
+        for row in work
+        if row.get("owner") != "YOU" and not row.get("stale")
+    ]
 
 
 def hidden_lines(hidden: dict[str, int]) -> list[str]:

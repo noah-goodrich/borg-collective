@@ -44,15 +44,26 @@ def _lines(doc: dict) -> list[str]:
     return arrival.brief(doc).split("\n")
 
 
+def _rows(doc: dict) -> list[str]:
+    """The brief's rule and its four rows, each row's continuation lines (indented to the text column) joined back."""
+    rows: list[str] = []
+    for line in _lines(doc):
+        if line.startswith(" " * 13) and rows:
+            rows[-1] += " " + line.strip()
+        else:
+            rows.append(line)
+    return rows
+
+
 def test_the_brief_is_a_rule_and_four_labelled_lines():
-    lines = _lines(_doc())
+    lines = _rows(_doc())
     assert lines[0].startswith("▸ p ─")
     assert [line.split("  ")[0].strip() for line in lines[1:]] == ["last time", "next", "watch out", "since then"]
     assert "yesterday · Shipped the doorways slices and merged #440. second line" in lines[1]
 
 
 def test_since_then_leads_with_derived_facts():
-    since = _lines(_doc())[4]
+    since = _rows(_doc())[4]
     assert "HEAD moved 4 times" in since and "1 directive shipped" in since and "last active 3h ago" in since
     assert since.index("HEAD moved") < since.index("last active")
 
@@ -71,42 +82,61 @@ def test_next_is_the_repository_pages_own_line_plus_the_owner():
     rows = [{"project": "p", "item": "session", "next_step": "reply to session", "owner": "YOU", "ref": None}]
     doc = _doc(rows=rows)
     page_last = picture.plain(render.document(doc)).rstrip("\n").split("\n")[-1].strip()
-    nxt = _lines(doc)[2]
+    nxt = _rows(doc)[2]
     assert nxt.startswith(" next        ")
     assert nxt.strip()[len("next") :].strip() == page_last[len("next") :].strip() + "  owner: yours"
     ready = _doc()
     assert render.next_action(ready)[1] == ""
-    assert _lines(ready)[2].strip().endswith("borg next")
-    assert "owner" not in _lines(ready)[2]
+    assert _rows(ready)[2].strip().endswith("borg next")
+    assert "owner" not in _rows(ready)[2]
 
 
-def test_the_command_is_never_cut_when_the_label_is_long():
-    rows = [{"project": "r" * 80, "item": "session", "next_step": "n" * 200, "owner": "YOU", "ref": None}]
-    nxt = _lines(_doc(rows=rows))[2]
-    assert "…" in nxt and "borg next  owner: yours" in nxt and picture.visible_len(nxt) <= render.PAGE_COLUMNS
+def test_next_wraps_a_long_label_and_repository_whole_and_keeps_the_command_and_owner_together():
+    """AC5: nothing on the next line ends in an ellipsis or is cut to `(bo…e)`; the command and owner are one tail."""
+    words = " ".join(f"word{n}" for n in range(60))
+    repository = "an-extremely-long-repository-name-" + "x" * 40
+    rows = [{"project": repository, "item": "session", "next_step": words[:80], "detail": words, "owner": "YOU", "ref": None}]
+    lines = _lines(_doc(rows=rows))
+    start = next(index for index, line in enumerate(lines) if line.startswith(" next "))
+    end = next(index for index, line in enumerate(lines) if "owner: yours" in line)
+    block = lines[start : end + 1]
+    flat = " ".join(" ".join(block).split())
+    assert "…" not in flat and words in flat and f"({repository})" in flat
+    assert block[-1].endswith("borg next  owner: yours")
+    assert all(line.startswith(" " * 13) for line in block[1:])
+    assert all(picture.visible_len(line) <= render.PAGE_COLUMNS for line in block)
+
+
+def test_last_time_wraps_a_long_tldr_whole_with_a_hanging_indent():
+    doc = _doc()
+    doc["focus"]["checkpoint_head"] = "tl;dr: " + " ".join(f"fact{n}" for n in range(80)) + "\n\n## 1. Goal"
+    lines = _lines(doc)
+    last = [line for line in lines[1:] if not line.startswith((" next", " watch", " since"))]
+    assert len(last) > 1 and "…" not in "".join(last) and "fact79" in last[-1]
+    assert all(line.startswith(" " * 13) for line in last[1:])
 
 
 def test_an_old_checkpoint_leads_watch_out_with_stale():
     doc = _doc(checkpoint="2026-10-02-0900.md", days=17, has_uncommitted_changes=True)
-    watch = _lines(doc)[3]
+    watch = _rows(doc)[3]
     assert watch.startswith(" watch out   STALE: checkpoint is 17d old")
     assert "uncommitted work left behind" in watch
-    assert "STALE" not in _lines(_doc())[3]
-    assert "nothing flagged" in _lines(_doc())[3]
+    assert "STALE" not in _rows(_doc())[3]
+    assert "nothing flagged" in _rows(_doc())[3]
 
 
 def test_other_watch_out_facts():
     doc = _doc(clock_divergence={"detected": True, "delta_seconds": 2700}, waiting_reason="permission")
     doc["capacity"] = {"active": 5, "limit": 3, "over_limit": True}
     doc["waiting"]["degraded"] = "gh failed"
-    watch = _lines(doc)[3]
+    watch = _rows(doc)[3]
     for fact in ("clock skew ~45m", "waiting: permission", "5 active, limit 3", "PR sweep degraded"):
         assert fact in watch
 
 
 def test_facts_that_do_not_fit_are_counted_never_cut():
     doc = _doc(summary="x", waiting_reason="w" * 70, has_uncommitted_changes=True, checkpoint="2026-10-02-0900.md", days=20)
-    watch = _lines(doc)[3]
+    watch = _rows(doc)[3]
     assert watch.startswith(" watch out   STALE: checkpoint is 20d old") and "more" in watch
     assert picture.visible_len(watch) <= render.PAGE_COLUMNS
 
@@ -304,7 +334,7 @@ def test_the_next_line_names_an_owner_for_an_item_nobody_owns():
     case that derives it is in test_screen_contract."""
     doc = _doc()
     doc["waiting"]["next"] = {"project": "p", "next_step": "await review #5", "detail": "await review #5", "owner": "—"}
-    line = _lines(doc)[2]
+    line = _rows(doc)[2]
     assert "await review #5" in line and line.endswith("owner: unowned") and "nothing is ready" not in line
     doc["waiting"]["next"]["owner"] = "YOU"
-    assert _lines(doc)[2].endswith("owner: yours")
+    assert _rows(doc)[2].endswith("owner: yours")

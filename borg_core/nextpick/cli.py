@@ -153,15 +153,18 @@ def item_rows_with_next(
     swept: tuple[dict[str, list[dict[str, Any]]], str | None] | None = None,
     compass: dict[str, Any] | None = None,
     queen: bool = False,
-) -> tuple[list[dict[str, Any]], str | None, dict[str, int], dict[str, str] | None]:
-    """`(rows, degraded, hidden, first)`: `item_rows`' capped rows plus the first row BEFORE the cap.
+) -> tuple[
+    list[dict[str, Any]], str | None, dict[str, int], dict[str, str] | None, list[dict[str, str]]
+]:
+    """`(rows, degraded, hidden, first, upcoming)`: `item_rows`' capped rows plus what the cap left out, read BEFORE it.
 
     `first` is `core.first_next` over the same uncapped work the rows were cut from, so a page that shows only the
-    YOU rows can still name the first AGENT or unowned item without a second sweep.
+    YOU rows can still name the first AGENT or unowned item without a second sweep. `upcoming` is `core.upcoming`:
+    every such row, whole, for the repository page's Next list.
     """
     work, _quiet, degraded, ranked = _gather(repositories, local, swept=swept, compass=compass, queen=queen)
     shown, hidden = core.cap_rows(work)
-    return core.numbered_rows(shown, ranked), degraded, hidden, core.first_next(work)
+    return core.numbered_rows(shown, ranked), degraded, hidden, core.first_next(work), core.upcoming(work)
 
 
 # JUSTIFICATION (too-many-arguments / too-many-positional-arguments): six independent inputs of one assembly step;

@@ -247,6 +247,8 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict], c
     `next` is the first row of the same uncapped work, before the cap (`{project, next_step, detail, owner}` or
     null): the page keeps only YOU rows, so the first AGENT or unowned item would otherwise not be in the document
     and NEXT would say "nothing is ready" above a checkpoint that holds one. Additive; same call, no second sweep.
+    `next_items` is every such non-YOU row whole (`nextpick.core.upcoming`), for the repository page's Next list, and
+    `[]` on any other scope. Additive.
     Fail-open: any failure degrades to an empty block that says why.
     """
     try:
@@ -255,18 +257,26 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict], c
             {repo: repositories[repo]} if scope.get("kind") == "repository" and repo in repositories else repositories
         )
         by_repository = recon_core.merge_by_repository(tracks)
-        rows, degraded, hidden, first = nextpick_cli.item_rows_with_next(
+        rows, degraded, hidden, first, upcoming = nextpick_cli.item_rows_with_next(
             scoped, local, swept=(by_repository, None), compass=compass, queen=scope.get("kind") != "repository"
         )
     # JUSTIFICATION: a side block must never take the page down; degrade and say why.
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        rows, degraded, hidden, first = [], f"waiting rows failed: {exc}", dict(nextpick_core.NO_HIDDEN), None
+        rows, degraded, hidden, first, upcoming = (
+            [],
+            f"waiting rows failed: {exc}",
+            dict(nextpick_core.NO_HIDDEN),
+            None,
+            [],
+        )
     return {
         "rows": [row for row in rows if row.get("owner") == "YOU"],
         "hidden": hidden,
         "hidden_lines": nextpick_core.hidden_lines(hidden),
         "degraded": degraded,
         "next": first,
+        # The repository page's Next list, whole; the Queen's page lists no such rows, so its document carries none.
+        "next_items": upcoming if scope.get("kind") == "repository" else [],
     }
 
 

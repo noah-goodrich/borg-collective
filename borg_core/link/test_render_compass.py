@@ -140,7 +140,7 @@ def test_a_repository_no_destination_claims_is_never_off_route():
 
 def test_nothing_is_off_route_when_no_leg_was_chosen():
     page = _card("gadgets", _compass(log=None))
-    assert "  Compass: no leg chosen\n" in page
+    assert "Compass:" not in page, "AC5: the card says nothing when no leg was chosen"
     assert "off route" not in page
 
 

@@ -13,7 +13,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import time
 from pathlib import Path
 
@@ -121,8 +120,9 @@ def test_render_exposes_exactly_one_human_entry_point():
         if not name.startswith("_") and callable(value) and getattr(value, "__module__", "") == render.__name__
     }
     # route_kind is a routing seam for borg_core.nextpick, not a second way to render the page.
-    # glance_line: the board's own items, one line. next_action and clip: the arrival brief reads the page's own `next` line.
-    assert public == {"document", "porcelain", "route_kind", "glance_line", "next_action", "clip"}
+    # glance_line: the board's own items, one line. next_action, clip and wrap: the arrival brief reads the page's own
+    # `next` line and lays its rows out the way the page lays out its items.
+    assert public == {"document", "porcelain", "route_kind", "glance_line", "next_action", "clip", "wrap"}
 
 
 def test_the_human_arm_names_render_document_exactly_once():
@@ -405,27 +405,14 @@ def test_the_plan_is_not_on_a_directorys_page():
     assert "criteria met" not in out
 
 
-def test_focus_renders_checkpoints_and_the_latest_head():
+def test_focus_leaves_the_checkpoint_filenames_and_excerpt_off_the_page_but_on_the_document():
+    """AC5: the filenames and the Goal/Accomplished excerpt left the page; `--json` keeps them (no key removed)."""
     doc = _repository_doc(
         focus=_focus(checkpoints=["2026-08-01.md"], checkpoint_head="line one\nline two"),
     )
     out = render.document(doc)
-    assert "2026-08-01.md" in out
-    assert "line one" in out
-
-
-def test_checkpoint_head_indents_blank_lines_to_two_spaces():
-    head = "# Checkpoint\n\nBody.\n"[:-1]  # mirrors shell.read_latest_checkpoint_head's join
-    out = render._checkpoint_head_block(head)  # pylint: disable=protected-access
-    lines = out.split("\n")
-    assert lines[1] == "  "
-
-
-def test_checkpoint_head_no_spurious_trailing_blank_for_a_short_checkpoint():
-    text = "# Checkpoint one\n\nBody one.\n"
-    head = "\n".join(text.split("\n")[:20])
-    out = render._checkpoint_head_block(head)  # pylint: disable=protected-access
-    assert out.count("\n") == 3
+    assert "2026-08-01.md" not in out and "line one" not in out and "Checkpoint" not in out
+    assert doc["focus"]["checkpoints"] == ["2026-08-01.md"] and doc["focus"]["checkpoint_head"]
 
 
 # ── the untouched porcelain surface ───────────────────────────────────────────────────────────────
@@ -814,20 +801,17 @@ def test_the_archived_status_arm_renders_a_bare_reset():
     assert row.startswith(f" gone{' ' * 16} [C]  \x1b[0marchived")
 
 
-def test_a_summary_past_seventy_columns_wraps_and_reindents_inside_the_card():
-    """The IN FOCUS card's `fold -s -w 70` + `sed '1!s/^/  /'` path. Pinned structurally rather than
-    byte-exact for the reason the bats case records: three counting algorithms are in play and they
-    diverge on non-ASCII."""
-    long_summary = (
-        "This summary is deliberately far longer than seventy columns so that the fold "
-        "pipeline has to break it across at least three separate rendered lines."
-    )
+def test_last_time_wraps_a_long_summary_at_the_page_width_with_a_hanging_indent_and_no_ellipsis():
+    """AC5: the summary is `Last time:`, laid out whole at `PAGE_COLUMNS`, continuation lines indented under the text."""
+    long_summary = " ".join(f"word{n}" for n in range(60))
     doc = _repository_doc(focus=_focus(entry={"path": "null", "summary": long_summary}))
     body_text = plain(render.document(doc))
-    block = body_text.split("  Summary\n")[1].split("\n\n")[0].split("\n")
-    assert len(block) >= 2
+    block = body_text.split("  Last time: ")[1].split("\n\n")[0].split("\n")
+    assert len(block) >= 3 and "…" not in body_text
+    assert " ".join(" ".join(block).split()) == long_summary
     for continuation in block[1:]:
-        assert continuation.startswith("  ") and not continuation.startswith("   ")
+        assert continuation.startswith("    ") and not continuation.startswith("     ")
+    assert all(len(line) <= render.PAGE_COLUMNS for line in body_text.split("\n"))
 
 
 def test_two_pending_wakes_for_one_repository_render_the_first_not_the_last():
@@ -925,126 +909,6 @@ def test_render_reads_no_clock(monkeypatch):
     )
     render.porcelain(doc)
     render.document(doc)
-
-
-class TestFoldS:
-    def test_no_break_needed(self):
-        assert render._fold_s("short", width=70) == ["short"]  # pylint: disable=protected-access
-
-    def test_breaks_after_last_space_at_or_before_width(self):
-        text = "a" * 68 + " " + "b" * 10
-        lines = render._fold_s(text, width=70)  # pylint: disable=protected-access
-        assert lines[0] == "a" * 68 + " "
-        assert lines[1] == "b" * 10
-        assert not lines[1].startswith(" ")
-
-    def test_hard_break_when_no_space_in_window(self):
-        text = "a" * 140
-        lines = render._fold_s(text, width=70)  # pylint: disable=protected-access
-        assert lines[0] == "a" * 70
-        assert lines[1] == "a" * 70
-
-    def test_exactly_width_does_not_break(self):
-        text = "a" * 70
-        assert render._fold_s(text, width=70) == [text]  # pylint: disable=protected-access
-
-    def test_width_plus_one_breaks(self):
-        text = "a" * 71
-        lines = render._fold_s(text, width=70)  # pylint: disable=protected-access
-        assert lines[0] == "a" * 70
-        assert lines[1] == "a"
-
-    @pytest.mark.skipif(shutil.which("fold") is None, reason="no `fold` binary on this host")
-    @pytest.mark.parametrize(
-        "text,width",
-        [
-            ("short", 70),
-            ("a" * 68 + " " + "b" * 10, 70),
-            ("a" * 140, 70),
-            ("a" * 70, 70),
-            ("a" * 71, 70),
-            ("aa bbb cc", 6),
-            ("   abc def ghi", 5),
-            ("abc def " * 5, 6),
-            ("a b c d e f g h i j k l m n o p", 3),
-            ("", 70),
-            ("     ", 4),
-            ("word " * 20, 20),
-        ],
-    )
-    def test_matches_real_fold_s_binary(self, text, width):
-        """Differential, not hardcoded: shells out to whatever `fold -s` this host actually has
-        (BSD on macOS CI, GNU in a devcontainer) so the assertion is correct by construction on
-        every platform instead of pinning one vendor's output. This is the test that would have
-        caught the original `_fold_s` divergence -- see the PR body for the RED-before-fix run."""
-        proc = subprocess.run(
-            ["fold", "-s", "-w", str(width)],
-            input=text,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        # `fold` never appends a newline that wasn't already on the (newline-free) input, so its
-        # stdout is directly comparable to `"\n".join(lines)` with no trailing-newline massaging.
-        got = render._fold_s(text, width=width)  # pylint: disable=protected-access
-        assert "\n".join(got) == proc.stdout
-
-
-# ── F1/F5: _summary_block, the COMPOSITION of _fold_s with the re-indent loop ─────────────────────
-# TestFoldS above covers the folding primitive alone, including a differential against the real
-# `fold -s` binary. What the renderer's `^  [^ ]` continuation contract actually rests on is the
-# composition -- fold, then re-indent lines 2..n -- and until this class it was unverified.
-
-_CONTINUATION_CONTRACT = re.compile(r"^  [^ ]")
-
-
-class TestSummaryBlock:
-    def test_summary_block_single_line_is_header_plus_one_indented_line(self):
-        out = render._summary_block("a short summary")  # pylint: disable=protected-access
-        assert out == f"  {picture.BOLD}Summary{picture.NC}\n  a short summary\n"
-
-    def test_summary_block_reindents_lines_two_onward_only(self):
-        # A two-word summary, each word long enough that the pair plus the two-space prefix
-        # overruns the 70-column budget while either word alone fits: `fold -s -w 70` therefore
-        # breaks at the single space, and the tail arrives from _fold_s with NO indent of its own.
-        # (Shape, not arithmetic -- a character count in a comment rots the moment the fixture or
-        # the width changes, and nothing fails when it does.)
-        summary = "w" * 40 + " " + "x" * 40
-        out = render._summary_block(summary)  # pylint: disable=protected-access
-        lines = out.split("\n")[:-1]
-        assert lines[0] == f"  {picture.BOLD}Summary{picture.NC}"
-        # Line 1 carries the indent the FOLD INPUT already had -- it must not be indented twice.
-        assert lines[1] == "  " + "w" * 40 + " "
-        # Line 2 is the one the re-indent loop is responsible for.
-        assert lines[2] == "  " + "x" * 40
-        assert len(lines) == 3
-        assert all(_CONTINUATION_CONTRACT.match(line) for line in lines)
-
-    def test_summary_block_empty_string_pins_the_bare_indent_line(self):
-        # The one line on the page that legitimately fails `^  [^ ]`: with nothing to fold, zsh's
-        # `echo -e "  " | fold -s -w 70 | sed '1!s/^/  /'` emits the bare two-space line and so does
-        # this. Pinned so a future "strip trailing whitespace" cleanup is a visible decision.
-        out = render._summary_block("")  # pylint: disable=protected-access
-        assert out == f"  {picture.BOLD}Summary{picture.NC}\n  \n"
-
-    def test_summary_block_flattens_an_embedded_newline(self):
-        # F1. summarize.summarize_llm returns `result.stdout.strip()[:500]`, and .strip() does not
-        # touch INTERIOR newlines the way the heuristic path's `.replace("\n", " ")` does; nor does
-        # lib/registry.zsh's control-char scrub, whose ranges exclude 0x0A. Un-normalized, the raw
-        # \n emits a sub-line _fold_s never produced and the re-indent loop therefore never indents.
-        out = render._summary_block(link_core.flatten_summary("first half\nsecond half"))  # pylint: disable=protected-access
-        lines = out.split("\n")[:-1]
-        assert all(_CONTINUATION_CONTRACT.match(line) for line in lines[1:]), lines
-        assert lines[1] == "  first half second half"
-        assert len(lines) == 2
-
-    def test_summary_block_flattens_newlines_before_folding_not_after(self):
-        # The flatten is one-for-one, so a newline occupies a space's worth of the 70-column budget
-        # and the break lands exactly where an equivalent space would put it -- i.e. no golden moves.
-        summary = "w" * 40 + "\n" + "x" * 40
-        with_newline = render._summary_block(link_core.flatten_summary(summary))  # pylint: disable=protected-access
-        with_space = render._summary_block(summary.replace("\n", " "))  # pylint: disable=protected-access
-        assert with_newline == with_space
 
 
 # ── F1, second renderer: _overview_summary_cut, the BOARD's newline defense ───────────────────────
@@ -1155,19 +1019,6 @@ def test_the_registry_scrub_set_is_enumerated_from_the_scrub_not_assumed(scrubbe
 @pytest.mark.parametrize("ch", _SURVIVING_WS)
 def test_flatten_summary_maps_every_surviving_whitespace_control_to_one_space(ch):
     assert link_core.flatten_summary(f"a{ch}b") == "a b"  # pylint: disable=protected-access
-
-
-@pytest.mark.parametrize("ch", _SURVIVING_WS)
-def test_summary_block_flattens_every_surviving_control_not_just_newline(ch):
-    # Consumer 1. A `\t` inside the fold input also breaks `^  [^ ]` reasoning -- `fold -s` counts a
-    # tab as one column while a terminal expands it -- and a `\r` returns the cursor to column zero,
-    # erasing the indent the re-indent loop just applied.
-    out = render._summary_block(link_core.flatten_summary(f"first half{ch}second half"))  # pylint: disable=protected-access
-    lines = out.split("\n")[:-1]
-    assert len(lines) == 2, lines
-    assert lines[1] == "  first half second half"
-    # The block's own newlines are structure; a tab or a CR anywhere in it is leaked payload.
-    assert "\t" not in out and "\r" not in out
 
 
 @pytest.mark.parametrize("ch", _SURVIVING_WS)
@@ -1784,17 +1635,20 @@ def test_a_worktree_page_is_strictly_that_directory():
     out = plain(render.document(_door_doc()))
     assert out.startswith("▸ IN FOCUS  door — worktree of borg\n")
     for kept in (
-        "Path:         /dev/borg-door",
         "Branch:       feat-x",
         "Worktree of:  borg",
         "Status:       active",
-        "sess-door-1",
-        "Own summary.",
-        "2026-10-13-0900.md",
-        "# Own checkpoint",
+        "Last time: Own summary.",
     ):
         assert kept in out, kept
     for absent in (
+        "Path:",
+        "Source:",
+        "tmux window:",
+        "Session ID:",
+        "sess-door-1",
+        "2026-10-13-0900.md",
+        "# Own checkpoint",
         "THE BORG COLLECTIVE",
         "Tip:",
         "REPOSITORIES",
