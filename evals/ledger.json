@@ -28,6 +28,13 @@
         "lib/recon/**",
         "merge-tree/**"
       ]
+    },
+    "evals/link-next": {
+      "covers": [
+        "evals/link-next/**",
+        "skills/borg-link/**",
+        "skills/borg-next/**"
+      ]
     }
   },
   "items": {
@@ -67,15 +74,13 @@
       "review_by": "2027-01-31"
     },
     "skills/borg-link": {
-      "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
-      "review_by": "2027-01-31"
+      "eval": "evals/link-next"
     },
     "skills/borg-link-up": {
       "eval": "evals/lifecycle-manifests"
     },
     "skills/borg-next": {
-      "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
-      "review_by": "2027-01-31"
+      "eval": "evals/link-next"
     },
     "skills/borg-plan": {
       "eval": "evals/lifecycle-manifests"
