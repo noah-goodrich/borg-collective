@@ -2,7 +2,7 @@
 
 A runbook for bringing a machine from an older borg to the current release, or for installing borg on a fresh machine. It is written so that a person, or a Claude Code session with no other context, can follow it top to bottom. The GitHub release notes for each version describe what changed; this page holds the per-machine steps, and a future release that needs anything from you adds a row to the migration table in section 5 instead of rewriting the notes.
 
-This page was last checked against release 0.9.11.
+This page was last checked against release 0.9.12.
 
 ## 1. Who this is for and how to use it with Claude Code
 
@@ -118,7 +118,8 @@ Find the row for the version you started from. If you skipped several releases, 
 | 0.9.8 | 0.9.9 update order, below |
 | 0.9.9 | 0.9.10 update order, below |
 | 0.9.10 | 0.9.11 update order, below |
-| 0.9.11 | None (current release) |
+| 0.9.11 | None |
+| 0.9.12 | None (current release) |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
 
