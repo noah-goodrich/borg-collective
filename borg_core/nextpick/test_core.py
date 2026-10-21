@@ -561,6 +561,40 @@ def test_work_items_freshness_needs_both_mtimes_and_a_tie_keeps_the_plan():
     assert [r["next_step"] for r in rows] == [PLAN_STEP]
 
 
+DAY = 86400
+
+
+def test_work_items_agent_rows_age_out_after_thirty_days_but_you_rows_never_do():
+    now = 1_790_000_000
+    items = (("YOU", "wait forever"), ("AGENT", "stale next"))
+    stale = _cp(*items, mtime=now - 31 * DAY)
+    rows, quiet = core.work_items([_rank("p")], {}, {}, {"p": stale}, now_epoch=now)
+    assert [(r["owner"], r["next_step"]) for r in rows] == [("YOU", "wait forever")] and quiet == []
+    assert core.first_next(rows)["owner"] == "YOU"
+    fresh = _cp(*items, mtime=now - 30 * DAY)
+    rows, _ = core.work_items([_rank("p")], {}, {}, {"p": fresh}, now_epoch=now)
+    assert [r["owner"] for r in rows] == ["YOU", "AGENT"]
+
+
+def test_work_items_an_aged_checkpoint_feeds_no_next_row_and_does_not_displace_the_plan():
+    now = 1_790_000_000
+    plan = {**PLAN, "mtime": now - 90 * DAY}
+    aged = _cp(("AGENT", "stale next"), mtime=now - 40 * DAY)
+    rows, _ = core.work_items([_rank("p")], {}, {"p": plan}, {"p": aged}, now_epoch=now)
+    assert [r["next_step"] for r in rows] == [PLAN_STEP]
+    rows, quiet = core.work_items([_rank("p")], {}, {}, {"p": aged}, now_epoch=now)
+    assert rows == [] and quiet == ["p"]
+
+
+def test_work_items_without_a_clock_or_an_mtime_nothing_ages():
+    aged = _cp(("AGENT", "next"), mtime=1.0)
+    rows, _ = core.work_items([_rank("p")], {}, {}, {"p": aged}, now_epoch=0)
+    assert [r["next_step"] for r in rows] == ["next"]
+    unknown = _cp(("AGENT", "next"), mtime=None)
+    rows, _ = core.work_items([_rank("p")], {}, {}, {"p": unknown}, now_epoch=1_790_000_000)
+    assert [r["next_step"] for r in rows] == ["next"]
+
+
 def test_short_title_strips_prefix_and_truncates():
     assert core.short_title("feat(next): interactive chooser with an earned suggestion") == "interactive choos…"
     assert core.short_title("fix!: tiny") == "tiny"

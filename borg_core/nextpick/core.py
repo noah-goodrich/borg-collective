@@ -397,16 +397,33 @@ def _newer(checkpoint_mtime: float | None, plan_mtime: float | None) -> bool:
     return checkpoint_mtime is not None and plan_mtime is not None and checkpoint_mtime > plan_mtime
 
 
+NEXT_AGE_DAYS = 30
+
+
+def _aged(checkpoint: dict[str, Any], now_epoch: int) -> bool:
+    """True when the checkpoint is older than `NEXT_AGE_DAYS` at `now_epoch`; False when either time is unknown.
+
+    The clock is the caller's (`work_items`' `now_epoch`): nothing here reads one.
+    """
+    mtime = checkpoint.get("mtime")
+    return bool(now_epoch and mtime is not None and now_epoch - mtime > NEXT_AGE_DAYS * 86400)
+
+
 def _checkpoint_rows(checkpoint: dict[str, Any], owner: str) -> list[dict[str, Any]]:
     """The rows of one repository's checkpoint items that `owner` owns."""
     return [_checkpoint_row(it) for it in checkpoint.get("items") or [] if it.get("owner") == owner]
 
 
-def _fallback_rows(checkpoint: dict[str, Any], plan: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _fallback_rows(
+    checkpoint: dict[str, Any], plan: dict[str, Any] | None, now_epoch: int
+) -> list[dict[str, Any]]:
     """For a repository with no PR row: the plan row, else the checkpoint's AGENT items.
 
-    A checkpoint with items that is newer than the plan (`_newer`) replaces the plan row.
+    A checkpoint with items that is newer than the plan (`_newer`) replaces the plan row. A checkpoint older than
+    `NEXT_AGE_DAYS` (`_aged`) does neither: a month-old next step is not what is next. Its YOU items still stand.
     """
+    if _aged(checkpoint, now_epoch):
+        return _plan_rows(plan)
     if checkpoint.get("items") and _newer(checkpoint.get("mtime"), (plan or {}).get("mtime")):
         plan = None
     return _plan_rows(plan) or _checkpoint_rows(checkpoint, "AGENT")
@@ -431,7 +448,8 @@ def work_items(
     `recon.core.checkpoint_owned_items` returns. Order inside one repository: the waiting session, the YOU merge
     rows, the checkpoint's YOU wait items, the AGENT PR rows, then the plan row or, when neither a PR row nor a
     surviving plan row exists, the checkpoint's AGENT Next Session items. The plan row does not survive a checkpoint
-    whose mtime is later than the plan's (both numbers known). Checkpoint rows also carry `detail`, the item's full
+    whose mtime is later than the plan's (both numbers known). A checkpoint older than `NEXT_AGE_DAYS` at `now_epoch`
+    feeds no AGENT row and no plan replacement; its YOU wait items never age out. Checkpoint rows also carry `detail`, the item's full
     text; `next_step` is that text cut to NEXT_STEP_MAX.
     """
     rows: list[dict[str, Any]] = []
@@ -462,7 +480,7 @@ def work_items(
         mine.extend(_checkpoint_rows(checkpoint, "YOU"))
         mine.extend(r for r in pr_rows if r["owner"] != "YOU")
         if not pr_rows:
-            mine.extend(_fallback_rows(checkpoint, plans_by_repository.get(repository)))
+            mine.extend(_fallback_rows(checkpoint, plans_by_repository.get(repository), now_epoch))
         if not mine:
             quiet.append(repository)
         rows.extend({"project": repository, **row, "age": age} for row in mine)

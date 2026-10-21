@@ -433,9 +433,9 @@ def test_item_rows_reads_wait_items_past_line_20_from_real_checkpoint_files(tmp_
     rows, quiet = _item_rows(registry)
     assert quiet == []
     assert [(r["owner"], r["detail"]) for r in rows] == [
-        ("YOU", "**Rotate the key.** Only the owner can."),
+        ("YOU", "Rotate the key. Only the owner can."),
         ("YOU", "Pick a name for the thing"),
-        ("AGENT", "**Ship it.** Then verify. - sub one"),
+        ("AGENT", "Ship it. Then verify. - sub one"),
         ("AGENT", "Tidy up"),
     ]
     assert all(r["item"] == "" and r["ready"] == "" and r["ref"] is None for r in rows)
