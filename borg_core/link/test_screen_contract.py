@@ -388,17 +388,20 @@ def test_the_next_action_line_never_cuts_its_command_and_waiting_rows_never_cut_
     document = _queen(stacks=1, waiting=0)
     document["waiting"] = {"rows": [row], "hidden": {}, "hidden_lines": [], "degraded": None}
     page = plain(render.document(document)).split("\n")
-    last = [line for line in page if line.strip()][-1]
+    block = page[next(i for i, line in enumerate(page) if line.startswith("  next  ")) :]
+    block = [line for line in block if line.strip()]
     command = render._next_action_command(ref)  # pylint: disable=protected-access
     assert command == f"gh pr view 12345 -R {owner}"
-    assert last.endswith(command) and picture.visible_len(last) <= 98
-    assert last.startswith("  next  #12345")
+    flat = " ".join(" ".join(block).split())
+    assert block[-1].strip() == command and picture.visible_len(block[-1]) <= 98
+    assert block[0].startswith("  next  #12345") and f"({'p' * 30})" in flat and "…" not in flat
     waiting = next(line for line in page if "▶" in line and "#12345" in line)
     assert "#12345" in waiting and picture.visible_len(waiting) <= 98 and waiting.rstrip().endswith("…")
-    # A non-GitHub label too long for the line is cut in the middle, never the command.
-    document["waiting"]["rows"] = [{**row, "ref": "", "item": "s" * 150}]
-    tail = [line for line in plain(render.document(document)).split("\n") if line.strip()][-1]
-    assert tail.endswith("borg next") and picture.visible_len(tail) <= 98
+    # A non-GitHub label too long for the line wraps whole (AC5), and the command is still the last thing on the page.
+    document["waiting"]["rows"] = [{**row, "ref": "", "item": "session", "next_step": "s" * 150}]
+    tail = [line for line in plain(render.document(document)).split("\n") if line.strip()]
+    assert tail[-1].endswith("borg next") and all(picture.visible_len(line) <= 98 for line in tail)
+    assert "s" * 150 in "".join(line.strip() for line in tail[-3:])
 
 
 # ── Doorways S3 (AC3): the page is painted verbatim, so both scopes must fit the paint ───────────────────────────
@@ -433,21 +436,33 @@ def test_the_painted_page_has_no_escape_byte_and_no_line_over_a_hundred_columns(
     assert max(picture.visible_len(line) for line in painted.split("\n")) <= 98
 
 
-def test_the_repository_page_cuts_free_text_with_an_ellipsis_and_keeps_every_other_line_whole():
+def test_the_queen_boards_table_rows_cut_free_text_with_an_ellipsis_and_keep_every_other_line_whole():
+    """AC5 narrowed this from the repository page to the Queen's board rows (Non-Goal: the table rows keep their cut)."""
+    page = plain(render.document(_queen(stacks=1, waiting=2)))
+    lines = page.split("\n")
+    rows = [line for line in lines if _BOARD_ROW.match(line)]
+    assert rows and all(line.endswith("…") for line in rows), "every board row's long summary is cut"
+    assert all(picture.visible_len(line) <= 98 for line in lines)
+
+
+def test_the_repository_page_cuts_nothing_and_shows_fewer_things():
+    """AC5: the 302-column checkpoint line, the 400-character summary and the fields are no longer on the page."""
     page = plain(render.document(_painted_repository_doc()))
-    cut = [line for line in page.split("\n") if line.endswith("…")]
-    assert any("tl;dr" in line for line in cut), "the 302-column checkpoint line is cut"
+    assert "…" not in page.replace("(p)", "") or page.count("…") == 1  # only the waiting row's own clip may remain
     assert all(picture.visible_len(line) <= 98 for line in page.split("\n"))
-    assert "short" in page and "borg link --overview" in page
+    for left in ("tl;dr", "Source:", "Path:", "tmux window:", "Session ID:", "Recent Checkpoints", "2026-10-19-101627"):
+        assert left not in page, left
+    assert "s" * 400 in page.replace("\n", "").replace(" ", ""), "the summary is whole across wrapped lines"
+    assert "borg link --overview" in page
 
 
 def test_the_repository_page_never_cuts_a_command_or_a_ref():
-    """The pointer line and the waiting row hold literal commands and refs. They are not free text, so the fit
-    does not touch them, even where they are wider than the page (here a path past 100 columns)."""
+    """The pointer line, the waiting row and the parent repository hold literal commands and refs. They are not free
+    text, so the fit does not touch them, even where they are wider than the page (here a path past 100 columns)."""
     ref = "an-organisation-name/a-repository-name-quite-long#12345"
     long_path = "/ws/" + "deeply-nested-directory/" * 6 + "p"
     document = _painted_repository_doc()
-    document["focus"]["entry"]["path"] = long_path
+    document["focus"]["identity"] = {"kind": "worktree", "branch": "b", "worktree_of": long_path}
     document["waiting"] = {
         "rows": [{"project": "p", "item": "session", "next_step": f"gh pr view -R {ref}", "owner": "YOU", "ref": None}],
         "hidden": {},
@@ -455,7 +470,7 @@ def test_the_repository_page_never_cuts_a_command_or_a_ref():
         "degraded": None,
     }
     page = plain(render.document(document))
-    assert long_path in page, "a path is a ref, never cut"
+    assert f"Worktree of:  {long_path}\n" in page, "a path is a ref, never cut"
     assert "borg link --overview" in page
     assert f"gh pr view -R {ref}" in page
 
@@ -559,3 +574,123 @@ def test_an_empty_checkpoint_still_says_nothing_is_ready_and_carries_no_owner(tm
     assert _last_line(render.document(repository_doc)) == "next  nothing is ready  borg next"
     brief_next = next(line for line in arrival.brief(repository_doc).split("\n") if line.startswith(" next"))
     assert "nothing is ready" in brief_next and "owner:" not in brief_next
+
+
+# ── AC5 of 2026-10-20-one-owned-next-list: the repository page shows fewer things, whole ──────────────────────────
+
+
+def _words(count: int, stem: str = "word") -> str:
+    return " ".join(f"{stem}{n}" for n in range(count))
+
+
+def _wide_checkpoint(waits: list[str], nexts: list[str]) -> str:
+    return (
+        "tl;dr synthetic\n\n## 4. Blockers\n\nWaits on you:\n"
+        + "".join(f"- {text}\n" for text in waits)
+        + "\n## 5. Next Session\n\n"
+        + "".join(f"{n}. {text}\n" for n, text in enumerate(nexts, start=1))
+    )
+
+
+def _item_lines(page: str, heading: str) -> list[str]:
+    """The lines under `heading` on a plain page, up to the next blank line."""
+    lines = page.split("\n")
+    start = lines.index(f"  {heading}") + 1
+    end = next((i for i in range(start, len(lines)) if not lines[i].strip()), len(lines))
+    return lines[start:end]
+
+
+def test_a_three_hundred_character_wait_item_renders_whole_across_wrapped_lines(tmp_path, monkeypatch):
+    """AC5. The item travels the real path (a file on disk, `nextpick.shell`, `link.cli._waiting`). MUTATION: put
+    `_fit_text` back over the list and the item ends in an ellipsis; drop the wrap and one line passes 98 columns."""
+    item = " ".join(f"tok{n:02d}" for n in range(50))
+    assert len(item) == 299
+    repository_doc, _ = _checkpoint_documents(tmp_path, monkeypatch, _wide_checkpoint([item], ["Build the widget"]))
+    page = plain(render.document(repository_doc))
+    block = _item_lines(page, "Waits on you")
+    assert len(block) >= 4 and block[0].startswith("  1 ")
+    assert all(line.startswith("    ") for line in block[1:]), "a hanging indent under the text"
+    assert " ".join(" ".join(block).replace("1 ", "", 1).split()) == item
+    assert "…" not in page and all(picture.visible_len(line) <= render.PAGE_COLUMNS for line in page.split("\n"))
+    assert "Next · AGENT" in page and "  1 Build the widget" in page
+
+
+def test_the_page_caps_items_by_whole_items_and_counts_the_rest_with_the_command_that_prints_them(
+    tmp_path, monkeypatch
+):
+    waits = [_words(40, f"w{n}x") for n in range(4)]
+    nexts = [f"Next number {n} {_words(20, 'n')} end{n}" for n in range(5)]
+    repository_doc, _ = _checkpoint_documents(tmp_path, monkeypatch, _wide_checkpoint(waits, nexts))
+    page = plain(render.document(repository_doc))
+    block_w, block_n = _item_lines(page, "Waits on you"), _item_lines(page, "Next · AGENT")
+    shown = block_w + block_n
+    assert len(shown) <= render.PAGE_ITEM_LINES + len(block_n), "the budget holds (the Next list keeps its first item)"
+    kept_w = sum(1 for line in block_w if re.match(r"^  \d ", line))
+    kept_n = sum(1 for line in block_n if re.match(r"^  \d ", line))
+    more = next(line for line in page.split("\n") if "more" in line and "borg link --full" in line)
+    assert more.strip() == f"+{len(waits) + len(nexts) - kept_w - kept_n} more  borg link --full"
+    for items, block, kept in ((waits, block_w, kept_w), (nexts, block_n, kept_n)):
+        joined = " ".join(" ".join(block).split())
+        for index, item in enumerate(items):
+            assert (item in joined) == (index < kept), "an item is whole or absent, never cut"
+            assert (index < kept) or item.split()[-1] not in joined.split()
+    assert 0 < kept_w < len(waits) and kept_n >= 1
+    assert "…" not in page
+    full = plain(render.document(repository_doc, full=True))
+    assert "more  borg link --full" not in full
+    assert sum(1 for line in full.split("\n") if re.match(r"^  \d ", line)) == len(waits) + len(nexts)
+    assert all(picture.visible_len(line) <= render.PAGE_COLUMNS for line in full.split("\n"))
+
+
+def test_the_first_item_of_each_list_is_kept_even_when_the_budget_is_spent(tmp_path, monkeypatch):
+    waits = [_words(400, "a"), _words(10, "b")]
+    repository_doc, _ = _checkpoint_documents(tmp_path, monkeypatch, _wide_checkpoint(waits, ["Still shown"]))
+    page = plain(render.document(repository_doc))
+    assert len(_item_lines(page, "Waits on you")) > render.PAGE_ITEM_LINES, "one long item is never cut to fit"
+    assert "  1 Still shown" in page and "+1 more  borg link --full" in page
+
+
+def test_the_repository_page_stays_on_one_screen_with_busy_lists(tmp_path, monkeypatch):
+    waits = [_words(35, f"w{n}") for n in range(12)]
+    nexts = [_words(35, f"n{n}") for n in range(12)]
+    repository_doc, _ = _checkpoint_documents(tmp_path, monkeypatch, _wide_checkpoint(waits, nexts))
+    repository_doc["focus"]["entry"]["summary"] = _words(45, "last")
+    assert 280 <= len(repository_doc["focus"]["entry"]["summary"]) <= 340
+    lines = plain(render.document(repository_doc)).split("\n")
+    # The worst page the budget allows: 5 identity lines, a 4-line `Last time`, 8 item lines plus the first Next item
+    # the budget always keeps, their headings, the count line, the pointer and a 4-line WAITING ON YOU. A number
+    # edited to make the page pass would hide a lost cap, so it is a literal here.
+    assert len(lines) <= 34, len(lines)
+
+
+def test_the_page_fields_leave_but_the_document_keeps_every_key(tmp_path, monkeypatch):
+    repository_doc, _ = _checkpoint_documents(tmp_path, monkeypatch, _wide_checkpoint(["Wait one"], ["Do one"]))
+    focus = repository_doc["focus"]
+    focus["entry"].update({"tmux_window": "w", "claude_session_id": "sid", "source": "cli"})
+    before = copy.deepcopy(repository_doc)
+    page = plain(render.document(repository_doc))
+    for left in ("Source:", "Path:", "tmux window:", "Session ID:", "Checkpoints", ".md", "tl;dr"):
+        assert left not in page, left
+    assert repository_doc == before, "rendering reads the document and never edits it"
+    assert focus["checkpoints"] and focus["checkpoint_head"] and focus["entry"]["claude_session_id"] == "sid"
+
+
+def test_waiting_on_you_does_not_contradict_the_listed_wait_items(tmp_path, monkeypatch):
+    repository_doc, _ = _checkpoint_documents(tmp_path, monkeypatch, _wide_checkpoint(["Wait one"], ["Do one"]))
+    page = plain(render.document(repository_doc))
+    assert "  1 Wait one" in page and "nothing waits on you" not in page and "nothing here waits" not in page
+    assert "what waits on you is listed above" in page
+
+
+def test_checkpoint_rows_on_the_queen_page_are_named_by_their_repository_not_session(tmp_path, monkeypatch):
+    """Defect 2a. A checkpoint wait item has no ref and no item of its own; the renderer called it `session`.
+    MUTATION: restore `or "session"` in `_chooser_item` and the row reads `▶ session`."""
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(tmp_path / "queen-root"))
+    store = tmp_path / "queen-root" / ".borg" / "checkpoints"
+    store.mkdir(parents=True)
+    (store / "2026-10-19-162310-abcdef.md").write_text(_wide_checkpoint(["Pick the synthetic colour"], ["Go"]))
+    queen_doc = _doc(waiting=cli._waiting({}, {"kind": "orchestrator", "repository": None, "local": True}, True, []))  # pylint: disable=protected-access
+    page = plain(render.document(queen_doc))
+    row = next(line for line in page.split("\n") if "Pick the synthetic colour" in line and "▶" in line)
+    assert "queen" in row and "session" not in row
+    assert "session" not in page

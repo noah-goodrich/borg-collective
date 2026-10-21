@@ -806,3 +806,17 @@ def test_card_with_a_name_wider_than_the_card_keeps_it_whole():
     card = core.chooser_card(_card_row(project=name))
     assert any(name in line for line in card)
     assert card[-1].endswith("--chosen")
+
+
+def test_upcoming_lists_every_non_you_row_whole_before_the_cap():
+    long = "w" * 150
+    work = [
+        {"project": "p", "item": "", "next_step": "cut…", "detail": long, "owner": "AGENT"},
+        {"project": "p", "item": "#3", "next_step": "review", "owner": "YOU"},
+        {"project": "p", "item": "", "next_step": "no owner", "owner": ""},
+        {"project": "p", "item": "#4", "next_step": "stale draft", "owner": "AGENT", "stale": True},
+    ]
+    assert core.upcoming(work) == [
+        {"project": "p", "item": "", "next_step": "cut…", "detail": long, "owner": "AGENT"},
+        {"project": "p", "item": "", "next_step": "no owner", "detail": "no owner", "owner": "—"},
+    ]

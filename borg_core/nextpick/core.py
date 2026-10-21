@@ -449,7 +449,8 @@ def work_items(
     rows, the checkpoint's YOU wait items, the AGENT PR rows, then the plan row or, when neither a PR row nor a
     surviving plan row exists, the checkpoint's AGENT Next Session items. The plan row does not survive a checkpoint
     whose mtime is later than the plan's (both numbers known). A checkpoint older than `NEXT_AGE_DAYS` at `now_epoch`
-    feeds no AGENT row and no plan replacement; its YOU wait items never age out. Checkpoint rows also carry `detail`, the item's full
+    feeds no AGENT row and no plan replacement; its YOU wait items never age out. Checkpoint rows also carry
+    `detail`, the item's full
     text; `next_step` is that text cut to NEXT_STEP_MAX.
     """
     rows: list[dict[str, Any]] = []
@@ -567,6 +568,26 @@ def first_next(work: list[dict[str, Any]]) -> dict[str, str] | None:
                 "owner": str(row.get("owner") or "—"),
             }
     return None
+
+
+def upcoming(work: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Every non-YOU, non-stale row of `work`, in order, as `{project, item, next_step, detail, owner}`.
+
+    The repository page's `Next` list: `cap_rows` only counts these rows, so the page reads them from here, BEFORE the
+    cap, whole (`detail` is the full text when the row has one, else the cut `next_step`). A row with no owner reads
+    `—`.
+    """
+    return [
+        {
+            "project": str(row.get("project") or ""),
+            "item": str(row.get("item") or ""),
+            "next_step": str(row.get("next_step") or ""),
+            "detail": str(row.get("detail") or row.get("next_step") or ""),
+            "owner": str(row.get("owner") or "—"),
+        }
+        for row in work
+        if row.get("owner") != "YOU" and not row.get("stale")
+    ]
 
 
 def hidden_lines(hidden: dict[str, int]) -> list[str]:

@@ -371,7 +371,8 @@ def checkpoint_owned_items(text: str) -> list[dict[str, str]]:
 
     YOU items are the top-level list items that follow a whole-line `Waits on you:` or `These wait on <name>:`
     lead-in (case-insensitive) inside `## 4. Blockers`; `Waits on you: none`, `No blockers.` and any other prose
-    yield nothing. AGENT items are every top-level list item of `## 5. Next Session`. Item text loses its emphasis markers
+    yield nothing. AGENT items are every top-level list item of `## 5. Next Session`. Item text loses its emphasis
+    markers
     (`_strip_emphasis`; the words stay), collapses whitespace and is never truncated. Pure: text in, dicts out.
     """
     owned: list[dict[str, str]] = []

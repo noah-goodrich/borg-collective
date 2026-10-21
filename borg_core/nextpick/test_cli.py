@@ -557,13 +557,17 @@ def test_queen_owned_swallows_a_reader_failure(monkeypatch):
 
 def test_item_rows_with_next_reads_the_first_row_before_the_cap_from_a_real_file(tmp_path):
     registry = {"repositories": {"p": _repo(tmp_path, "p", ("2026-10-01-0900.md", NEW_FORM))}}
-    rows, _degraded, hidden, first = cli.item_rows_with_next(registry["repositories"], True)
+    rows, _degraded, hidden, first, upcoming = cli.item_rows_with_next(registry["repositories"], True)
     assert [r["owner"] for r in rows] == ["YOU", "YOU"]
+    assert [(u["owner"], u["detail"]) for u in upcoming] == [
+        ("AGENT", "Ship it. Then verify. - sub one"),
+        ("AGENT", "Tidy up"),
+    ]
     assert hidden == {"agent": 2, "stale": 0, "overflow": 0, "unowned": 0}
     assert first is not None and first["owner"] == "YOU" and first["project"] == "p"
     no_wait = "## 4. Blockers\n\nNo blockers.\n\n## 5. Next Session\n\n1. Go\n"
     only_next = {"q": _repo(tmp_path, "q", ("2026-10-01-0900.md", no_wait))}
-    rows, _degraded, hidden, first = cli.item_rows_with_next(only_next, True)
+    rows, _degraded, hidden, first, _upcoming = cli.item_rows_with_next(only_next, True)
     assert rows == [] and hidden["agent"] == 1
     assert first == {"project": "q", "next_step": "Go", "detail": "Go", "owner": "AGENT"}
 
