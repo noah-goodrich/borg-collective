@@ -88,7 +88,7 @@ import re
 from functools import partial
 from typing import Callable, NamedTuple
 
-from borg_core.link import core, grid, picture, worktree
+from borg_core.link import core, grid, picture, slots, worktree
 from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 
 # Overview column widths, hoisted so the header line and every row format string share ONE source
@@ -1785,7 +1785,7 @@ def _waiting_section(doc: dict, cap: int | None = None) -> tuple[str, list[str]]
     note = _plural(facts.total, "item", "items")
     if unlooked:
         note += " — and some refs nobody looked up"
-    rows = _waiting_rows(items[: shown - parked_n], parking[:parked_n])
+    rows = _waiting_rows(slots.share_slots(items, shown - parked_n, "repository"), parking[:parked_n])
     if not capped and more_parked:
         rows.append(f"  {DIM}+{more_parked} more parked items due{NC}\n")
     return note, [*rows, *tail, action]

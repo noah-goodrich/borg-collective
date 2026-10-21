@@ -17,7 +17,7 @@ from typing import Any
 from borg_core.compass import core as compass_core
 from borg_core.link import core as link_core
 from borg_core import timefmt
-from borg_core.link import grid, picture, render
+from borg_core.link import grid, picture, render, slots
 from borg_core.planstate import core as planstate
 
 
@@ -531,25 +531,28 @@ def _is_unowned(row: dict[str, Any]) -> bool:
 def cap_rows(
     work: list[dict[str, Any]], show_all: bool = False, limit: int = SHOWN_MAX
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """`(shown, hidden)`: at most `limit` YOU rows in existing order; everything else is only counted.
+    """`(shown, hidden)`: at most `limit` YOU rows, the slots shared across repositories; the rest only counted.
 
-    `hidden` is `{agent, stale, overflow, unowned}`: stale drafts first (whoever owns them), then non-YOU rows with
-    no owner (`—` or blank) as `unowned`, every other non-YOU row as `agent`, then YOU rows beyond `limit` as
-    `overflow`. `show_all` returns every row and zero counts.
+    The shown YOU rows are chosen round-robin: the first YOU row of each repository (the Queen's `queen` label is
+    one repository) in rank order, then the second of each, and so on until `limit`. They are displayed in the
+    existing order, not pick order, so with one repository this is the first `limit` rows. `hidden` is
+    `{agent, stale, overflow, unowned}`: stale drafts first (whoever owns them), then non-YOU rows with no owner
+    (`—` or blank) as `unowned`, every other non-YOU row as `agent`, then YOU rows not chosen as `overflow`.
+    `show_all` returns every row and zero counts.
     """
     if show_all:
         return list(work), dict(NO_HIDDEN)
     hidden = dict(NO_HIDDEN)
-    shown: list[dict[str, Any]] = []
+    you_rows: list[dict[str, Any]] = []
     for row in work:
         if row.get("stale"):
             hidden["stale"] += 1
         elif row.get("owner") != "YOU":
             hidden["unowned" if _is_unowned(row) else "agent"] += 1
-        elif len(shown) < limit:
-            shown.append(row)
         else:
-            hidden["overflow"] += 1
+            you_rows.append(row)
+    shown = slots.share_slots(you_rows, limit, "project")
+    hidden["overflow"] = len(you_rows) - len(shown)
     return shown, hidden
 
 

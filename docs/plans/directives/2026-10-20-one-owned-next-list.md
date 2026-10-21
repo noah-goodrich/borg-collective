@@ -62,6 +62,8 @@ The model half of the failure, the borg-link skill repeating "Nothing is waiting
   - Verify: a 300-character wait item renders whole across wrapped lines; the existing one-screen height test passes; `test_the_repository_page_cuts_free_text_with_an_ellipsis_and_keeps_every_other_line_whole` is narrowed to the Queen board's table rows.
 - [ ] AC6 — Live, and nothing breaks.
   - Verify: on Noah's machine `borg next --rows --json` lists the newest checkpoints' wait items as YOU rows (output pasted in the PR); `make test && make test-bats && make lint` is green; `borg next --line` median stays under 20 ms.
+- [ ] AC7 — The cap shares its slots across repositories, so the Queen's wait items show when one repository has five or more.
+  - Verify: `test_cap_rows_six_a_and_two_queen_shows_a1_a2_a3_q1_q2_in_original_order_overflow_three` and its siblings in `borg_core/nextpick/test_core.py`; `test_queen_rows_show_when_one_repository_has_six_you_rows_ac7` through `item_rows` and `--rows --json` in `borg_core/nextpick/test_cli.py`; `test_the_queen_page_waiting_on_you_shows_queen_rows_when_one_repository_has_six_you_rows` in `borg_core/link/test_screen_contract.py`.
 
 ## Testability
 
@@ -99,6 +101,7 @@ Target 2026-11-01, three PRs at about one session each:
 - PR 1: reader, rows, Queen, freshness, labels and the template (AC1-AC3); this directive and the AC8 tick ride along.
 - PR 2: surfaces and the arrival brief's owner (AC4).
 - PR 3: page and brief wrapping (AC5), then the live check (AC6).
+- PR 4: the cap shares its slots across repositories (AC7), added on Noah's word "pr 4" on 2026-10-21 after the live check showed the Queen's rows pushed off by one repository's five.
 
 ## Risks
 

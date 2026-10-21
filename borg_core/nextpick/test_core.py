@@ -179,7 +179,7 @@ def test_core_imports_nothing_impure():
             if node.module == "borg_core.link":
                 pure_link.update(a.name for a in node.names)
     assert roots == {"__future__", "re", "typing", "borg_core"}, f"core.py grew an impure import: {sorted(roots)}"
-    assert pure_link == {"core", "grid", "picture", "render"}, f"only borg_core.link's pure Domain modules: {pure_link}"
+    assert pure_link == {"core", "grid", "picture", "render", "slots"}, f"only borg_core.link's pure Domain modules: {pure_link}"
 
 
 BLANK = {"item": "", "next_step": "", "owner": "", "ready": ""}
@@ -507,7 +507,12 @@ def test_work_items_checkpoint_fallback_and_quiet_and_order():
     rows, quiet = core.work_items(ranked, {"c": [_pr(1)]}, {}, {"a": _cp(("AGENT", "do the thing"))})
     assert quiet == ["b"]
     assert [r["project"] for r in rows] == ["a", "c"]
-    assert (rows[0]["item"], rows[0]["next_step"], rows[0]["owner"], rows[0]["ready"]) == ("", "do the thing", "AGENT", "")
+    assert (rows[0]["item"], rows[0]["next_step"], rows[0]["owner"], rows[0]["ready"]) == (
+        "",
+        "do the thing",
+        "AGENT",
+        "",
+    )
     assert rows[0]["detail"] == "do the thing" and rows[0]["ref"] is None
 
 
@@ -658,6 +663,59 @@ def test_cap_rows_all_returns_everything_uncounted():
     work = [{"owner": "AGENT", "stale": True}, *_you_rows(7)]
     shown, hidden = core.cap_rows(work, show_all=True)
     assert shown == work and hidden == {"agent": 0, "stale": 0, "overflow": 0, "unowned": 0}
+
+
+def _repo_rows(project, count):
+    return [
+        {"project": project, "item": f"{project}{n}", "owner": "YOU", "ref": f"{project}#{n}", "stale": False}
+        for n in range(1, count + 1)
+    ]
+
+
+def test_cap_rows_six_a_and_two_queen_shows_a1_a2_a3_q1_q2_in_original_order_overflow_three():
+    work = [*_repo_rows("a", 6), *_repo_rows("queen", 2)]
+    shown, hidden = core.cap_rows(work)
+    assert [r["item"] for r in shown] == ["a1", "a2", "a3", "queen1", "queen2"]
+    assert hidden == {"agent": 0, "stale": 0, "overflow": 3, "unowned": 0}
+
+
+def test_cap_rows_three_repositories_take_turns_and_display_in_rank_order():
+    work = [*_repo_rows("a", 3), *_repo_rows("b", 3), *_repo_rows("queen", 3)]
+    shown, hidden = core.cap_rows(work)
+    assert [r["item"] for r in shown] == ["a1", "a2", "b1", "b2", "queen1"]
+    assert hidden["overflow"] == 4
+
+
+def test_cap_rows_a_short_repository_gives_its_unused_turns_back():
+    work = [*_repo_rows("a", 6), *_repo_rows("queen", 1)]
+    shown, hidden = core.cap_rows(work)
+    assert [r["item"] for r in shown] == ["a1", "a2", "a3", "a4", "queen1"]
+    assert hidden["overflow"] == 2
+
+
+def test_cap_rows_one_repository_is_the_first_five_as_before():
+    work = _repo_rows("a", 8)
+    shown, hidden = core.cap_rows(work)
+    assert shown == work[:5] and hidden["overflow"] == 3
+
+
+def test_cap_rows_round_robin_leaves_agent_stale_and_unowned_counts_alone():
+    work = [
+        {"project": "a", "owner": "AGENT", "stale": False},
+        {"project": "a", "owner": "—", "stale": False},
+        {"project": "a", "owner": "YOU", "item": "old", "stale": True},
+        *_repo_rows("a", 6),
+        *_repo_rows("queen", 2),
+    ]
+    shown, hidden = core.cap_rows(work)
+    assert [r["item"] for r in shown] == ["a1", "a2", "a3", "queen1", "queen2"]
+    assert hidden == {"agent": 1, "stale": 1, "overflow": 3, "unowned": 1}
+
+
+def test_cap_rows_show_all_ignores_the_round_robin():
+    work = [*_repo_rows("a", 6), *_repo_rows("queen", 2)]
+    shown, hidden = core.cap_rows(work, show_all=True)
+    assert shown == work and hidden["overflow"] == 0
 
 
 def test_hidden_lines_fixed_order_and_no_zeros():
