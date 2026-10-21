@@ -20,6 +20,7 @@ Rules moved verbatim from the top-level CLAUDE.md.
   Inspect runs with `borg nanoprobes` (alias `np`) and pull transcripts with
   `borg nanoprobe-log <id-prefix>`. The agent file installs to `~/.claude/agents/borg-nanoprobe.md`
   via `borg setup`, where both Claude Code and Cortex Code discover it.
+- **A PR adds its own stack row**: when a brief names a stack manifest (a file under `.stacks/`), the PR adds its own row in the same PR with `python3 -m borg_core.manifest.cli add-row` (`--name`, `--ref`, `--why`, `--status`), because `/borg-link-up` cannot do it for a nanoprobe: it needs a plan slug and a PR on the current branch, and nanoprobe worktrees never run it. A stack whose PRs skip this stays at zero rows and `borg link` shows nothing for the directive. The orchestrator adds the manifest name to every brief.
 - **Bounded termination (agent loops)**: when fanning out nanoprobes or running any retry/until
   loop, set an explicit ceiling (max spawns / max iterations) up front and stop when hit. Never
   rely on judgment to exit loops — explicit stopping conditions only (e.g., `MAX_RETRIES=3`

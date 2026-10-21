@@ -1,5 +1,41 @@
 {
   "desc": "Every next surface answers from one owned list read from the newest repository and Queen checkpoints",
   "program": "2026-10-20-one-owned-next-list",
-  "rows": []
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#450",
+      "status": "merged",
+      "why": "Files the directive and amends evals with Phase 1b"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#451",
+      "status": "merged",
+      "why": "Evals B1 and B2: link and next restate the page, 2026-11-15 waivers renewed"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#452",
+      "status": "merged",
+      "why": "PR 1a: checkpoint wait items become YOU rows"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#453",
+      "status": "merged",
+      "why": "PR 1b: Queen checkpoint rows and the Waits on you template"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#455",
+      "status": "merged",
+      "why": "PR 2: unowned rows and a next item on every surface (AC4)"
+    }
+  ]
 }

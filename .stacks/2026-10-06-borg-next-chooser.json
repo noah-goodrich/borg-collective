@@ -1,5 +1,55 @@
 {
   "desc": "borg next becomes a chooser that logs every run and earns its recommendation",
   "program": "2026-10-06-borg-next-chooser",
-  "rows": []
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#274",
+      "status": "merged",
+      "why": "Chooser PR 1 of 2: log every next run, add --pick"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#275",
+      "status": "merged",
+      "why": "Chooser PR 2 of 2: interactive chooser with an earned suggestion"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#277",
+      "status": "merged",
+      "why": "The next skill becomes the chooser; reaper ages by commits"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#283",
+      "status": "merged",
+      "why": "Caps the chooser at 5 YOU rows with hidden-count summaries"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#286",
+      "status": "merged",
+      "why": "next reads the registry through the one Python state overlay"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#315",
+      "status": "merged",
+      "why": "Ticks the finished boxes in the chooser plan and directive"
+    },
+    {
+      "lane": "_default",
+      "order": "7",
+      "ref": "noah-goodrich/borg-collective#391",
+      "status": "merged",
+      "why": "Assimilates the chooser plan into the archive"
+    }
+  ]
 }
