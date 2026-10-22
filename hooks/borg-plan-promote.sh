@@ -14,10 +14,16 @@
 #   5. Session JSONL must contain an ExitPlanMode tool call since the most recent
 #      non-meta user message (i.e. the current user turn).
 #
+# Cortex Code CLI branch (PostToolUse on ExitPlanMode): Cortex's transcript is a conversations/<id>.json file, not
+# the Claude JSONL gate 5 reads, so the branch below reads the plan from tool_input.plan instead. It applies gates 1,
+# 3 and 4, writes docs/plans/PROJECT_PLAN.md, and also overwrites the team plan file .cortex/plans/plan-<task-id>.md
+# the response names (never the plan_<timestamp>.md files Cortex writes itself). The Claude path is unchanged.
+#
 # Always exits 0 — never blocks. On any unexpected failure, logs a debug line to
 # ~/.local/state/borg/plan-promote-debug.log and exits 0.
 #
-# Registered as a PreToolUse hook in ~/.claude/settings.json.
+# Registered as a PreToolUse hook in ~/.claude/settings.json, and in Cortex's hooks.json as PreToolUse (no-op there,
+# Cortex payloads fail gate 5) and as PostToolUse on ExitPlanMode|exit_plan_mode (the Cortex branch).
 
 set -euo pipefail
 
@@ -60,6 +66,74 @@ declare -F _borg_session_mode >/dev/null || exit 0
 
 MODE=$(_borg_session_mode "$CWD")
 [[ "$MODE" == "orchestrator" ]] && exit 0
+
+# ── Cortex branch: PostToolUse ExitPlanMode carries the plan in tool_input.plan ───────────────────────────────
+# Accept both tool-name spellings (Cortex payloads say ExitPlanMode; its own tool is exit_plan_mode).
+
+HOOK_EVENT=$(printf '%s' "$INPUT" | jq -r '.hook_event_name // ""' 2>/dev/null || true)
+if [[ "$HOOK_EVENT" == "PostToolUse" ]]; then
+    case "$TOOL_NAME" in
+        ExitPlanMode|exit_plan_mode) ;;
+        *) exit 0 ;;
+    esac
+
+    # Promote only when the user accepted: a rejected or "keep planning" exit has different response text.
+    _resp=$(printf '%s' "$INPUT" | jq -r '.tool_response | tostring' 2>/dev/null || true)
+    case "$_resp" in
+        *"Plan mode has ended"*) ;;
+        *) exit 0 ;;
+    esac
+
+    PLAN_TEXT=$(printf '%s' "$INPUT" | jq -r '.tool_input.plan // ""' 2>/dev/null || true)
+    [[ -z "$PLAN_TEXT" ]] && exit 0
+
+    # Gate 3: cwd must be a git repo.
+    REPO_ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || true)
+    [[ -z "$REPO_ROOT" ]] && exit 0
+
+    # Gate 4: no existing PROJECT_PLAN.md.
+    PLAN_PRIMARY="${REPO_ROOT}/docs/plans/PROJECT_PLAN.md"
+    if [[ -f "$PLAN_PRIMARY" || -f "${REPO_ROOT}/PROJECT_PLAN.md" ]]; then
+        exit 0
+    fi
+
+    mkdir -p "${REPO_ROOT}/docs/plans" 2>/dev/null || {
+        _debug "cortex: failed to create ${REPO_ROOT}/docs/plans"
+        exit 0
+    }
+    {
+        printf '<!-- auto-promoted from session plan by borg-plan-promote.sh at %s -->\n\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        printf '%s\n' "$PLAN_TEXT"
+    } > "$PLAN_PRIMARY" 2>/dev/null || {
+        _debug "cortex: failed to write $PLAN_PRIMARY"
+        exit 0
+    }
+    _debug "cortex: promoted plan to $PLAN_PRIMARY"
+
+    # Team mode: workers implement from .cortex/plans/plan-<task-id>.md (hyphen), which keeps Cortex's native plan.
+    # The response names it after "Plan saved to" in backticks. Only a plan-*.md under <repo>/.cortex/plans/ is
+    # touched; the plan_<timestamp>.md files (underscore) are Cortex's own and are left alone.
+    # shellcheck disable=SC2016  # backticks and <date> in the text are literal, not expansions
+    _team=$(printf '%s' "$_resp" | sed -n 's/.*Plan saved to `\([^`]*\)`.*/\1/p' | head -1)
+    _team_dir="${_team%/*}"
+    _team_base="${_team##*/}"
+    case "$_team_base" in
+        plan-*.md)
+            case "$_team_dir" in
+                *..*) _debug "cortex: team plan path has .., skipped" ;;
+                "${REPO_ROOT}/.cortex/plans"|"${CWD}/.cortex/plans")
+                    if [[ -d "$_team_dir" ]]; then
+                        printf '%s\n' "$PLAN_TEXT" > "$_team" 2>/dev/null \
+                            && _debug "cortex: synced team plan $_team_base" \
+                            || _debug "cortex: failed to write team plan $_team_base"
+                    fi
+                    ;;
+                *) _debug "cortex: team plan outside .cortex/plans, skipped" ;;
+            esac
+            ;;
+    esac
+    exit 0
+fi
 
 # ── Gate 2: edit target inside repo working tree ──────────────────────────────
 

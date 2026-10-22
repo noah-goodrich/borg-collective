@@ -58,6 +58,7 @@ Reference moved verbatim from the top-level CLAUDE.md.
   repositories so the Queen's rows are not pushed out. `--json` gains additive keys only (`hidden.unowned`,
   `waiting.next`, `waiting.next_items`; `DOCUMENT_VERSION` stays 2). `evals/link-next` replaces the `borg-link` and
   `borg-next` eval waivers. Directive: `docs/plans/directives/2026-10-20-one-owned-next-list.md`
+- Unreleased: borg-plan in Cortex plan mode. Cortex registers an inject (PostToolUse `EnterPlanMode`), a gate (PreToolUse `ExitPlanMode`, exit 2 without Acceptance Criteria, Scope Boundaries and a Plan-slug; `BORG_PLAN_GATE=off` disables) and a promote (PostToolUse `ExitPlanMode`, writes `docs/plans/PROJECT_PLAN.md` and the team `plan-<task-id>.md`) in `hooks.json`; `tests/cortex_payload_replay.bats` replays synthetic Cortex payloads through every registered hook. Evidence: `docs/evidence/2026-10-cortex-*.md`. Directive: `docs/plans/directives/2026-10-22-borg-plan-in-cortex-plan-mode.md`
 - `borg-sync` (lib/borg-sync.zsh): mtime-based file sync helpers shared by the CLI and hooks
 - Auto-memory read instrumentation: `borg-memory-read-log.sh` (PostToolUse/Read) logs every read
   of a Claude Code project-memory file to `$BORG_DIR/memory-hits.log`; `bin/memory-hits-report`

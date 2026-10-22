@@ -1,0 +1,12 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ExitPlanMode",
+  "tool_use_id": "toolu_synthetic08",
+  "tool_input": {
+    "plan": "# Project Plan: widgets discount\n\n- Plan-slug: `2026-10-22-widgets-discount`\n\n## Objective\nAdd a discount.\n\n## Acceptance Criteria\n1. It works. Verify: pytest\n\n## Scope Boundaries\nNOT building: coupons.\n\n## Ship Definition\nMerged."
+  }
+}
