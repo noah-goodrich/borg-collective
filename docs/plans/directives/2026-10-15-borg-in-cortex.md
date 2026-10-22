@@ -15,6 +15,8 @@ Register the Cortex copies in `~/.snowflake/cortex/hooks.json`, never in `~/.cla
 
 Cortex names its tools in lowercase (`bash`, `read`, `edit`, `write`, `grep`, `glob`, `task`, `skill`, `ask_user_question`, `exit_plan_mode`, `python_repl`, `bash_output`). A hook that cases on a capitalised tool name never matches there. S1 fixes the one registered hook that does (`borg-plan-promote.sh`); the other hooks that name tools are either not registered for Cortex or already read the command rather than the tool name.
 
+*Correction, 2026-10-22 (the paragraph above is left as written).* The 2026-10-22 battery on Cortex 1.2.14 and 1.2.18 found that hook payloads use Claude-style tool names (`Bash`, `Read`, `Write`, `EnterPlanMode`, `ExitPlanMode`); the lowercase names are Cortex's own tool names, which do not appear in hook input. The lowercase handling added in S1 is therefore harmless but is not the reason the hooks work. See `docs/evidence/2026-10-cortex-session-start-context.md` and `docs/plans/directives/2026-10-22-borg-plan-in-cortex-plan-mode.md`.
+
 ## Acceptance Criteria
 
 - [ ] **AC1: `borg setup` registers the eight Cortex hooks where Cortex reads them.** `~/.snowflake/cortex/hooks.json` carries SessionStart `borg-link-down.sh`, Stop `borg-link-up.sh`, Notification `notify.sh` and `borg-notify.sh`, PreToolUse `pre-commit-remind.sh`, `bash-guard.sh` and `borg-plan-promote.sh`, and SubagentStop `borg-nanoprobe-log.sh`, pointing at the copies under `~/.snowflake/cortex/hooks/`. A second run changes nothing (byte-identical file). The stale entries written earlier into `~/.snowflake/cortex/settings.json` are removed and every other key of that file, including a user's own hooks, is untouched; a user's own entries already in `hooks.json` survive. Nothing is registered into `~/.claude/settings.json`. (this PR)
@@ -32,7 +34,7 @@ Cortex names its tools in lowercase (`bash`, `read`, `edit`, `write`, `grep`, `g
 - [ ] **AC5: A live Cortex session on a real machine flips status, shows a waiting state on a permission prompt and appears on the board.** Checked by hand after S1 and S2 are installed, and recorded in a dated note with the Cortex version. (S2 or S3)
   - Verify: the note exists, names the version, and states each of the three observations.
   - Evidence: `path:docs/evidence/2026-10-cortex-live-session.md`
-- [ ] **AC6: Whether SessionStart `additionalContext` reaches the model in Cortex is settled and documented with the version.** The validation saw the injected text in the UI but the model answered as if it had never seen it, and the saved history held no trace of it, so the question is open; the answer, with the evidence, goes in a dated note. (S2 or S3)
+- [x] **AC6: Whether SessionStart `additionalContext` reaches the model in Cortex is settled and documented with the version.** The validation saw the injected text in the UI but the model answered as if it had never seen it, and the saved history held no trace of it, so the question is open; the answer, with the evidence, goes in a dated note. (S2 or S3)
   - Verify: the note exists and states the version and the observation.
   - Evidence: `path:docs/evidence/2026-10-cortex-session-start-context.md`
 

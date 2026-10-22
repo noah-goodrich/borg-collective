@@ -1,0 +1,5 @@
+{
+  "desc": "Cortex plan mode produces borg-plan-shaped plans that land in PROJECT_PLAN.md, and the Cortex hooks the battery found dead are repaired",
+  "program": "2026-10-22-borg-plan-in-cortex-plan-mode",
+  "rows": []
+}

@@ -39,6 +39,8 @@ hooks/
     borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
     borg-notify.sh          permission/elicitation Notification → status=waiting + waiting_reason
     borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
+                            Cortex: PostToolUse ExitPlanMode → plan from tool_input.plan (+ team plan file)
+    borg-cortex-plan.sh     Cortex only: PostToolUse EnterPlanMode inject, PreToolUse ExitPlanMode gate
     bash-guard.sh           PreToolUse (Bash) → destructive-pattern hard-block + RO pre-approval
     borg-memory-read-log.sh PostToolUse (Read) → logs project-memory reads to memory-hits.log
     borg-dispatch-guard.sh  PreToolUse (Agent/Workflow) → >=92% usage hard-stop veto (default-OFF)
