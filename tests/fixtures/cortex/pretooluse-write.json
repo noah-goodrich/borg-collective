@@ -1,0 +1,13 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_use_id": "toolu_synthetic06",
+  "tool_input": {
+    "file_path": "__CWD__/widgets.py",
+    "content": "x = 1\n"
+  }
+}

@@ -3,7 +3,7 @@
 #
 # Cortex Code CLI never reads ~/.snowflake/cortex/settings.json for hooks. Its loader reads
 # ~/.snowflake/cortex/hooks.json (the location its bundled HOOKS.md and CONFIGURATION.md document), so borg
-# registers the eight hooks there and scrubs the stale entries older versions wrote into settings.json.
+# registers the eleven hooks there and scrubs the stale entries older versions wrote into settings.json.
 # See docs/plans/directives/2026-10-15-borg-in-cortex.md (AC1).
 #
 # THE HAZARD: borg setup rewrites the real Cortex and Claude configuration. These cases never run it. They
@@ -30,7 +30,8 @@ _register() {
     "
 }
 
-# The eight event|script pairs borg registers, in registration order.
+# The eight event|script pairs borg registers with the empty matcher, in registration order. The three plan-mode
+# entries (2026-10-22 directive AC4) carry tool-name matchers and are asserted in their own block below.
 _expected_pairs() {
     printf '%s\n' \
         "SessionStart|borg-link-down.sh" \
@@ -80,15 +81,15 @@ EOF
     [[ "$COCO_DIR" == "$BATS_TEST_TMPDIR"/* ]]
 }
 
-@test "cortex hooks: hooks.json is created with the eight entries in the documented shape" {
+@test "cortex hooks: hooks.json is created with the eleven entries in the documented shape" {
     [ ! -e "$HOOKS_JSON" ]
     _register
     [ "$status" -eq 0 ]
     [ -f "$HOOKS_JSON" ]
     jq -e . "$HOOKS_JSON" >/dev/null
 
-    # exactly eight hook commands in total
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 8 ]
+    # exactly eleven hook commands in total
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 11 ]
 
     local pair event name
     while IFS='|' read -r event name; do
@@ -103,12 +104,30 @@ EOF
             )' "$HOOKS_JSON"
         [ "$status" -eq 0 ] || { echo "missing $event $name"; return 1; }
     done < <(_expected_pairs)
+
+    # the three plan-mode hooks carry their tool-name matcher, each once
+    run jq -e --arg c "$COCO_DIR/hooks/borg-cortex-plan.sh" '
+        .hooks.PostToolUse | map(select(.hooks[0].command == $c)) |
+        length == 1 and .[0].matcher == "EnterPlanMode|enter_plan_mode" and .[0].hooks[0].timeout == 10' "$HOOKS_JSON"
+    [ "$status" -eq 0 ]
+    run jq -e --arg c "$COCO_DIR/hooks/borg-cortex-plan.sh" '
+        .hooks.PreToolUse | map(select(.hooks[0].command == $c)) |
+        length == 1 and .[0].matcher == "ExitPlanMode|exit_plan_mode" and .[0].hooks[0].timeout == 10' "$HOOKS_JSON"
+    [ "$status" -eq 0 ]
+    run jq -e --arg c "$COCO_DIR/hooks/borg-plan-promote.sh" '
+        .hooks.PostToolUse | map(select(.hooks[0].command == $c)) |
+        length == 1 and .[0].matcher == "ExitPlanMode|exit_plan_mode" and .[0].hooks[0].timeout == 10' "$HOOKS_JSON"
+    [ "$status" -eq 0 ]
+    # and promote keeps its original empty-matcher PreToolUse entry (expand, not replace)
+    run jq -e --arg c "$COCO_DIR/hooks/borg-plan-promote.sh" '
+        .hooks.PreToolUse | map(select(.hooks[0].command == $c)) | length == 1 and .[0].matcher == ""' "$HOOKS_JSON"
+    [ "$status" -eq 0 ]
 }
 
-@test "cortex hooks: only the five Cortex events carry borg hooks" {
+@test "cortex hooks: only the six Cortex events carry borg hooks" {
     _register
     [ "$status" -eq 0 ]
-    [ "$(jq -r '.hooks | keys | join(",")' "$HOOKS_JSON")" = "Notification,PreToolUse,SessionStart,Stop,SubagentStop" ]
+    [ "$(jq -r '.hooks | keys | join(",")' "$HOOKS_JSON")" = "Notification,PostToolUse,PreToolUse,SessionStart,Stop,SubagentStop" ]
 }
 
 @test "cortex hooks: the hook commands point at files setup copies into the Cortex hooks directory" {
@@ -130,7 +149,7 @@ EOF
     _register
     [ "$status" -eq 0 ]
     [ "$(shasum -a 256 "$HOOKS_JSON")" = "$first" ]
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 8 ]
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 11 ]
 }
 
 @test "cortex hooks: a second run leaves a migrated settings.json byte-identical too" {
@@ -164,8 +183,8 @@ EOF
     # and no empty husk of the emptied hooks object is left behind
     [ "$(jq 'has("hooks")' "$SETTINGS_JSON")" = "false" ]
 
-    # the entries moved: hooks.json now carries all eight
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 8 ]
+    # the entries moved: hooks.json now carries all eleven
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 11 ]
 }
 
 @test "cortex hooks: only borg's stale entries leave settings.json, a user's own hook there stays" {
@@ -223,8 +242,8 @@ EOF
     run jq -e '.hooks.SessionEnd[0].hooks[0].command == "/opt/mine/cleanup.sh"' "$HOOKS_JSON"
     [ "$status" -eq 0 ]
     [ "$(jq .someOtherKey "$HOOKS_JSON")" = "7" ]
-    # the user's two hooks plus borg's eight
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 10 ]
+    # the user's two hooks plus borg's eleven
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 13 ]
 }
 
 @test "cortex hooks: an unreadable hooks.json is left alone, settings.json keeps its stale entries, setup is told" {
@@ -250,6 +269,22 @@ EOF
     [ "$status" -eq 0 ]
     [ "$(shasum -a 256 "$BORG_TEST_HOME/.claude/settings.json")" = "$before" ]
     [ ! -e "$BORG_TEST_HOME/.cortex/settings.json" ]
+}
+
+@test "cortex hooks: a hooks.json from before the plan-mode hooks gains exactly the three new entries" {
+    _register
+    [ "$status" -eq 0 ]
+    local tmp="$HOOKS_JSON.old"
+    jq 'del(.hooks.PostToolUse) | .hooks.PreToolUse |= map(select(.hooks[0].command | endswith("borg-cortex-plan.sh") | not))' \
+        "$HOOKS_JSON" > "$tmp" && mv "$tmp" "$HOOKS_JSON"
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 8 ]
+    _register
+    [ "$status" -eq 0 ]
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 11 ]
+    local first
+    first=$(shasum -a 256 "$HOOKS_JSON")
+    _register
+    [ "$(shasum -a 256 "$HOOKS_JSON")" = "$first" ]
 }
 
 @test "cortex hooks: borg.zsh calls the registration from setup and no longer registers into settings.json" {
