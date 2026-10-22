@@ -6,9 +6,9 @@
 ## What was observed
 
 - **Hook events fire.** SessionStart, UserPromptSubmit, Stop and Notification all reached the registered borg hooks, on both versions. The recorded payloads carry `hook_event_name`, `session_id`, `cwd`, `transcript_path` and `permission_mode`.
-- **Status flipped to idle after Stop.** The borg state for the session read idle once Stop fired.
-- **Status flipped to waiting on a permission prompt.** The state read `waiting`, with the reason text of the prompt.
-- **The integrated plan flow worked on 1.2.18.** Entering plan mode, the model loading the borg-plan skill, writing a borg-shaped plan, exiting plan mode, and the accepted plan landing as `PROJECT_PLAN.md`, solo and in team mode. The mechanism is in `docs/plans/directives/2026-10-22-borg-plan-in-cortex-plan-mode.md`; the repository hooks that now implement it are covered by bats, not by this note.
+- **Status flipped to idle after Stop (read directly on 1.2.14 only).** The borg state.json for the session read idle once Stop fired. It was not re-read on 1.2.18.
+- **Status flipped to waiting on a permission prompt (read directly on 1.2.14 only).** The state read `waiting`, with the reason text of the prompt.
+- **The integrated plan flow worked.** Solo on 1.2.18: entering plan mode, the model loading the borg-plan skill, writing a borg-shaped plan, the gate passing with no block, and the accepted plan landing as `PROJECT_PLAN.md`. Team mode on 1.2.14 (not run on 1.2.18): the gate blocked a chat-style plan, passed after borg-plan loaded, the plan was promoted, and the team plan file stayed native (the gap this change closes). The mechanism is in `docs/plans/directives/2026-10-22-borg-plan-in-cortex-plan-mode.md`; the repository hooks that now implement it are covered by bats, not by this note.
 
 ## What was NOT observed
 

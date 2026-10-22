@@ -7,7 +7,7 @@ Filed as a directive because no `PROJECT_PLAN.md` exists to hold it and the pare
 
 ## Objective
 
-Cortex plan mode produces borg-plan-shaped plans that land in `PROJECT_PLAN.md`, and the Cortex hooks the battery found dead are repaired. A live battery of Cortex Code CLI on 2026-10-22 (versions 1.2.14, then 1.2.18 after an update mid-run) found that plan promotion is a silent no-op in Cortex (`borg-plan-promote.sh` gate 5 reads a Claude `.jsonl` transcript that Cortex does not write, so the debug log says "JSONL not found"), that SessionStart `additionalContext` never reaches Cortex's model (so the arrival brief and the "run /borg-plan" nudge are invisible there), and that Cortex's native plan (Context, Steps, Verification, Critical Files) ignores the borg-plan template. Three small hooks hanging off the plan-mode tool names fixed all of it end to end on 1.2.18, in solo and in team mode.
+Cortex plan mode produces borg-plan-shaped plans that land in `PROJECT_PLAN.md`, and the Cortex hooks the battery found dead are repaired. A live battery of Cortex Code CLI on 2026-10-22 (versions 1.2.14, then 1.2.18 after an update mid-run) found that plan promotion is a silent no-op in Cortex (`borg-plan-promote.sh` gate 5 reads a Claude `.jsonl` transcript that Cortex does not write, so the debug log says "JSONL not found"), that SessionStart `additionalContext` never reaches Cortex's model (so the arrival brief and the "run /borg-plan" nudge are invisible there), and that Cortex's native plan (Context, Steps, Verification, Critical Files) ignores the borg-plan template. Three small hooks hanging off the plan-mode tool names fixed all of it end to end, solo on 1.2.18 and team mode on 1.2.14.
 
 ## Decision
 

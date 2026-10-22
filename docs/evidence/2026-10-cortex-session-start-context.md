@@ -5,7 +5,7 @@
 
 ## What was observed (1.2.18)
 
-Three questions asked in fresh interactive sessions with no tools allowed, each a yes/no or token answer:
+Three consecutive questions asked in ONE interactive session on 1.2.18 (after the canary hook was installed), each with no tools allowed and a yes/no or token answer:
 
 - **Canary.** A hook returned an `additionalContext` carrying a unique canary token at SessionStart. Asked for the token, the model answered NONE.
 - **borg's real text.** With the real borg SessionStart hook installed, asked whether its context contained "WORKFLOW REQUIREMENT" or "Active directives", the model answered NO.
