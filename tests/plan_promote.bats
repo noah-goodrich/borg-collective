@@ -402,3 +402,141 @@ _make_tool_input() {
         [ ! -f "$PLAN_PRIMARY" ] || { echo "promoted on tool $tool"; return 1; }
     done
 }
+
+# ── Cortex Code CLI plan mode: PostToolUse ExitPlanMode carries the plan in tool_input.plan ─────────
+# docs/plans/directives/2026-10-22-borg-plan-in-cortex-plan-mode.md AC1. Payloads are synthetic: the shapes were
+# recorded from Cortex 1.2.14 and 1.2.18 on 2026-10-22, the values (cwd, session id, task id) are invented.
+
+CORTEX_SID="00000000-0000-4000-8000-000000000001"
+CORTEX_PLAN=$'# Project Plan: widgets discount\n\n- Plan-slug: `2026-10-22-widgets-discount`\n\n## Objective\nAdd a discount.\n\n## Acceptance Criteria\n1. It works. Verify: pytest\n\n## Scope Boundaries\nNOT building: coupons.'
+
+# Build a Cortex PostToolUse ExitPlanMode payload. Arguments: cwd plan_text response_text
+_cortex_exit_payload() {
+    jq -nc --arg sid "$CORTEX_SID" --arg cwd "$1" --arg plan "$2" --arg resp "$3" '
+        {session_id: $sid, transcript_path: "/work/.cortex/conversations/x.json", cwd: $cwd,
+         permission_mode: "default", hook_event_name: "PostToolUse", tool_name: "ExitPlanMode",
+         tool_input: {plan: $plan}, tool_use_id: "toolu_synthetic01",
+         tool_response: {name: "exit_plan_mode", tool_use_id: "toolu_synthetic01",
+                         content: [{type: "text", text: $resp}], status: "success"}}'
+}
+
+# The response text Cortex returns once the user accepted. Argument: the path named after "Plan saved to"
+_cortex_accepted() {
+    printf 'Plan mode has ended. You are no longer in read-only mode. User confirmed plan. You MUST now proceed with implementation.\n\nPlan saved to `%s`.\nThe confirmed plan is available in this conversation history.' "$1"
+}
+
+@test "plan_promote cortex: an accepted ExitPlanMode writes docs/plans/PROJECT_PLAN.md with the header" {
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan_2026-10-22_0900.md")")"
+
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    [ -f "$PLAN_PRIMARY" ]
+    grep -q "auto-promoted" "$PLAN_PRIMARY"
+    grep -q "2026-10-22-widgets-discount" "$PLAN_PRIMARY"
+}
+
+@test "plan_promote cortex: the lowercase exit_plan_mode tool name is accepted too" {
+    _cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan_2026-10-22_0900.md")" \
+        | jq -c '.tool_name = "exit_plan_mode"' > "${BATS_TEST_TMPDIR}/in.json"
+    _run_hook "$(cat "${BATS_TEST_TMPDIR}/in.json")"
+
+    [ "$status" -eq 0 ]
+    [ -f "$PLAN_PRIMARY" ]
+}
+
+@test "plan_promote cortex: a rejected or keep-planning exit writes nothing" {
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "User rejected the plan. Keep planning and revise it.")"
+
+    [ "$status" -eq 0 ]
+    [ ! -f "$PLAN_PRIMARY" ]
+}
+
+@test "plan_promote cortex: an existing PROJECT_PLAN.md at either location is never overwritten" {
+    mkdir -p "${FAKE_REPO}/docs/plans"
+    printf '# Existing Plan\n' > "$PLAN_PRIMARY"
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan_a.md")")"
+    [ "$status" -eq 0 ]
+    [ "$(cat "$PLAN_PRIMARY")" = "# Existing Plan" ]
+
+    rm -f "$PLAN_PRIMARY"
+    printf '# Root Plan\n' > "$PLAN_FALLBACK"
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan_a.md")")"
+    [ "$status" -eq 0 ]
+    [ ! -f "$PLAN_PRIMARY" ]
+}
+
+@test "plan_promote cortex: the Queen session and a non-git directory write nothing" {
+    mkdir -p "${BORG_TEST_HOME}/dev" "${BATS_TEST_TMPDIR}/not-a-repo"
+    _run_hook "$(_cortex_exit_payload "${BORG_TEST_HOME}/dev" "$CORTEX_PLAN" "$(_cortex_accepted "/x/plan_a.md")")"
+    [ "$status" -eq 0 ]
+    [ ! -e "${BORG_TEST_HOME}/dev/docs/plans/PROJECT_PLAN.md" ]
+
+    _run_hook "$(_cortex_exit_payload "${BATS_TEST_TMPDIR}/not-a-repo" "$CORTEX_PLAN" "$(_cortex_accepted "/x/plan_a.md")")"
+    [ "$status" -eq 0 ]
+    [ ! -e "${BATS_TEST_TMPDIR}/not-a-repo/docs/plans/PROJECT_PLAN.md" ]
+}
+
+@test "plan_promote cortex: an empty plan writes nothing" {
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan_a.md")")"
+
+    [ "$status" -eq 0 ]
+    [ ! -f "$PLAN_PRIMARY" ]
+}
+
+@test "plan_promote cortex: a team plan-<task-id>.md named in the response is overwritten with the plan" {
+    mkdir -p "${FAKE_REPO}/.cortex/plans"
+    printf 'native Cortex plan\n' > "${FAKE_REPO}/.cortex/plans/plan-task42.md"
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan-task42.md")")"
+
+    [ "$status" -eq 0 ]
+    [ -f "$PLAN_PRIMARY" ]
+    grep -q "2026-10-22-widgets-discount" "${FAKE_REPO}/.cortex/plans/plan-task42.md"
+    ! grep -q "native Cortex plan" "${FAKE_REPO}/.cortex/plans/plan-task42.md"
+}
+
+@test "plan_promote cortex: the underscore plan_<timestamp>.md Cortex writes itself is never touched" {
+    mkdir -p "${FAKE_REPO}/.cortex/plans"
+    printf 'native Cortex plan\n' > "${FAKE_REPO}/.cortex/plans/plan_2026-10-22_0900.md"
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan_2026-10-22_0900.md")")"
+
+    [ "$status" -eq 0 ]
+    [ -f "$PLAN_PRIMARY" ]
+    [ "$(cat "${FAKE_REPO}/.cortex/plans/plan_2026-10-22_0900.md")" = "native Cortex plan" ]
+}
+
+@test "plan_promote cortex: a plan-*.md outside <repo>/.cortex/plans, or with .., is never written" {
+    mkdir -p "${BATS_TEST_TMPDIR}/elsewhere" "${FAKE_REPO}/.cortex/plans"
+    printf 'keep\n' > "${BATS_TEST_TMPDIR}/elsewhere/plan-task9.md"
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "${BATS_TEST_TMPDIR}/elsewhere/plan-task9.md")")"
+    [ "$status" -eq 0 ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/elsewhere/plan-task9.md")" = "keep" ]
+
+    rm -f "$PLAN_PRIMARY"
+    printf 'keep\n' > "${BATS_TEST_TMPDIR}/elsewhere/plan-task8.md"
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "${FAKE_REPO}/.cortex/plans/../../elsewhere/plan-task8.md")")"
+    [ "$status" -eq 0 ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/elsewhere/plan-task8.md")" = "keep" ]
+}
+
+@test "plan_promote cortex: no team plan file is written when PROJECT_PLAN.md already exists" {
+    mkdir -p "${FAKE_REPO}/.cortex/plans" "${FAKE_REPO}/docs/plans"
+    printf '# Existing Plan\n' > "$PLAN_PRIMARY"
+    printf 'native Cortex plan\n' > "${FAKE_REPO}/.cortex/plans/plan-task42.md"
+    _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan-task42.md")")"
+
+    [ "$status" -eq 0 ]
+    [ "$(cat "${FAKE_REPO}/.cortex/plans/plan-task42.md")" = "native Cortex plan" ]
+}
+
+@test "plan_promote cortex: other PostToolUse tools and the PreToolUse ExitPlanMode event write nothing" {
+    local payload
+    payload=$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan_a.md")")
+    _run_hook "$(printf '%s' "$payload" | jq -c '.tool_name = "Write" | .tool_input = {file_path: "x.py", content: "y"}')"
+    [ "$status" -eq 0 ]
+    [ ! -f "$PLAN_PRIMARY" ]
+
+    _run_hook "$(printf '%s' "$payload" | jq -c '.hook_event_name = "PreToolUse" | del(.tool_response)')"
+    [ "$status" -eq 0 ]
+    [ ! -f "$PLAN_PRIMARY" ]
+    [ -z "$output" ]
+}

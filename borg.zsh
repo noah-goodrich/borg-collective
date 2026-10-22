@@ -2041,9 +2041,11 @@ _borg_merge_settings_permissions() {
 
 # Register a hook in a settings.json file. Skips if already registered.
 # If registered but missing timeout, updates the entry.
-# Usage: _borg_register_hook <settings_file> <hook_cmd> <event> <label>
+# An optional fifth argument is the tool-name matcher regex (default "", every tool). The already-registered check is by
+# command within the event, so one script may sit under two events with different matchers.
+# Usage: _borg_register_hook <settings_file> <hook_cmd> <event> <label> [matcher]
 _borg_register_hook() {
-    local settings="$1" hook_cmd="$2" event="$3" label="$4"
+    local settings="$1" hook_cmd="$2" event="$3" label="$4" matcher="${5:-}"
     local timeout_val=10
 
     if jq -e --arg evt "$event" --arg cmd "$hook_cmd" \
@@ -2067,10 +2069,10 @@ _borg_register_hook() {
     fi
 
     local tmp="$settings.tmp.$$"
-    jq --arg evt "$event" --arg cmd "$hook_cmd" --argjson timeout "$timeout_val" '
+    jq --arg evt "$event" --arg cmd "$hook_cmd" --arg matcher "$matcher" --argjson timeout "$timeout_val" '
         if .hooks == null then .hooks = {} else . end |
         if .hooks[$evt] == null then .hooks[$evt] = [] else . end |
-        .hooks[$evt] += [{"matcher": "", "hooks": [{"type": "command", "command": $cmd, "timeout": $timeout}]}]
+        .hooks[$evt] += [{"matcher": $matcher, "hooks": [{"type": "command", "command": $cmd, "timeout": $timeout}]}]
     ' "$settings" > "$tmp" && mv "$tmp" "$settings"
     info "  $event: $label (registered)"
 }
@@ -2096,8 +2098,9 @@ _borg_unregister_hook() {
     info "  $event: $label (removed)"
 }
 
-# The eight hooks borg registers for Cortex Code CLI, as "<event>|<script>" pairs (scripts live in hooks/ and are
-# copied to <cortex dir>/hooks/ by cmd_setup). Order is registration order.
+# The hooks borg registers for Cortex Code CLI, as "<event>|<script>[|<matcher>]" entries (scripts live in hooks/ and
+# are copied to <cortex dir>/hooks/ by cmd_setup). The matcher is a tool-name regex and defaults to "" (every tool).
+# Order is registration order. The three plan-mode entries (2026-10-22 directive) fire on the plan-mode tools only.
 typeset -ga _BORG_CORTEX_HOOKS=(
     "SessionStart|borg-link-down.sh"
     "Stop|borg-link-up.sh"
@@ -2107,6 +2110,9 @@ typeset -ga _BORG_CORTEX_HOOKS=(
     "PreToolUse|bash-guard.sh"
     "PreToolUse|borg-plan-promote.sh"
     "SubagentStop|borg-nanoprobe-log.sh"
+    "PostToolUse|borg-cortex-plan.sh|EnterPlanMode|enter_plan_mode"
+    "PreToolUse|borg-cortex-plan.sh|ExitPlanMode|exit_plan_mode"
+    "PostToolUse|borg-plan-promote.sh|ExitPlanMode|exit_plan_mode"
 )
 
 # Hooks an older borg registered under names it has since dropped (borg-start.sh/borg-stop.sh became
@@ -2131,7 +2137,7 @@ typeset -ga _BORG_CORTEX_RENAMED_HOOKS=(
 _borg_register_cortex_hooks() {
     local coco_dir="$1"
     local hooks_json="$coco_dir/hooks.json" settings="$coco_dir/settings.json"
-    local entry event name
+    local entry event name rest matcher
 
     mkdir -p "$coco_dir"
     if [[ -f "$hooks_json" ]] && ! jq -e 'type == "object" and ((.hooks // {}) | type == "object")' \
@@ -2143,15 +2149,17 @@ _borg_register_cortex_hooks() {
     [[ -f "$hooks_json" ]] || echo '{}' > "$hooks_json"
 
     for entry in "${_BORG_CORTEX_HOOKS[@]}"; do
-        event="${entry%%|*}" name="${entry#*|}"
-        _borg_register_hook "$hooks_json" "$coco_dir/hooks/$name" "$event" "$name"
+        event="${entry%%|*}" rest="${entry#*|}"
+        name="${rest%%|*}" matcher=""
+        [[ "$rest" == *"|"* ]] && matcher="${rest#*|}"
+        _borg_register_hook "$hooks_json" "$coco_dir/hooks/$name" "$event" "$name" "$matcher"
     done
 
     [[ -f "$settings" ]] || return 0
     local removed=0 stale_cmd
     local -a events=()
     for entry in "${_BORG_CORTEX_HOOKS[@]}" "${_BORG_CORTEX_RENAMED_HOOKS[@]}"; do
-        event="${entry%%|*}" name="${entry#*|}"
+        event="${entry%%|*}" name="${${entry#*|}%%|*}"
         stale_cmd="\$HOME/.snowflake/cortex/hooks/$name"
         if jq -e --arg evt "$event" --arg cmd "$stale_cmd" \
             '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd)) | length > 0' \
