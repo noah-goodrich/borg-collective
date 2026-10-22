@@ -1,5 +1,13 @@
 {
   "desc": "Cortex plan mode produces borg-plan-shaped plans that land in PROJECT_PLAN.md, and the Cortex hooks the battery found dead are repaired",
   "program": "2026-10-22-borg-plan-in-cortex-plan-mode",
-  "rows": []
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#461",
+      "status": "open",
+      "why": "inject, gate and promote hooks for Cortex plan mode, replay tests, evidence notes"
+    }
+  ]
 }
