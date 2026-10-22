@@ -66,6 +66,7 @@ if [[ -f "${REPO_ROOT}/docs/plans/PROJECT_PLAN.md" || -f "${REPO_ROOT}/PROJECT_P
 fi
 
 if [[ "$ACTION" == "inject" ]]; then
+    # shellcheck disable=SC2016  # backticks and <date> in the text are literal, not expansions
     CONTEXT='[borg] This repository plans with the borg-plan skill, so your plan must match its PROJECT_PLAN.md template. Before you call exit_plan_mode: load the borg-plan skill, then write the plan with these sections: Objective (1-2 sentences), Acceptance Criteria (each criterion followed by a "Verify:" line naming a command or file check), Scope Boundaries (lines starting "NOT building:"), Ship Definition, Timeline, Risks, and a line "- Plan-slug: `<date>-<short-slug>`". You may keep Cortex sections such as Context and Critical Files in addition. Do not write PROJECT_PLAN.md yourself: a hook promotes the accepted plan.'
     _debug "inject emitted cwd=$CWD"
     jq -n --arg c "$CONTEXT" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $c}}'

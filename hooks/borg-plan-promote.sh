@@ -113,6 +113,7 @@ if [[ "$HOOK_EVENT" == "PostToolUse" ]]; then
     # Team mode: workers implement from .cortex/plans/plan-<task-id>.md (hyphen), which keeps Cortex's native plan.
     # The response names it after "Plan saved to" in backticks. Only a plan-*.md under <repo>/.cortex/plans/ is
     # touched; the plan_<timestamp>.md files (underscore) are Cortex's own and are left alone.
+    # shellcheck disable=SC2016  # backticks and <date> in the text are literal, not expansions
     _team=$(printf '%s' "$_resp" | sed -n 's/.*Plan saved to `\([^`]*\)`.*/\1/p' | head -1)
     _team_dir="${_team%/*}"
     _team_base="${_team##*/}"
