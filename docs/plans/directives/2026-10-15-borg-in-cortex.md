@@ -15,7 +15,7 @@ Register the Cortex copies in `~/.snowflake/cortex/hooks.json`, never in `~/.cla
 
 Cortex names its tools in lowercase (`bash`, `read`, `edit`, `write`, `grep`, `glob`, `task`, `skill`, `ask_user_question`, `exit_plan_mode`, `python_repl`, `bash_output`). A hook that cases on a capitalised tool name never matches there. S1 fixes the one registered hook that does (`borg-plan-promote.sh`); the other hooks that name tools are either not registered for Cortex or already read the command rather than the tool name.
 
-*Correction, 2026-10-22 (the paragraph above is left as written).* The 2026-10-22 battery on Cortex 1.2.14 and 1.2.18 found that hook payloads use Claude-style tool names (`Bash`, `Read`, `Write`, `EnterPlanMode`, `ExitPlanMode`); the lowercase names are Cortex's own tool names, which do not appear in hook input. The lowercase handling added in S1 is therefore harmless but is not the reason the hooks work. See `docs/evidence/2026-10-cortex-session-start-context.md` and `docs/plans/directives/2026-10-22-borg-plan-in-cortex-plan-mode.md`.
+*Correction, 2026-10-22 (the paragraph above is left as written).* The 2026-10-22 battery on Cortex 1.2.14 and 1.2.18 found that hook payloads use Claude-style tool names (`Bash`, `Read`, `Write`, `EnterPlanMode`, `ExitPlanMode`); the lowercase names are Cortex's own tool names, which do not appear in hook input. The lowercase handling added in S1 is therefore harmless but is not the reason the hooks work. See `docs/evidence/2026-10-cortex-session-start-context.md` and `docs/plans/assimilated/2026-10-22-borg-plan-in-cortex-plan-mode.md`.
 
 ## Acceptance Criteria
 

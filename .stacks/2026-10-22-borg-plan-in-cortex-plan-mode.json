@@ -6,7 +6,7 @@
       "lane": "_default",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#461",
-      "status": "open",
+      "status": "merged",
       "why": "inject, gate and promote hooks for Cortex plan mode, replay tests, evidence notes"
     }
   ]

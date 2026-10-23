@@ -1,7 +1,9 @@
 # Directive: borg-plan in Cortex plan mode
 *Established: 2026-10-22*
+*Shipped: 2026-10-22, PR #461 merged to main; live check 2026-10-23*
 
 - Plan-slug: `2026-10-22-borg-plan-in-cortex-plan-mode`
+- Status: Assimilated
 
 Filed as a directive because no `PROJECT_PLAN.md` exists to hold it and the parent work, `2026-10-15-borg-in-cortex.md`, is executed in place. One slice, one PR.
 
@@ -23,25 +25,25 @@ Evidence base: the 2026-10-22 battery, Cortex 1.2.14 and 1.2.18; the dated notes
 
 ## Acceptance Criteria
 
-- [ ] **AC1: Promote works in Cortex.** After the user accepts a plan, `hooks/borg-plan-promote.sh` writes it to `docs/plans/PROJECT_PLAN.md` (the location the Claude hook already uses), and also overwrites the team plan file `plan-<task-id>.md` when the response names one. The underscore `plan_<timestamp>.md` files are never touched. Claude Code behaviour of the same script stays unchanged.
+- [x] **AC1: Promote works in Cortex.** Shipped in #461: held by `tests/plan_promote.bats` and the green CI of #461. After the user accepts a plan, `hooks/borg-plan-promote.sh` writes it to `docs/plans/PROJECT_PLAN.md` (the location the Claude hook already uses), and also overwrites the team plan file `plan-<task-id>.md` when the response names one. The underscore `plan_<timestamp>.md` files are never touched. Claude Code behaviour of the same script stays unchanged.
   - Verify: `bats tests/plan_promote.bats` (Cortex cases built from synthetic payloads sit after the Claude ones).
   - Evidence: `bats:tests/plan_promote.bats`
-- [ ] **AC2: Gate.** A PreToolUse hook on `ExitPlanMode` exits 2 with a borg-plan message when the plan lacks any of: Acceptance Criteria; Scope Boundaries (or a "NOT building" line); a `- Plan-slug:` line (case-insensitive). It passes when all are present. It is a no-op in the Queen/orchestrator session, when `docs/plans/PROJECT_PLAN.md` or the root `PROJECT_PLAN.md` already exists, outside a git repo, and when `BORG_PLAN_GATE=off`.
+- [x] **AC2: Gate.** Shipped in #461: held by `tests/cortex_plan_hook.bats` and the green CI of #461. A PreToolUse hook on `ExitPlanMode` exits 2 with a borg-plan message when the plan lacks any of: Acceptance Criteria; Scope Boundaries (or a "NOT building" line); a `- Plan-slug:` line (case-insensitive). It passes when all are present. It is a no-op in the Queen/orchestrator session, when `docs/plans/PROJECT_PLAN.md` or the root `PROJECT_PLAN.md` already exists, outside a git repo, and when `BORG_PLAN_GATE=off`.
   - Verify: `bats tests/cortex_plan_hook.bats` (a case for each path).
   - Evidence: `bats:tests/cortex_plan_hook.bats`
-- [ ] **AC3: Inject.** A PostToolUse hook on `EnterPlanMode` prints the `additionalContext` JSON telling the model to load the borg-plan skill and write the plan in the PROJECT_PLAN.md template (Objective, Acceptance Criteria each with a Verify line, Scope Boundaries as "NOT building:" lines, Ship Definition, Timeline, Risks, a `- Plan-slug: \`<date>-<short-slug>\`` line; Cortex's Context and Critical Files may stay; PROJECT_PLAN.md itself is written by the promote hook). Same scoping gates and `BORG_PLAN_GATE=off` as the gate.
+- [x] **AC3: Inject.** Shipped in #461: held by `tests/cortex_plan_hook.bats` and the green CI of #461. A PostToolUse hook on `EnterPlanMode` prints the `additionalContext` JSON telling the model to load the borg-plan skill and write the plan in the PROJECT_PLAN.md template (Objective, Acceptance Criteria each with a Verify line, Scope Boundaries as "NOT building:" lines, Ship Definition, Timeline, Risks, a `- Plan-slug: \`<date>-<short-slug>\`` line; Cortex's Context and Critical Files may stay; PROJECT_PLAN.md itself is written by the promote hook). Same scoping gates and `BORG_PLAN_GATE=off` as the gate.
   - Verify: `bats tests/cortex_plan_hook.bats`.
   - Evidence: `bats:tests/cortex_plan_hook.bats`
-- [ ] **AC4: `borg setup` registers all three in `hooks.json`, idempotently.** PostToolUse `EnterPlanMode|enter_plan_mode`, PreToolUse `ExitPlanMode|exit_plan_mode`, PostToolUse `ExitPlanMode|exit_plan_mode` (promote). A second run is byte-identical; a user's own entries survive; nothing is registered into `~/.claude/settings.json`; the stale-entry scrub keeps working.
+- [x] **AC4: `borg setup` registers all three in `hooks.json`, idempotently.** Shipped in #461: held by `tests/cortex_hooks.bats` and the green CI of #461. PostToolUse `EnterPlanMode|enter_plan_mode`, PreToolUse `ExitPlanMode|exit_plan_mode`, PostToolUse `ExitPlanMode|exit_plan_mode` (promote). A second run is byte-identical; a user's own entries survive; nothing is registered into `~/.claude/settings.json`; the stale-entry scrub keeps working.
   - Verify: `bats tests/cortex_hooks.bats` (expected pair list and counts updated).
   - Evidence: `bats:tests/cortex_hooks.bats`
-- [ ] **AC5: Replay layer.** `tests/cortex_payload_replay.bats` feeds synthetic Cortex payloads (SessionStart, Stop, Notification, PreToolUse Bash/Read/Write, EnterPlanMode, ExitPlanMode) to every hook registered for Cortex and asserts exit 0 with stdout empty or valid JSON, plus the guard's deny (a force-push to main exits 2 with its message) and allow (a read-only command prints permissionDecision allow). HOME and the XDG directories are sandboxed.
+- [x] **AC5: Replay layer.** Shipped in #461: held by `tests/cortex_payload_replay.bats` and the green CI of #461. `tests/cortex_payload_replay.bats` feeds synthetic Cortex payloads (SessionStart, Stop, Notification, PreToolUse Bash/Read/Write, EnterPlanMode, ExitPlanMode) to every hook registered for Cortex and asserts exit 0 with stdout empty or valid JSON, plus the guard's deny (a force-push to main exits 2 with its message) and allow (a read-only command prints permissionDecision allow). HOME and the XDG directories are sandboxed.
   - Verify: `bats tests/cortex_payload_replay.bats`.
   - Evidence: `bats:tests/cortex_payload_replay.bats`
-- [ ] **AC6: Evidence notes.** `docs/evidence/2026-10-cortex-live-session.md` (AC5 of the parent directive) and `docs/evidence/2026-10-cortex-session-start-context.md` (AC6 of the parent directive) exist, each dated 2026-10-22 and naming Cortex 1.2.14 and 1.2.18. The first records only what was observed and states that appearance on the board was not; the second settles that SessionStart `additionalContext` does not reach the model. Parent AC6 is ticked, with a dated correction under the parent's Decision section; parent AC1 to AC5 are not.
+- [x] **AC6: Evidence notes.** Held by the two evidence files existing and the parent AC6 tick. `docs/evidence/2026-10-cortex-live-session.md` (AC5 of the parent directive) and `docs/evidence/2026-10-cortex-session-start-context.md` (AC6 of the parent directive) exist, each dated 2026-10-22 and naming Cortex 1.2.14 and 1.2.18. The first records only what was observed and states that appearance on the board was not; the second settles that SessionStart `additionalContext` does not reach the model. Parent AC6 is ticked, with a dated correction under the parent's Decision section; parent AC1 to AC5 are not.
   - Verify: both files exist and name both versions; `grep -c '\[x\] \*\*AC6' docs/plans/directives/2026-10-15-borg-in-cortex.md` prints 1.
   - Evidence: `path:docs/evidence/2026-10-cortex-live-session.md`, `path:docs/evidence/2026-10-cortex-session-start-context.md`
-- [ ] **AC7: Nothing breaks.** `make test`, `make test-bats` and `make lint` pass; the existing plan-promote cases stay green.
+- [x] **AC7: Nothing breaks.** Held by the green CI of #461 (all six required checks passed on head 160ca50e) and the existing plan-promote cases staying green. `make test`, `make test-bats` and `make lint` pass; the existing plan-promote cases stay green.
   - Verify: `make test && make test-bats && make lint`.
 
 ## Testability
@@ -62,6 +64,14 @@ Evidence base: the 2026-10-22 battery, Cortex 1.2.14 and 1.2.18; the dated notes
 ## Ship Definition
 
 PR opened, CI green, the owner's word, squash-merged. After it merges, run `borg setup` once on a machine with Cortex installed and confirm `~/.snowflake/cortex/hooks.json` carries the three new entries; that real run is the one thing the tests deliberately do not do. Then enter plan mode in Cortex once, in a repository with no `PROJECT_PLAN.md`, and confirm the skill loads and the accepted plan lands in `docs/plans/PROJECT_PLAN.md`.
+
+**Ship Definition result (2026-10-23).** Met on the owner's machine.
+
+- `borg setup` was run on 2026-10-22 after the merge of #461. `~/.snowflake/cortex/hooks.json` carries PostToolUse `EnterPlanMode|enter_plan_mode` (`borg-cortex-plan.sh`), PreToolUse `ExitPlanMode|exit_plan_mode` (`borg-cortex-plan.sh`) and PostToolUse `ExitPlanMode|exit_plan_mode` (`borg-plan-promote.sh`). The installed copies are byte-identical to `hooks/`.
+- The owner then ran one real interactive Cortex plan-mode session (real account, fresh session, throwaway git repository with no `PROJECT_PLAN.md`; the task was a Streamlit-in-Snowflake query-performance app). The installed Cortex reads v1.2.18 on 2026-10-23; the session's conversation file records no version, so the version of that exact session is not independently recorded.
+- The hook logs show `inject emitted` at 2026-10-22T22:00:29Z and `PASS` (the gate passed) at 2026-10-23T03:07:32Z in `cortex-plan-debug.log`, then `cortex: promoted plan to .../docs/plans/PROJECT_PLAN.md` at 2026-10-23T03:36:33Z in `plan-promote-debug.log`, after the owner accepted the plan.
+- The promoted file starts with the auto-promoted header comment and carries a Plan-slug line, Acceptance Criteria with Verify lines, and Scope Boundaries as NOT building lines.
+- The logs show only inject, gate PASS and promote. They do not show the model loading the skill, and no block-and-retry happened in this run.
 
 ## Timeline
 
