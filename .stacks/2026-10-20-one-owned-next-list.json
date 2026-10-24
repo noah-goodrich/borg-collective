@@ -41,21 +41,21 @@
       "lane": "_default",
       "order": "6",
       "ref": "noah-goodrich/borg-collective#457",
-      "status": "open",
+      "status": "merged",
       "why": "PR 3: the page shows fewer things, whole (AC5), and checkpoint-row fixes"
     },
     {
       "lane": "_default",
       "order": "7",
       "ref": "noah-goodrich/borg-collective#458",
-      "status": "open",
+      "status": "merged",
       "why": "PR 4: the cap shares its slots across repositories (AC7)"
     },
     {
       "lane": "_default",
       "order": "8",
       "ref": "noah-goodrich/borg-collective#459",
-      "status": "open",
+      "status": "merged",
       "why": "Evals Phase 1b B3 and B4: the model half, link and next eval pairs plus the borg-link closing-lines fix"
     }
   ]
