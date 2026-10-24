@@ -1,9 +1,12 @@
 # Directive: One owned next list, read from the checkpoints
 *Filed: 2026-10-20 · Status: Accepted 2026-10-20 · Owner: Noah*
+*Shipped: 2026-10-21 — PRs #450, #451, #452, #453, #455, #457, #458 and #459 merged to main; released as v0.9.12; live check 2026-10-24*
 
 **tl;dr** — On 2026-10-20 three checkpoints written that morning listed 9 distinct items waiting on Noah, and `borg next`, `borg link` and the arrival brief all said nothing waited on him, because no screen reads the checkpoint's Blockers section. One reader turns each checkpoint's wait list and Next Session list (repositories and the Queen) into owned rows, every "next" surface reads those rows, and the repository page shows them whole.
 
 - Plan-slug: `2026-10-20-one-owned-next-list`
+- Status: Assimilated (Noah said "closeout" 2026-10-24)
+- Tracking issue: https://github.com/noah-goodrich/borg-collective/issues/449
 
 ## Problem
 
@@ -46,23 +49,23 @@ The model half of the failure, the borg-link skill repeating "Nothing is waiting
 
     Each item wraps at `PAGE_COLUMNS` with a hanging indent and is capped by whole items. Source, Path, tmux window, Session ID, the checkpoint filenames and the Goal/Accomplished excerpt leave the page and stay on the `--json` document. The Compass line is omitted when no leg is chosen. Arrival brief lines wrap the same way. Queen board table rows keep their cut.
 6. **Template, expand step.** `skills/borg-link-up/SKILL.md` asks for a `Waits on you:` list under Blockers (`Waits on you: none` when empty). The legacy parse stays until a later contract directive.
-7. **Housekeeping.** Tick AC8 of `2026-10-18-arrival-brief-on-sessionstart.md` (confirmed via the Queen relay 2026-10-20: startup rendered in borg:1 and in the ingle drone, resume confirmed by Noah), then assimilate it once AC4 here lands.
+7. **Housekeeping.** Tick AC8 of `2026-10-18-arrival-brief-on-sessionstart.md` (confirmed via the Queen relay 2026-10-20: startup rendered in borg:1 and in the ingle drone, resume confirmed by Noah), then assimilate it once AC4 here lands. Done: the tick landed in #450, and both directives were assimilated on 2026-10-24.
 
 ## Acceptance criteria
 
-- [ ] AC1 — Checkpoint wait items become YOU rows; Next Session items become AGENT rows; the link-up template asks for the new list.
+- [x] AC1 — Checkpoint wait items become YOU rows; Next Session items become AGENT rows; the link-up template asks for the new list. Shipped in #452 (reader and rows) and #453 (the template line).
   - Verify: pytest writes fixture checkpoint files (new form, legacy form, "No blockers.") to a tmp dir and reads them through `nextpick.shell`, never by passing `checkpoint_steps` in. A `tests/prose_contracts.bats` case pins the template's `Waits on you:` line.
-- [ ] AC2 — The Queen's checkpoint feeds the Queen scope.
+- [x] AC2 — The Queen's checkpoint feeds the Queen scope. Shipped in #453.
   - Verify: pytest with `BORG_ORCHESTRATOR_ROOT` at a tmp dir holding a checkpoint: its wait items are YOU rows in `borg next --rows --json` and in the Queen page's WAITING ON YOU; the registry file is byte-identical before and after.
-- [ ] AC3 — A checkpoint newer than `PROJECT_PLAN.md` beats the plan's unchecked criterion.
+- [x] AC3 — A checkpoint newer than `PROJECT_PLAN.md` beats the plan's unchecked criterion. Shipped in #452.
   - Verify: pytest with both orders of plan mtime and checkpoint timestamp.
-- [ ] AC4 — Surfaces agree and carry an owner. No surface prints "nothing waits on you" or "nothing is ready" while the document holds a YOU row or a checkpoint next step; NEXT falls back to the first Next Session item; the arrival brief's next line always carries an owner; `—` rows count as "unowned".
+- [x] AC4 — Surfaces agree and carry an owner. No surface prints "nothing waits on you" or "nothing is ready" while the document holds a YOU row or a checkpoint next step; NEXT falls back to the first Next Session item; the arrival brief's next line always carries an owner; `—` rows count as "unowned". Shipped in #455.
   - Verify: one fixture document rendered through the page, `borg next --line` and the arrival brief in `borg_core/link/test_screen_contract.py`; the six "agent tasks" pins (nextpick `test_core`, `test_cli`; link `test_render`, `test_cli`, `test_screen_contract`) change in the same commit.
-- [ ] AC5 — The repository page shows fewer things, whole, on one screen.
+- [x] AC5 — The repository page shows fewer things, whole, on one screen. Shipped in #457.
   - Verify: a 300-character wait item renders whole across wrapped lines; the existing one-screen height test passes; `test_the_repository_page_cuts_free_text_with_an_ellipsis_and_keeps_every_other_line_whole` is narrowed to the Queen board's table rows.
-- [ ] AC6 — Live, and nothing breaks.
+- [x] AC6 — Live, and nothing breaks. Held by the live check of 2026-10-24 and the green push-triggered Test run on main (see Ship definition).
   - Verify: on Noah's machine `borg next --rows --json` lists the newest checkpoints' wait items as YOU rows (output pasted in the PR); `make test && make test-bats && make lint` is green; `borg next --line` median stays under 20 ms.
-- [ ] AC7 — The cap shares its slots across repositories, so the Queen's wait items show when one repository has five or more.
+- [x] AC7 — The cap shares its slots across repositories, so the Queen's wait items show when one repository has five or more. Shipped in #458.
   - Verify: `test_cap_rows_six_a_and_two_queen_shows_a1_a2_a3_q1_q2_in_original_order_overflow_three` and its siblings in `borg_core/nextpick/test_core.py`; `test_queen_rows_show_when_one_repository_has_six_you_rows_ac7` through `item_rows` and `--rows --json` in `borg_core/nextpick/test_cli.py`; `test_the_queen_page_waiting_on_you_shows_queen_rows_when_one_repository_has_six_you_rows` in `borg_core/link/test_screen_contract.py`.
 
 ## Testability
@@ -94,6 +97,14 @@ The model half of the failure, the borg-link skill repeating "Nothing is waiting
 - After the last PR: release bump, plugin mirror through `scripts/build-plugin.sh`, `claude plugin update`, `borg setup`, then AC6 on the installed build.
 - One tracking issue carries the PR checklist.
 
+**Ship definition result (2026-10-24).** Met on the owner's machine.
+
+- All eight PRs merged to main. The release bump is #460, and v0.9.12 was published on 2026-10-21. The installed build reads `borg version` 0.9.12, and `claude plugin list` shows `borg-collective@noah-local` 0.9.12.
+- AC6, live: `borg next --rows --json` on the installed build returned 5 rows, every one owner YOU, from the newest checkpoints: 3 labelled `borg-collective` and 2 labelled `queen`. The row text is not pasted here, because this repository is public and the live board carries private items. `hidden` read 27 agent, 2 stale, 5 overflow and 2 unowned. `borg next --line` had a median of 12.8 ms (min 11.1, max 15.8) over 21 runs, against the 20 ms limit.
+- AC6, `make test && make test-bats && make lint`: the push-triggered Test run on main at `0b50c982` passed lint, test, python, viz and contract-macos (eval-changed skipped). On the host, pytest over `borg_core/nextpick`, `borg_core/link` and `borg_core/recon` passed 1044 tests on 2026-10-24. A local `make test-bats` is blocked in the primary checkout by a stray socket (`borg-collective/1`), so CI is the evidence for the bats half.
+- Not part of this series: the scheduled Test run on main failed on 2026-10-24 in `tests/resume_inject.bats` ("bind_container: two claude panes never bind and never fall back to the rightmost"). The push run of the same commit passed, and the cause is not investigated here.
+- The work machine has not reported its upgrade; the criteria name only Noah's machine.
+
 ## Timeline
 
 Target 2026-11-01, three PRs at about one session each:
@@ -108,3 +119,10 @@ Target 2026-11-01, three PRs at about one session each:
 - **Legacy wording.** The legacy match will miss other phrasings. ingle's 2026-10-20 checkpoint already does: it names Noah inside each Blockers bullet with no lead-in, so its items surface only after its next link-up writes the new form.
 - **Height budget.** Busy repositories could push the page past one screen. The whole-item cap decides, and the height test catches it.
 - **Statusline path.** Reading 18 whole checkpoints is about 100 KB; it must stay off the `borg next --line` path that tmux calls.
+
+## Additional Work Shipped
+
+- Evals Phase 1b of `2026-10-03-evals-for-everything.md`, the model half of the failure. B1 and B2 (#451): the `borg-link` and `borg-next` skill text restates the page only and never says "declined". B3 and B4 (#459): four plugin-eval cases (`link-verdict-honest` with and without waits, `next-empty-no-declined`, `next-rows-chooser`), an offline known-bad transcript the graders must fail, and the `borg-link` and `borg-next` ledger waivers replaced by `evals/link-next`. Live, sonnet passes every case; haiku is flaky, so `live.sh` defaults to sonnet.
+- Three checkpoint-row defects fixed alongside AC5 (#457).
+- Stack manifest rows backfilled for four empty manifests, and PRs now add their own row (#456).
+- A checkpoint older than 30 days adds no Next Session rows.

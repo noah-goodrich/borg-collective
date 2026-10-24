@@ -1,9 +1,11 @@
 # Directive: The arrival brief rides SessionStart systemMessage
 *Filed: 2026-10-18 · Status: Approved (Noah, 2026-10-19) · Owner: Noah*
+*Shipped: 2026-10-20 — PRs #437 and #447 merged to main; released as v0.9.11*
 
 **tl;dr** — The spike on 2026-10-18 showed that text printed before `claude` starts is hidden by the fullscreen renderer, and that a SessionStart `systemMessage` renders at the top of the transcript before any typing. This directive builds screen 4 of the board-chooser directive (and the Doorways arrival brief) as a SessionStart hook that prints the brief from the `borg link <repo> --json` document on `startup` and `resume` only, so launched, hand-typed and resumed sessions all get it with no launcher change.
 
 - Plan-slug: `2026-10-18-arrival-brief-on-sessionstart`
+- Status: Assimilated (Noah said "closeout" 2026-10-24)
 
 ## Problem
 
@@ -58,3 +60,7 @@ A new SessionStart hook emits a top-level `systemMessage` carrying the brief. Ev
   - Verify: start a new `claude` in a repository with a checkpoint and see "SessionStart:startup says:" with the four lines before typing; resume it and see "SessionStart:resume says:" with the title unchanged. Confirmed 2026-10-20: the startup brief rendered in the Queen window and in the ingle drone, and Noah confirmed "SessionStart:resume says:" on resume (relayed by the Queen session).
 - [x] AC9 — Suite green.
   - Verify: `make test && make test-bats && make lint`.
+
+## Additional Work Shipped
+
+- Solution item 2's "next + owner" gap was closed by AC4 of `2026-10-20-one-owned-next-list.md` (#455): the arrival brief's next line always carries an owner. The wrapping of the brief's lines (AC5 there, #457) shipped in the same series.

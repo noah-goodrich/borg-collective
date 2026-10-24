@@ -145,7 +145,7 @@ Setup: Claude Code v2.1.300, tmux 3.6a, Ghostty. The test session was started in
 Gates applied:
 
 - (a) failed, so the launcher print is demoted. It is no longer the primary arrival channel, and build step 2's launcher work is not the path to build first.
-- SessionStart `systemMessage` becomes the primary human-facing arrival channel, on the `startup` and `resume` matchers only. It covers launched, hand-typed and resumed sessions and needs no launcher change. The build is filed as `docs/plans/directives/2026-10-18-arrival-brief-on-sessionstart.md`.
+- SessionStart `systemMessage` becomes the primary human-facing arrival channel, on the `startup` and `resume` matchers only. It covers launched, hand-typed and resumed sessions and needs no launcher change. The build is filed as `docs/plans/assimilated/2026-10-18-arrival-brief-on-sessionstart.md`.
 - (b) passes, with the overwrite guard above.
 - (c) passes, so the departure flags stay on Stop `systemMessage`.
 - (d) passes, so the switch headline keeps 4 seconds.

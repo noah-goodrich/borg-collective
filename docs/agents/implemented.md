@@ -47,17 +47,18 @@ Reference moved verbatim from the top-level CLAUDE.md.
   time, next, watch out, since then) as a visible message when a session starts or resumes in a repository; the Queen
   session gets one line, the same as `borg next --line`; a repository session gets the directory name as its title,
   only when it has none. It is built from the same document as `borg link`, plus one additive `--json` key,
-  `focus.since.head_moves`. Directive: `docs/plans/directives/2026-10-18-arrival-brief-on-sessionstart.md`
+  `focus.since.head_moves`. Directive: `docs/plans/assimilated/2026-10-18-arrival-brief-on-sessionstart.md`
 - One owned next list (v0.9.12): `borg next`, `borg link` and the arrival brief read each repository's newest
   checkpoint whole. The items under `Waits on you:` become YOU rows, the `Next Session` items become AGENT rows (a
   checkpoint older than 30 days adds none), and a checkpoint newer than `PROJECT_PLAN.md` replaces the plan row. The
   Queen's own checkpoint feeds the Queen scope, and `/borg-link-up` writes the `Waits on you:` list. A row with no
   owner shows as `unowned` and is counted apart (`+N unowned`), and when a checkpoint holds a Next Session item,
-  every surface names it with its owner instead of saying nothing is ready. The repository page shows Last time, Waits on you and Next whole, wrapped, capped
-  by whole items with `+N more  borg link --full`; the 5-row cap on decisions that are yours shares its slots across
-  repositories so the Queen's rows are not pushed out. `--json` gains additive keys only (`hidden.unowned`,
-  `waiting.next`, `waiting.next_items`; `DOCUMENT_VERSION` stays 2). `evals/link-next` replaces the `borg-link` and
-  `borg-next` eval waivers. Directive: `docs/plans/directives/2026-10-20-one-owned-next-list.md`
+  every surface names it with its owner instead of saying nothing is ready. The repository page shows Last time,
+  Waits on you and Next whole, wrapped, capped by whole items with `+N more  borg link --full`; the 5-row cap on
+  decisions that are yours shares its slots across repositories so the Queen's rows are not pushed out. `--json`
+  gains additive keys only (`hidden.unowned`, `waiting.next`, `waiting.next_items`; `DOCUMENT_VERSION` stays 2).
+  `evals/link-next` replaces the `borg-link` and `borg-next` eval waivers. Directive:
+  `docs/plans/assimilated/2026-10-20-one-owned-next-list.md`
 - Unreleased: borg-plan in Cortex plan mode. Cortex registers an inject (PostToolUse `EnterPlanMode`), a gate (PreToolUse `ExitPlanMode`, exit 2 without Acceptance Criteria, Scope Boundaries and a Plan-slug; `BORG_PLAN_GATE=off` disables) and a promote (PostToolUse `ExitPlanMode`, writes `docs/plans/PROJECT_PLAN.md` and the team `plan-<task-id>.md`) in `hooks.json`; `tests/cortex_payload_replay.bats` replays synthetic Cortex payloads through every registered hook. Evidence: `docs/evidence/2026-10-cortex-*.md`. Directive: `docs/plans/directives/2026-10-22-borg-plan-in-cortex-plan-mode.md`
 - `borg-sync` (lib/borg-sync.zsh): mtime-based file sync helpers shared by the CLI and hooks
 - Auto-memory read instrumentation: `borg-memory-read-log.sh` (PostToolUse/Read) logs every read
