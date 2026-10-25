@@ -8,16 +8,13 @@ This page was last checked against release 0.9.12.
 
 Use this page if you run borg on more than one machine, if a machine fell behind, or if you are setting borg up somewhere new.
 
-To have a Claude Code session do the work, start a fresh session on the target machine and paste the raw URL of this file, https://raw.githubusercontent.com/noah-goodrich/borg-collective/main/docs/upgrading.md, with one sentence:
+To have a Claude Code session do the work, start a fresh session on the target machine and give it the raw URL of this file and nothing else: https://raw.githubusercontent.com/noah-goodrich/borg-collective/main/docs/upgrading.md. This page is the whole brief.
 
-```
-Follow docs/upgrading.md on this machine, one step at a time, show
-each command's output, stop at the first failure and report it.
-```
+If you are a Claude Code session that was handed this page: follow it top to bottom under the standing rules below. Do section 2, then section 3 on a fresh machine or section 4 on a machine that already has borg, then every row of section 5 that applies, then section 6. End by showing the person the output of the three commands in section 6, and give them the one thing in section 5 that only they can do (the 0.9.12 update order names it).
 
 Standing rules for that session (a person following the page by hand should keep them too):
 
-- Run each step as a plain command and show its output before moving on.
+- Work through the page in order, one step at a time. Run each step as a plain command and show its output before moving on.
 - Stop at the first failure and report it. Do not improvise a workaround.
 - Never force-push and never discard local changes. If a step needs a file out of the way, stash it with a name (`git stash push -m "<what and why>"`) and say so.
 - Ask before running `install.sh` on a machine that already has borg.
@@ -118,7 +115,7 @@ Find the row for the version you started from. If you skipped several releases, 
 | 0.9.8 | 0.9.9 update order, below |
 | 0.9.9 | 0.9.10 update order, below |
 | 0.9.10 | 0.9.11 update order, below |
-| 0.9.11 | None |
+| 0.9.11 | 0.9.12 update order, below |
 | 0.9.12 | None (current release) |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
@@ -134,6 +131,26 @@ run-in <BORG> ./install.sh
 ```
 
 2. Run `borg doctor`. Every RESUME row should now be OK except `resume-guardian`, which stays a known warning (section 6). On a machine signed in with a subscription this clears both the `resume-watch` and the `resume-probe` FAIL rows: the probe reads the path of the Claude binary from the watcher's plist, so it cannot pass without it. On a usage-billed account (an Enterprise seat), `/usage` reports cost and has no session limit, so `resume-probe` shows `INFO`, not `OK`: limit-class resumes and the guardian's limit thresholds do not apply there, and every other resume path is unchanged. A `FAIL` on that row on any account still means the probe cannot read `/usage` at all.
+
+### Updating to 0.9.12: update order
+
+0.9.12 is the one owned next list release: `borg next`, `borg link` and the arrival brief read each repository's newest checkpoint whole, and the items under a `Waits on you:` line in its Blockers section become the person's rows. No file migration is needed and `--json` only gains keys. One thing is not automatic: a checkpoint written before 0.9.12 has no `Waits on you:` line, and the reader drops a Blockers bullet that has no such lead-in, so what waits on the person shows nothing until a newer checkpoint is written in the new form.
+
+The path from 0.9.11 or earlier, in order (the commands are in section 4):
+
+1. Pull the checkouts.
+2. Run `claude plugin update` for borg-collective.
+3. Run `borg setup`.
+4. Restart every open Claude Code session.
+5. This step is the person's, and you cannot do it for them: a slash command runs inside the session it is typed in. Tell them to open the Queen session (`borg init`), run `/borg-link-up` there, and do the same in any repository session whose latest checkpoint has something waiting on them. Do not write a checkpoint yourself.
+6. Once they say it is done, run this and show the output. It prints project names and owners only, no row text, so it is safe to send on:
+
+```
+borg next --rows --json \
+  | jq '{rows: [.rows[] | {project, owner}], hidden}'
+```
+
+A good answer lists the Queen's waiting items with owner `YOU`. If the Queen has things waiting and none show, the newest Queen checkpoint still has the old wording: run `/borg-link-up` in the Queen session again and check that its Blockers section carries a line that reads exactly `Waits on you:`.
 
 ### Updating to 0.9.11: update order
 
@@ -254,6 +271,8 @@ git -C <REPOSITORY> status --short
 6. Run `borg link --overview` again. The warning should be gone for each migrated repository. If the page still names a repository, re-read step 1: the entry is most likely a subdirectory registration, and migrate will not touch it until that is fixed.
 
 ## 6. Verify
+
+Show the person the output of `borg version`, `claude plugin list | grep borg-collective` and `borg doctor`, all three, whether or not they pass.
 
 - `borg version` prints the release you expect. The expected release is the content of the `VERSION` file in `<BORG>`.
 - `borg doctor` is green. One warning is known and benign: a `resume-guardian` row that reads `usage guardian last active ...` (or `no usage-guardian.json`) is marked `WARN` and says it is a warning only, because borg-resume runs its own usage probe. On a usage-billed account `resume-probe` reads `INFO`, which is also correct. Any other `WARN` or `FAIL` row is worth reading. A `gh` row below the version floor means upgrading `gh`. The full list of rows to expect after 0.9.9 is in section 5.
