@@ -18,21 +18,25 @@ Standing rules for that session (a person following the page by hand should keep
 - Stop at the first failure and report it. Do not improvise a workaround.
 - Never force-push and never discard local changes. If a step needs a file out of the way, stash it with a name (`git stash push -m "<what and why>"`) and say so.
 - Ask before running `install.sh` on a machine that already has borg.
-- Never edit files outside the two checkouts (the borg-collective checkout and the plugin mirror checkout). The one exception is the stack migration in section 5, which moves manifest files inside the repositories that `borg link` names, using `borg stack migrate` only, and which asks the person before committing in each one.
+- The dotfiles installer (section 4, step 0) is the person's to run, never yours: it types into every tmux pane, including the one you are in.
+- Never edit files outside the three checkouts (the borg-collective checkout, the plugin mirror checkout and the dotfiles checkout). The exceptions are the dotfiles installer that the person runs in section 4, step 0, and the stack migration in section 5, which moves manifest files inside the repositories that `borg link` names, using `borg stack migrate` only, and which asks the person before committing in each one.
 - If a command prompts for input (for example `borg setup` asking for a git identity, or `install.sh` asking whether to install the plugin), stop and ask the person what to answer.
 
 ## 2. Facts to collect first
 
-In the commands below, `<BORG>` is the borg-collective checkout, `<PLUGINS>` is the plugin mirror checkout (a clone of the claude-plugins repository), and `<MARKETPLACE>` is the name of the Claude Code marketplace that serves it. Collect these four facts before changing anything.
+In the commands below, `<BORG>` is the borg-collective checkout, `<PLUGINS>` is the plugin mirror checkout (a clone of the claude-plugins repository), `<DOTFILES>` is the dotfiles checkout (normally `~/.config/dotfiles`), and `<MARKETPLACE>` is the name of the Claude Code marketplace that serves it. Collect these five facts before changing anything.
 
 - Installed version: `borg version`. A good answer is a version number such as `0.9.5`. "command not found" means this is a fresh machine, so go to section 3.
 - Where the installed borg lives: `command -v borg | xargs readlink -f`. A good answer is a path ending in `borg.zsh` inside a borg-collective checkout. The directory holding it is `<BORG>`. Pulling that checkout is what upgrades borg.
 - Where the plugin mirror is and which marketplace serves it: `claude plugin list` and `claude plugin marketplace list`. In the first, find the `borg-collective@<MARKETPLACE>` entry; its `Read from:` line is the mirror directory, and its parent directory is `<PLUGINS>`. In the second, the same marketplace name appears with a `Source: Folder (...)` line pointing at `<PLUGINS>`. If the source is a GitHub repository instead of a folder, there is no local `<PLUGINS>` checkout to pull; see the troubleshooting entry for a stale marketplace.
 - Whether either checkout has uncommitted changes: `git -C <BORG> status --short --branch` and `git -C <PLUGINS> status --short --branch`. A good answer is the branch name (normally `main`) with no file lines. Modified files under the `borg-collective/` directory of `<PLUGINS>` are expected and are handled in section 4. Any other modified file is the person's own work: leave it alone. If `<BORG>` is not on `main`, stop and ask.
+- Where the dotfiles checkout is and whether it is current: `readlink ~/.config/tmux/tmux.conf`. A good answer ends in `dotfiles/tmux/tmux.conf`, and the directory above `tmux/` is `<DOTFILES>`. If it is not a link, the machine never ran the dotfiles installer: step 0 of section 4 still applies, after cloning `https://github.com/noah-goodrich/dotfiles` to `~/.config/dotfiles` if that directory is missing (it is a private repository, so `gh auth status` must succeed first; if it does not, ask the person to run `gh auth login`). Then run `git -C <DOTFILES> status --short --branch`. A good answer is `main` with no file lines. A modified `tmux/tmux.conf` is expected on a machine that ran an older `borg setup`, and step 0 handles it. Any other modified file is the person's own work: leave it alone.
 
 ## 3. Fresh machine
 
 Requirements: macOS, zsh, git, tmux, jq, fzf, gh, Python 3.11 or newer, and the Claude Code CLI. See the Requirements section of the README for the list; `docs/work-machine-setup.md` covers prerequisites in more detail.
+
+The dotfiles come first. Clone `https://github.com/noah-goodrich/dotfiles` to `~/.config/dotfiles` (a private repository: run `gh auth status` first and ask the person to run `gh auth login` if it fails), have the person run its installer as described in section 4, step 0, and then follow the identity steps in the dotfiles repository's own `docs/work-machine-setup.md` (the work email goes in `~/.gitconfig.local`, secrets go in the Keychain). Do that before step 1 below.
 
 1. Clone both repositories side by side. borg builds its plugin mirror into `claude-plugins` under the workspace root, which is `~/dev` unless `BORG_ORCHESTRATOR_ROOT` says otherwise, so `~/dev` is the simplest choice.
 
@@ -62,6 +66,15 @@ claude plugin install borg-collective@<MARKETPLACE>
 
 Do these in order, after section 2.
 
+0. Bring the dotfiles current first. The dotfiles repository carries the tmux, Ghostty, zsh, git and Neovim config, the global `~/.claude/CLAUDE.md` rules and Cortex's `RULES.md`, and several recent borg features lean on it: clickable PR links need a tmux setting, the tmux status line shows the `borg next --line` glance, and the Cortex link rule lives in `RULES.md`. Older `borg setup` runs also edited the dotfiles tmux config in place, so pull dotfiles before borg.
+
+   1. Run `git -C <DOTFILES> status --short --branch`. If `tmux/tmux.conf` is modified, stash it by name: `git -C <DOTFILES> stash push -m "pre-upgrade tmux binding appended by borg setup" -- tmux/tmux.conf`. The current dotfiles carries that binding itself, so nothing is lost. Leave every other local change alone.
+   2. Run `git -C <DOTFILES> pull --ff-only`. If it refuses, stop and report.
+   3. Copy the Claude settings aside with `cp ~/.claude/settings.json ~/.claude/settings.json.pre-dotfiles`. Current dotfiles no longer ships a settings template, so the installer should leave that file alone; older revisions overwrote `permissions` and `model` from one.
+   4. Tell the person to run `bash <DOTFILES>/install.sh` themselves, in a terminal tab that is not a tmux pane running Claude Code, Cortex or an editor. It types `source ~/.zshrc` and Enter into every tmux pane, and it can take several minutes when Docker is installed, because it builds the base devcontainer image. It re-links the tmux, zsh, git, Neovim and Ghostty config and the global `~/.claude/CLAUDE.md` (a file that was in the way is moved to `~/.dotfiles-backup/<timestamp>/`), copies the dotfiles-owned hooks and slash commands into `~/.claude`, links Cortex's `RULES.md`, pulls `<PLUGINS>` and re-registers the plugin marketplace. It may print a jq error that names `claude/code/settings.json`, followed by "settings.json merged", and leave an empty `~/.claude/settings.json.tmp.<pid>`; both come from a retired merge step and are harmless. The machine's own git identity lives in `~/.gitconfig.local`, which the installer never overwrites; the dotfiles repository's `docs/work-machine-setup.md` says how to set it.
+   5. If the person says the installer moved a `~/.snowflake/cortex/RULES.md` of their own into `~/.dotfiles-backup/`, ask whether any rule in it belongs in the dotfiles copy, because the linked file replaces it.
+   6. Re-read the tmux config, then re-attach: `tmux source-file ~/.config/tmux/tmux.conf`, then detach (`Ctrl+Space d`) and attach again. tmux reads the hyperlink setting when a client attaches. Check with `tmux show-options -s | grep hyperlinks` (one line naming `xterm-ghostty:hyperlinks`) and, after re-attaching, `tmux list-clients -F '#{client_termfeatures}'` (the output contains `hyperlinks`).
+
 a. Stash, never discard, any modified files inside the plugin mirror directory. They are generated files from an earlier local build of the mirror and they block the pull. Leave every other local change alone.
 
 ```
@@ -90,13 +103,13 @@ claude plugin list
 
    Run the `update` line once per `<name>@<MARKETPLACE>` entry in the first listing (an entry's `Read from:` line also points into `<PLUGINS>`). Entries from other marketplaces are not yours to update here. The second listing should show each updated plugin at the version in its own `.claude-plugin/plugin.json` under `<PLUGINS>`. `claude plugin update` says to restart to apply; step e does that.
 
-d. Refresh what borg installs, right away, before anything else runs against the registry. `borg setup` refreshes the hooks, the bin utilities and the tmux binding, migrates an old registry key (section 5), and rebuilds the local plugin mirror. Skills and agents ship through the plugin in the previous step. Run the installed `borg` from any directory, but never from a git worktree of borg-collective, because that registers skill paths under the worktree:
+d. Refresh what borg installs, right away, before anything else runs against the registry. `borg setup` refreshes the hooks, the bin utilities and the tmux binding (a no-op once step 0 is done, because the dotfiles config already has it), migrates an old registry key (section 5), and rebuilds the local plugin mirror. When `cortex` is on `PATH` it also registers borg's Cortex hooks, copies borg's six agents into `~/.snowflake/cortex/agents/` and registers the skills with Cortex. Skills and agents ship through the plugin in the previous step. Run the installed `borg` from any directory, but never from a git worktree of borg-collective, because that registers skill paths under the worktree:
 
 ```
 borg setup
 ```
 
-e. Restart every open Claude Code session. A running session keeps the hooks and skills it loaded at start, so it can report the new version while still running old code. A resumed conversation (`claude --resume` or `claude --continue`) loads the new instruction and skill files but keeps the old context. For a fresh conversation, start `claude` without a resume flag, or open a managed window with `borg init` or `drone up`.
+e. Restart every open Claude Code session and every open Cortex session. A running session keeps the hooks and skills it loaded at start, so it can report the new version while still running old code. A resumed conversation (`claude --resume` or `claude --continue`) loads the new instruction and skill files but keeps the old context. For a fresh conversation, start `claude` without a resume flag, or open a managed window with `borg init` or `drone up`.
 
 f. Check the install with `borg doctor`, then read what it should show in section 6.
 
@@ -116,7 +129,8 @@ Find the row for the version you started from. If you skipped several releases, 
 | 0.9.9 | 0.9.10 update order, below |
 | 0.9.10 | 0.9.11 update order, below |
 | 0.9.11 | 0.9.12 update order, below |
-| 0.9.12 | None (current release) |
+| 0.9.12 | 0.9.13 update order, below |
+| 0.9.13 | None (current release) |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
 
@@ -131,6 +145,21 @@ run-in <BORG> ./install.sh
 ```
 
 2. Run `borg doctor`. Every RESUME row should now be OK except `resume-guardian`, which stays a known warning (section 6). On a machine signed in with a subscription this clears both the `resume-watch` and the `resume-probe` FAIL rows: the probe reads the path of the Claude binary from the watcher's plist, so it cannot pass without it. On a usage-billed account (an Enterprise seat), `/usage` reports cost and has no session limit, so `resume-probe` shows `INFO`, not `OK`: limit-class resumes and the guardian's limit thresholds do not apply there, and every other resume path is unchanged. A `FAIL` on that row on any account still means the probe cannot read `/usage` at all.
+
+### Updating to 0.9.13: update order
+
+0.9.13 trims the context borg loads and makes borg's agents work in Cortex Code. No migration is needed. What changes after the plugin update and a restart: `/borg-link-up`, `/borg-plan` and `/borg-collective-review` are much shorter and read their detail files from the skill's `references/` folder only when a step needs them (about 5k tokens less after every compaction); the nudge after 75 tool calls now says to link up and start a fresh session; and on a machine with Cortex Code, `borg setup` registers the plan-mode hooks and copies borg's six agents into `~/.snowflake/cortex/agents/` under the same names the skills use (`borg-collective:borg-scout`), registers the model guard on Cortex's `Agent` and `Task` calls, and warns when `CORTEX_THINKING_EFFORT` is `xhigh` or `max`, because Cortex runs every subagent at the session's effort and ignores each agent's own.
+
+One behavior change on a machine that runs drones: `drone up` and `drone exec` now start the shared `dev-postgres` container only for a repository whose `.devcontainer/` names `dev-postgres`; every repository still gets the `devnet` network. A repository that reaches the shared database some other way, for example a connection string in a root `.env`, stops getting it started: add the name under `.devcontainer/`, or start it by hand with `docker compose -f <the file named by POSTGRES_COMPOSE in drone.zsh> up -d`. To list the repositories that mention it outside `.devcontainer/` (the ones at risk), run `grep -rl dev-postgres ~/dev --exclude-dir=.devcontainer --exclude-dir=borg-collective --exclude-dir=node_modules --exclude-dir=.git` and show the output.
+
+The path from 0.9.12 or earlier, in order (the commands are in section 4):
+
+0. Bring the dotfiles current (section 4, step 0). Skip it only if you already did it as part of this same upgrade.
+1. Pull the checkouts.
+2. Run `claude plugin update` for borg-collective.
+3. Run `borg setup`.
+4. Restart every open Claude Code session and every open Cortex session.
+5. On a machine with Cortex Code, run `grep -l 'borg-collective:borg-' ~/.snowflake/cortex/agents/*.md` and show the output: six files named `borg-*.md`. If `borg setup` printed an effort warning, say so.
 
 ### Updating to 0.9.12: update order
 
@@ -278,6 +307,8 @@ Show the person the output of `borg version`, `claude plugin list | grep borg-co
 - `borg doctor` is green. One warning is known and benign: a `resume-guardian` row that reads `usage guardian last active ...` (or `no usage-guardian.json`) is marked `WARN` and says it is a warning only, because borg-resume runs its own usage probe. On a usage-billed account `resume-probe` reads `INFO`, which is also correct. Any other `WARN` or `FAIL` row is worth reading. A `gh` row below the version floor means upgrading `gh`. The full list of rows to expect after 0.9.9 is in section 5.
 - `borg link --overview` renders a page, with no unmigrated-manifest warnings and no `sweep: adapter 'github'` line under SIGNALS.
 - In a Claude Code session started after the update, or from a shell with `claude plugin list`, the `borg-collective` plugin shows the same version as `borg version`.
+- The dotfiles checkout is current: `git -C <DOTFILES> status --short --branch` shows `main` with no `behind`. On a machine with Cortex, `readlink ~/.snowflake/cortex/RULES.md` points into `<DOTFILES>/cortex/RULES.md`.
+- tmux carries the hyperlink setting: `tmux show-options -s | grep hyperlinks` prints a line. A tmux server that was already running needs the re-attach in section 4, step 0.
 
 ## 7. Rollback
 
@@ -312,3 +343,6 @@ To return to the current release afterwards: `git -C <BORG> checkout main`, then
 - borg says `unknown command` after the pull. `PATH` points at a different checkout than the one you pulled. Run `command -v borg | xargs readlink -f`, then either pull that checkout or run `./install.sh` from the intended checkout, which re-points the `borg` link (ask first on a machine that already has borg).
 - Hooks and skills still look old. The Claude Code session was started before the update. Restart it.
 - A plugin other than borg-collective is still on its old version, or a skill that was removed still appears. Only the plugins you updated by name were updated. Run `claude plugin list`, update every `<name>@<MARKETPLACE>` entry (section 4, step c), and restart.
+- The dotfiles pull refuses. A file in `<DOTFILES>` is modified; the usual one is `tmux/tmux.conf`, edited in place by an older `borg setup`. Stash it by name (section 4, step 0) and pull again.
+- The dotfiles installer typed `source ~/.zshrc` into a Claude Code or Cortex pane. That is what it does to every tmux pane. The line is harmless, and the person should run the installer from a plain terminal next time.
+- Links in a Claude Code or Cortex session are still not clickable after the update. The tmux server has not re-read its config for the attached client. If `tmux show-options -s | grep hyperlinks` prints nothing, run `tmux source-file ~/.config/tmux/tmux.conf`; then detach and attach again.

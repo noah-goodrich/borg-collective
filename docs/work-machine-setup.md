@@ -157,10 +157,11 @@ Expected layout under `~/dev/` — borg expects `BORG_ORCHESTRATOR_ROOT=$HOME/de
 ```zsh
 mkdir -p ~/dev
 git clone https://github.com/noah-goodrich/borg-collective ~/dev/borg-collective
-git clone https://github.com/noah-goodrich/dotfiles ~/.config/dotfiles
 git clone https://github.com/noah-goodrich/claude-plugins ~/dev/claude-plugins
 
-# PRIVATE repo (employer-specific skills) — requires the `gh auth login` from Phase 0 (or an SSH remote)
+# PRIVATE repos: dotfiles and the employer-specific skills.
+# Both need the gh auth login from Phase 0 (or an SSH remote).
+git clone https://github.com/noah-goodrich/dotfiles ~/.config/dotfiles
 git clone https://github.com/noah-goodrich/claude-plugins-private ~/dev/claude-plugins-private
 
 # Wire dotfiles symlinks (zshrc, tmux, secrets.zsh, CLAUDE.md)
