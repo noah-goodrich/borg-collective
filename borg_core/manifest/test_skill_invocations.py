@@ -23,9 +23,9 @@ _REQUIRED = {
 
 def _invocations() -> list[tuple[str, str, str]]:
     found = []
-    for skill in sorted(SKILLS.glob("*/SKILL.md")):
+    for skill in sorted([*SKILLS.glob("*/SKILL.md"), *SKILLS.glob("*/references/*.md")]):
         for match in _INVOCATION.finditer(skill.read_text()):
-            found.append((skill.parent.name, match["verb"], match["rest"]))
+            found.append((skill.relative_to(SKILLS).parts[0], match["verb"], match["rest"]))
     return found
 
 
