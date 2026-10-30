@@ -1,0 +1,76 @@
+{
+  "desc": "borg 0.9.13: borg-plan in Cortex, a smaller session context, Cortex agents release",
+  "program": "2026-10-30-release-0-9-13",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#461",
+      "status": "merged",
+      "why": "borg-plan in Cortex plan mode: inject, gate and promote hooks"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#462",
+      "status": "merged",
+      "why": "assimilates the borg-plan in Cortex directive"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#463",
+      "status": "merged",
+      "why": "assimilates the one-owned-next-list directive"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#464",
+      "status": "merged",
+      "why": "upgrading runbook uses the raw URL"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#468",
+      "status": "merged",
+      "why": "borg-link-up reads its criteria on demand"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#469",
+      "status": "merged",
+      "why": "borg-plan and review prose moved to references/"
+    },
+    {
+      "lane": "_default",
+      "order": "7",
+      "ref": "noah-goodrich/borg-collective#470",
+      "status": "merged",
+      "why": "fresh-session nudge, CLAUDE.md history to learned.md"
+    },
+    {
+      "lane": "_default",
+      "order": "8",
+      "ref": "noah-goodrich/borg-collective#471",
+      "status": "merged",
+      "why": "Cortex agents load as pinned"
+    },
+    {
+      "lane": "_default",
+      "order": "9",
+      "ref": "noah-goodrich/borg-collective#473",
+      "status": "merged",
+      "why": "drone starts dev-postgres only when a repository opts in"
+    },
+    {
+      "lane": "_default",
+      "order": "10",
+      "ref": "noah-goodrich/borg-collective#474",
+      "status": "merged",
+      "why": "Cortex: one agent name, guard and logger"
+    }
+  ]
+}
