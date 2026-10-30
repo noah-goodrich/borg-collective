@@ -119,7 +119,7 @@ Read `references/follow-up-directives.md` (relative to this skill's base directo
 
 ## Output
 
-Read `references/output.md` (relative to this skill's base directory) once the conversation is done and before writing `PROJECT_PLAN.md`. It holds the 02-output extension notice, the Plan-slug rule, the PROJECT_PLAN.md template, the manifest scaffolding steps (`python3 -m borg_core.manifest.cli scaffold`, unconditional right after the plan is written) and the 03-followup extension notice.
+Read `references/output.md` (relative to this skill's base directory) once the conversation is done and before writing `PROJECT_PLAN.md`. It holds the 02-output extension notice, the Plan-slug rule, the PROJECT_PLAN.md template, the manifest scaffolding steps (`borg_core.manifest.cli`, unconditional right after the plan is written) and the 03-followup extension notice.
 
 ## Orchestrator turn discipline
 
