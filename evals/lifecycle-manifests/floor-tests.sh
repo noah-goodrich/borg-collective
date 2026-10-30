@@ -228,6 +228,14 @@ fi
 bindir_real="$(_eval_allowlist_bin "$WORK/bin-real" "$WORK/ghstub-run")"
 prep="$(_eval_repo_with_source "$WORK/prep")"
 _eval_feature_branch "$prep"
+# The feature branch must really be PUSHED (to the local bare repo behind the github.com/o/r URL), and the
+# remote URL must still be the one `gh` slug resolution reads. A silent `remote add` failure left it unpushed.
+if [ -n "$(git -C "$prep" ls-remote origin feature/ci-gate 2>/dev/null)" ] \
+    && [ "$(git -C "$prep" config --get remote.origin.url)" = "https://github.com/o/r.git" ]; then
+    ok "the feature-branch fixture is pushed, and origin keeps the github.com/o/r URL"
+else
+    bad "the feature-branch fixture is not pushed (git ls-remote origin finds no feature/ci-gate)"
+fi
 prep_out="$(cd "$prep" && PATH="$bindir_real" BORG_PATH_PREFIX="$bindir_real" borg checkpoint-prepare 2>&1)"
 if printf '%s\n' "$prep_out" | grep -q '^PR_REF: o/r#7 '; then
     ok "borg checkpoint-prepare inside the sandbox reports PR_REF o/r#7 (stub in front of the real gh)"

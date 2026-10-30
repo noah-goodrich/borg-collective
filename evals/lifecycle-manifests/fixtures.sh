@@ -196,10 +196,14 @@ _eval_feature_branch() {
     _eval_git_env
     git -C "$dir" add -A >/dev/null 2>&1
     git -C "$dir" commit --quiet -m "add CI and a coverage gate" >/dev/null 2>&1
-    # A LOCAL BARE REMOTE, so the branch reads as pushed and a skill that pushes cannot reach the network.
+    # A LOCAL BARE REMOTE BEHIND THE SAME URL, so the branch reads as pushed and a skill that pushes cannot
+    # reach the network. `_eval_repo` already set `origin` to https://github.com/o/r.git (the slug `gh`
+    # resolution reads), so `git remote add origin <local>` FAILED SILENTLY on the first version of this
+    # and the branch was never pushed; the model noticed ("`git ls-remote origin` returns Repository not
+    # found") and refused to ship. `url.<local>.insteadOf` keeps the URL and redirects the transport.
     git init --quiet --bare "$dir.origin.git" >/dev/null 2>&1
-    git -C "$dir" remote add origin "$dir.origin.git" >/dev/null 2>&1
-    git -C "$dir" push --quiet -u origin feature/ci-gate >/dev/null 2>&1
+    git -C "$dir" config "url.$dir.origin.git.insteadOf" "https://github.com/o/r.git"
+    git -C "$dir" push --quiet -u origin main feature/ci-gate >/dev/null 2>&1
 }
 
 # THE PROMPT SHAPE, in one place so all three positives cannot drift apart.
