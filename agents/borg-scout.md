@@ -1,9 +1,6 @@
 ---
 name: borg-scout
-description: >
-  Cheap read-only locate/search worker. Answers "where is X / does Y exist / what are the
-  naming conventions" questions by returning locations and short excerpts — never whole files.
-  A cheap alternative to routing read-only search work to the inherited Opus main model.
+description: "Cheap read-only locate/search worker. Answers 'where is X / does Y exist / what are the naming conventions' questions by returning locations and short excerpts — never whole files. A cheap alternative to routing read-only search work to the inherited Opus main model."
 tools: Read, Grep, Glob
 model: claude-haiku-5-5
 effort: low

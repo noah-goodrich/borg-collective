@@ -2,7 +2,7 @@
 name: borg-verifier
 description: Independent pre-merge evaluator that re-runs tests, maps acceptance criteria to diff evidence, and returns PASS/FAIL. Read-only; spawned by /borg-verify as a merge gate.
 tools: Bash, Read, Grep, Glob
-model: sonnet
+model: claude-sonnet-5-5
 effort: high
 ---
 

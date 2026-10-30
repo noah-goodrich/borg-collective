@@ -2,7 +2,7 @@
 name: borg-reviewer
 description: Independent blind adversarial reviewer. Reviews a proposal or option-set COLD — never sees the author's reasoning — to catch what self-review misses.
 tools: Read, WebSearch, WebFetch, Grep, Glob
-model: sonnet
+model: claude-sonnet-5-5
 effort: high
 background: true
 ---
