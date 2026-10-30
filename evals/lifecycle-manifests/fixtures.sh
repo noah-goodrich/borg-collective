@@ -62,7 +62,10 @@ _eval_repo() {
     local dir="$1" slug="${2:-o/r}"
     _eval_git_env
     mkdir -p "$dir"
-    git -C "$dir" init --quiet
+    # `-b main` BECAUSE THE DEFAULT BRANCH IS AN AMBIENT SETTING: `init.defaultBranch` is `main` on the machine of
+    # record and unset on a CI runner (so `master`), and the feature-branch fixture pushes `main`. Found when the
+    # push failed whole on CI and the floor case that asserts it is pushed went red there only.
+    git -C "$dir" init --quiet -b main
     git -C "$dir" remote add origin "https://github.com/${slug}.git" 2>/dev/null || true
     printf 'fixture\n' > "$dir/README.md"
     git -C "$dir" add README.md
