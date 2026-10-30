@@ -174,8 +174,8 @@ EOF
     _install_hook pre-up.sh 0
     run "$DRONE" up "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    # ensure_postgres runs its own compose up before the repository; filter to
-    # the repository's compose call only (contains "-p sampleproj").
+    # A repository that references dev-postgres gets the shared postgres compose up first; filter
+    # to the repository's compose call only (contains "-p sample").
     local hook_line up_line
     hook_line=$(grep -n 'hook:pre-up.sh' "$TRACE" | head -1 | cut -d: -f1)
     up_line=$(grep -n 'docker-compose -p sample .*up' "$TRACE" | head -1 | cut -d: -f1)
@@ -186,7 +186,7 @@ EOF
     _install_hook pre-up.sh 1
     run "$DRONE" up "$TEST_REPOSITORY"
     [ "$status" -ne 0 ]
-    # ensure_postgres may still run, but the repository's compose must not.
+    # Shared services may still start, but the repository's compose must not.
     ! grep -q 'docker-compose -p sample .*up' "$TRACE"
 }
 
