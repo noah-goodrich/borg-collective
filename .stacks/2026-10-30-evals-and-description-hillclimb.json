@@ -1,0 +1,5 @@
+{
+  "desc": "Evals that run, and hillclimbing for skill descriptions, on Claude Code and Cortex Code",
+  "program": "2026-10-30-evals-and-description-hillclimb",
+  "rows": []
+}
