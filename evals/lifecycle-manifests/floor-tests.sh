@@ -176,6 +176,88 @@ else
     bad "the gh stub does not answer under the allowlist PATH"
 fi
 
+# THE CASE THAT WOULD HAVE CAUGHT THE STALE ALLOWLIST (measured 2026-10-30). The skills resolve the
+# borg source dir with `command -v borg | xargs readlink -f | xargs dirname` and the link-up prepare
+# step runs `borg checkpoint-prepare`, so `borg`, `zsh` (borg's interpreter), `xargs` and `readlink`
+# must resolve under the allowlist PATH, and `borg` must land in THIS checkout, because
+# `PYTHONPATH=<that dir>` is what imports the `borg_core` under test. A September allowlist had none of
+# them: every live positive failed with "`borg` isn't on PATH" for a reason unrelated to the skills,
+# and nothing noticed because CI runs this harness offline.
+for need in borg zsh xargs readlink; do
+    if PATH="$bindir" command -v "$need" >/dev/null 2>&1; then
+        ok "$need is reachable under the allowlist PATH (a skill command needs it)"
+    else
+        bad "$need is NOT on the allowlist — a skill command that names it cannot run in the sandbox"
+    fi
+done
+borg_real="$(PATH="$bindir" readlink -f "$bindir/borg" 2>/dev/null || true)"
+if [ -n "$borg_real" ] && [ "$borg_real" = "$(readlink -f "$REPO/borg.zsh")" ]; then
+    ok "the allowlist's borg resolves to this checkout's borg.zsh"
+else
+    bad "the allowlist's borg does not resolve to this checkout ($borg_real)"
+fi
+
+# THE `gh` STUB MUST SURVIVE THE READER THE SKILLS USE (measured 2026-10-30). run.sh embeds the stub as a
+# heredoc; this extracts that exact text and feeds its answer to `borg checkpoint-prepare`'s own parser. A
+# September stub answered `{"number":7}`, the parser (correctly) wants a pull-request URL, and /borg-link-up
+# reported "no pull request for this branch" and wrote no row. A PAIR: the old shape must be REFUSED by the
+# same parser, or the check would pass on a parser that accepts anything. Then the merge marker: a PR must
+# read OPEN, and MERGED after `gh pr merge`, or /borg-assimilate cannot verify what it just did.
+awk "/<<'GH'/{f=1;next} /^GH\$/{f=0} f" "$HERE/run.sh" > "$WORK/ghstub-run"
+chmod +x "$WORK/ghstub-run"
+mkdir -p "$WORK/ghstate" && cp "$WORK/ghstub-run" "$WORK/ghstate/gh"
+stub_view="$("$WORK/ghstate/gh" pr view --json number,url 2>/dev/null)"
+pr_ref() { PYTHONPATH="$REPO" "$PYTHON" -c 'import sys
+from borg_core.checkpoint import prepare_shell as p
+print(p._pr_from_json(sys.argv[1])[0])' "$1" 2>/dev/null; }
+if [ "$(pr_ref "$stub_view")" = "o/r#7" ]; then
+    ok "the gh stub's pr view parses to o/r#7 under checkpoint-prepare's reader"
+else
+    bad "the gh stub's pr view does not parse to o/r#7 ($stub_view)"
+fi
+if [ -z "$(pr_ref '{"number":7}')" ]; then
+    ok "the reader refuses the old number-only shape (so the check above discriminates)"
+else
+    bad "the reader accepted a number-only answer; the stub check proves nothing"
+fi
+
+# THE WHOLE CHAIN, NOT ITS PARTS: the real `borg checkpoint-prepare`, run inside a feature-branch fixture
+# under the sandbox PATH, must report the stubbed PR. Each piece above passed while this did not, because
+# `borg.zsh` rebuilds PATH at startup and put the real `gh` first; `BORG_PATH_PREFIX` is what keeps the
+# stub in front, and this is the case that fails if run.sh stops passing it or the stub stops parsing.
+bindir_real="$(_eval_allowlist_bin "$WORK/bin-real" "$WORK/ghstub-run")"
+prep="$(_eval_repo_with_source "$WORK/prep")"
+_eval_feature_branch "$prep"
+# The feature branch must really be PUSHED (to the local bare repo behind the github.com/o/r URL), and the
+# remote URL must still be the one `gh` slug resolution reads. A silent `remote add` failure left it unpushed.
+if [ -n "$(git -C "$prep" ls-remote origin feature/ci-gate 2>/dev/null)" ] \
+    && [ "$(git -C "$prep" config --get remote.origin.url)" = "https://github.com/o/r.git" ]; then
+    ok "the feature-branch fixture is pushed, and origin keeps the github.com/o/r URL"
+else
+    bad "the feature-branch fixture is not pushed (git ls-remote origin finds no feature/ci-gate)"
+fi
+prep_out="$(cd "$prep" && PATH="$bindir_real" BORG_PATH_PREFIX="$bindir_real" borg checkpoint-prepare 2>&1)"
+if printf '%s\n' "$prep_out" | grep -q '^PR_REF: o/r#7 '; then
+    ok "borg checkpoint-prepare inside the sandbox reports PR_REF o/r#7 (stub in front of the real gh)"
+else
+    bad "borg checkpoint-prepare did not report the stubbed PR: $(printf '%s\n' "$prep_out" | grep '^PR_REF')"
+fi
+# shellcheck disable=SC2016
+# JUSTIFICATION: the single quotes keep `$BIN` LITERAL on purpose -- the text searched for is run.sh's own source line.
+if grep -q 'BORG_PATH_PREFIX="\$BIN"' "$HERE/run.sh"; then
+    ok "run.sh passes BORG_PATH_PREFIX to every skill run"
+else
+    bad "run.sh does not pass BORG_PATH_PREFIX; borg.zsh will put the real gh ahead of the stub"
+fi
+before_state="$("$WORK/ghstate/gh" pr view --json state 2>/dev/null | jq -r .state)"
+"$WORK/ghstate/gh" pr merge 7 --squash >/dev/null 2>&1
+after_state="$("$WORK/ghstate/gh" pr view --json state 2>/dev/null | jq -r .state)"
+if [ "$before_state" = "OPEN" ] && [ "$after_state" = "MERGED" ]; then
+    ok "the gh stub reads OPEN before gh pr merge and MERGED after"
+else
+    bad "the gh stub's state is $before_state then $after_state; expected OPEN then MERGED"
+fi
+
 echo "== floor: run.sh's own guards =="
 
 # ── 5. --skip-model runs VERBS, skips all six model cases BY NAME, and exits 0 ───────────────────
@@ -254,6 +336,47 @@ if [ -x "$RUN" ]; then
         ok "all six cases SKIP and none FAILs when claude is absent"
     else
         bad "expected 6 SKIP / 0 FAIL case lines, got $n_skip / $n_fail — absent input read as a defect"
+    fi
+
+    # ── 8. EVAL_PLUGIN_DIR reaches the six model cases and not the probe ─────────────────────────
+    #
+    # Without it a live run after a skill change loads the INSTALLED plugin and grades the previous
+    # release's bodies. A stub `claude` records its argv and answers the probe, so the six cases run
+    # (and mostly FAIL, which is irrelevant here) and the log shows exactly which calls carried the
+    # flag. A PAIR: the same run without the variable must carry it nowhere, or case 8a would pass
+    # on a harness that always adds the flag.
+    stubdir="$WORK/stubclaude"
+    mkdir -p "$stubdir"
+    # shellcheck disable=SC2016
+    # JUSTIFICATION: the script body is written LITERALLY; `$*` and `$CLAUDE_ARGS_LOG` must expand when the STUB runs, not here.
+    printf '#!/bin/sh\necho "$*" >> "$CLAUDE_ARGS_LOG"\ncase "$*" in *READY*) echo READY ;; esac\nexit 0\n' > "$stubdir/claude"
+    chmod +x "$stubdir/claude"
+    for b in bash sh env git jq python3 sed grep awk cat printf date mkdir rm ls dirname basename tr wc sort head tail; do
+        src=$(command -v "$b" 2>/dev/null) && ln -sf "$src" "$stubdir/$b"
+    done
+    CLAUDE_ARGS_LOG="$WORK/args-with.log"; export CLAUDE_ARGS_LOG
+    : > "$CLAUDE_ARGS_LOG"
+    PATH="$stubdir:/usr/bin:/bin" EVAL_PLUGIN_DIR="/plugin/under/test" EVAL_MAX_BUDGET_USD=3 "$RUN" >/dev/null 2>&1
+    n_calls=$(grep -c -- ' --model ' "$CLAUDE_ARGS_LOG")
+    n_flag=$(grep -c -- '--plugin-dir /plugin/under/test' "$CLAUDE_ARGS_LOG")
+    n_budget=$(grep -c -- '--max-budget-usd 3' "$CLAUDE_ARGS_LOG")
+    n_probe=$(grep -- 'READY' "$CLAUDE_ARGS_LOG" | grep -c -- '--plugin-dir')
+    # The allow-list is not optional: without it a headless case cannot run the skill's own commands.
+    n_allow=$(grep -cF -- '--allowedTools Bash(PYTHONPATH=*)' "$CLAUDE_ARGS_LOG")
+    if [ "$n_calls" -eq 7 ] && [ "$n_flag" -eq 6 ] && [ "$n_budget" -eq 6 ] && [ "$n_probe" -eq 0 ] && [ "$n_allow" -eq 6 ]; then
+        ok "EVAL_PLUGIN_DIR, EVAL_MAX_BUDGET_USD and the tool allow-list reach all six model cases and not the probe"
+    else
+        bad "plugin-dir/budget/allow-list forwarding: expected 7 calls, 6 flagged, 6 budgeted, 0 on the probe, 6 allowed; got $n_calls/$n_flag/$n_budget/$n_probe/$n_allow"
+    fi
+    CLAUDE_ARGS_LOG="$WORK/args-without.log"; export CLAUDE_ARGS_LOG
+    : > "$CLAUDE_ARGS_LOG"
+    PATH="$stubdir:/usr/bin:/bin" "$RUN" >/dev/null 2>&1
+    n_calls=$(grep -c -- ' --model ' "$CLAUDE_ARGS_LOG")
+    n_flag=$(grep -c -- '--plugin-dir\|--max-budget-usd' "$CLAUDE_ARGS_LOG")
+    if [ "$n_calls" -eq 7 ] && [ "$n_flag" -eq 0 ]; then
+        ok "without the variables no call carries either flag (the pair that makes the case above discriminate)"
+    else
+        bad "unset variables: expected 7 calls and 0 flagged, got $n_calls/$n_flag"
     fi
 else
     bad "run.sh is not executable — nothing below could be checked"
