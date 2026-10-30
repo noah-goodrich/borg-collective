@@ -131,9 +131,18 @@ _eval_allowlist_bin() {
     # graded it as a FAILING SKILL. Exactly the class of the `--bare skipped the keychain` defect
     # fixed in #200, where a flag that suppressed keychain reads made borg report its own flag as a
     # missing credential.
-    for b in claude security bash sh env git jq python3 sed grep awk cat printf date mkdir rm ls dirname basename tr wc sort head tail; do
+    # `borg`, `zsh`, `xargs` AND `readlink` ARE ON IT BECAUSE THE SKILLS CALL THEM. Measured 2026-10-30 on
+    # both the trimmed and the pre-trim skill bodies: /borg-plan, /borg-link-up and /borg-assimilate all
+    # end with "`borg` isn't on PATH in this session", because the October skills resolve the borg
+    # source dir with `command -v borg | xargs readlink -f | xargs dirname` and the link-up prepare
+    # step runs `borg checkpoint-prepare`. An allowlist written in September had none of them, so every
+    # live positive failed for a reason unrelated to the skill's text, and nothing noticed because CI
+    # runs this harness offline only. `borg` is a symlink to the checkout's `borg.zsh`, so `readlink -f`
+    # lands in the checkout under test and `PYTHONPATH=<that dir>` imports ITS `borg_core`.
+    for b in claude security bash sh env git jq python3 sed grep awk cat printf date mkdir rm ls dirname basename tr wc sort head tail zsh xargs readlink; do
         src=$(command -v "$b" 2>/dev/null) && ln -sf "$src" "$bindir/$b"
     done
+    [ -f "${REPO:-}/borg.zsh" ] && ln -sf "$REPO/borg.zsh" "$bindir/borg"
     install -m 0755 "$ghbody" "$bindir/gh"
     printf '%s\n' "$bindir"
 }
@@ -162,6 +171,35 @@ _eval_repo_with_source() {
     git -C "$dir" add -A >/dev/null 2>&1
     git -C "$dir" commit --quiet -m "real source" >/dev/null 2>&1
     printf '%s\n' "$dir"
+}
+
+# Puts a fixture on the feature branch the `gh` stub's pull request names (`feature/ci-gate` into `main`).
+# /borg-assimilate ships "the work on this branch" by merging that branch's PR, and on a fixture that
+# keeps its commit on `main` it correctly stops: "there's no feature branch and no PR" (measured
+# 2026-10-30). /borg-link-up derives its row from the branch's PR too. /borg-plan fixtures stay on main.
+# Args: <dir>
+#
+# THE BRANCH CARRIES ITS OWN COMMIT, matching the stub's PR title ("add CI and a coverage gate"). A branch
+# level with `main` fails /borg-assimilate's own check ("no commit of its own, so the PR describes work
+# that does not exist"), which is the skill being right about a fixture that was wrong.
+_eval_feature_branch() {
+    local dir="$1"
+    git -C "$dir" checkout --quiet -b feature/ci-gate >/dev/null 2>&1
+    mkdir -p "$dir/.github/workflows"
+    # A WORKFLOW THAT WOULD ACTUALLY RUN, a README that no longer says "no CI", and a pushed branch: a
+    # careful /borg-assimilate (Opus at xhigh) read the first version of this fixture, found that its
+    # workflow never installed pytest, and refused to merge a gate that "fails every future PR". That was
+    # the skill being right about a fixture that was wrong.
+    printf 'name: ci\non: [pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with:\n          python-version: "3.12"\n      - run: pip install pytest pytest-cov\n      - run: python -m pytest --cov=src --cov-fail-under=100 -q\n' \
+        > "$dir/.github/workflows/ci.yml"
+    printf '# calc\n\nA tiny arithmetic library.\n\nCI runs the tests with a 100%% coverage gate.\n' > "$dir/README.md"
+    _eval_git_env
+    git -C "$dir" add -A >/dev/null 2>&1
+    git -C "$dir" commit --quiet -m "add CI and a coverage gate" >/dev/null 2>&1
+    # A LOCAL BARE REMOTE, so the branch reads as pushed and a skill that pushes cannot reach the network.
+    git init --quiet --bare "$dir.origin.git" >/dev/null 2>&1
+    git -C "$dir" remote add origin "$dir.origin.git" >/dev/null 2>&1
+    git -C "$dir" push --quiet -u origin feature/ci-gate >/dev/null 2>&1
 }
 
 # THE PROMPT SHAPE, in one place so all three positives cannot drift apart.
