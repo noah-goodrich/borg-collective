@@ -10,6 +10,11 @@
 # Contract: denies with exit 2 and the fix on stderr. Fails OPEN only when the call is not ours to judge
 # (missing python3, empty or malformed stdin, another tool). Kill switch: BORG_AGENT_MODEL_GUARD=0.
 # The policy block below is byte-identical in hooks/borg-workflow-model-guard.sh (a bats test diffs them).
+#
+# Cortex Code: also registered in Cortex's hooks.json (borg.zsh _BORG_CORTEX_HOOKS), where its task tool arrives as
+# tool_name "Task" and the borg agents are installed under the same borg-collective: names. Two Cortex-only rules sit
+# after POLICY-END: a per-call model must be a full claude-sonnet-*/claude-haiku-* id (Cortex ignores aliases), and
+# Cortex's own Snowflake agents (CORTEX_SPECIALISTS) are allowed only with such a pin.
 
 set -uo pipefail
 
@@ -161,6 +166,36 @@ def cap_problems(model, effort, need_pin, agent_type=None):
     return out
 # POLICY-END
 
+# Cortex Code only (outside the shared POLICY block; borg-workflow-model-guard.sh has no Cortex twin, since Cortex has
+# no Workflow tool). Cortex runs every command hook with CORTEX_PROJECT_DIR set and Claude Code never sets it, so that
+# is the signal. Measured live on Cortex 1.2.24 (evals/cortex-agents, 2026-10-30): a per-call `model` on the task tool
+# is honored as a full id (Explore with model "claude-haiku-5-5" ran Haiku) and silently ignored as an alias (a
+# model "haiku" session billed only the session's model), so a Cortex call must name the full id. Cortex's own
+# Snowflake agents have no borg equivalent and pin no model, so they run the session's model unless the call pins a
+# full Sonnet/Haiku id.
+CORTEX_SPECIALISTS = ("snowflake-object-discovery", "semantic-view-transform", "dbt-verify", "sql-verify",
+                      "feedback")
+CORTEX_MODEL_RE = re.compile(r"^(claude-sonnet-[a-z0-9._-]+|claude-haiku-[a-z0-9._-]+)$")
+
+
+def is_cortex():
+    return bool(os.environ.get("CORTEX_PROJECT_DIR"))
+
+
+def cortex_model_problem(t, model):
+    """Cortex: None if this call's model is allowed, else the fix. A specialist must pin one; others may omit it."""
+    if model is None:
+        if t in CORTEX_SPECIALISTS:
+            return ("'%s' pins no model, so in Cortex it runs the session's model (Opus in a Queen or drone "
+                    "session). Pass model: 'claude-sonnet-5-5' (or a claude-haiku-* id)" % t)
+        return None
+    if isinstance(model, str) and CORTEX_MODEL_RE.match(model.strip().lower()):
+        return None
+    if isinstance(model, str) and MODEL_RE.match(model.strip().lower()):
+        return ("model %r is an alias, which Cortex ignores (the call runs the session's model). Pass the full id, "
+                "for example 'claude-sonnet-5-5' or 'claude-haiku-5-5'" % (model,))
+    return None
+
 
 def main():
     try:
@@ -174,15 +209,28 @@ def main():
         ti = {}
     st = ti.get("subagent_type")
     research = is_research_type(st)
+    model = ti.get("model")
+    model = None if model in (None, "") else model
+    effort = ti.get("effort")
+    effort = None if effort in (None, "") else effort
     problems = []
-    p = type_problem(st, research_invoked(data.get("transcript_path")) if research else False)
-    if p:
-        problems.append(p)
-    elif not research:
-        model = ti.get("model")
-        effort = ti.get("effort")
-        problems.extend(cap_problems(None if model in (None, "") else model,
-                                     None if effort in (None, "") else effort, False, st))
+    if is_cortex() and isinstance(st, str) and st.strip() in CORTEX_SPECIALISTS:
+        # Not on the allowlist, which is shared with Claude Code; allowed here on the same caps plus a model pin.
+        problems.extend(cap_problems(model, effort, False, st))
+        if not problems:
+            p = cortex_model_problem(st.strip(), model)
+            if p:
+                problems.append(p)
+    else:
+        p = type_problem(st, research_invoked(data.get("transcript_path")) if research else False)
+        if p:
+            problems.append(p)
+        elif not research:
+            problems.extend(cap_problems(model, effort, False, st))
+            if not problems and is_cortex():
+                p = cortex_model_problem(st.strip(), model)
+                if p:
+                    problems.append(p)
     if not problems:
         return 0
     sys.stderr.write("borg agent model guard: Agent call denied.\n")

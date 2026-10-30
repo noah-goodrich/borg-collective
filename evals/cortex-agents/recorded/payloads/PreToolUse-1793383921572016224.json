@@ -1,0 +1,15 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000013",
+ "transcript_path": "/home/user/.snowflake/cortex/conversations/00000000-0000-4000-8000-000000000013.json",
+ "cwd": "/work/probe",
+ "permission_mode": "bypassPermissions",
+ "hook_event_name": "PreToolUse",
+ "tool_name": "Task",
+ "tool_input": {
+  "description": "G5-grunt",
+  "prompt": "In the git repository /work/probe: create the directory /work/probe/out, write the file /work/probe/out/grunt.txt containing exactly the line OK, then run: git -C /work/probe add out/grunt.txt && git -C /work/probe commit -m 'eval: grunt write'. Reply with the path:line of the file you wrote.",
+  "run_in_background": false,
+  "subagent_type": "borg-collective:borg-grunt"
+ },
+ "tool_use_id": "toolu_bdrk_01NrcjobfZV2sYXeVQMT32Gr"
+}

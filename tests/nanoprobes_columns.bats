@@ -51,3 +51,18 @@ row() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"dddd4444"*"claude-sonnet-5-5"*"high"* ]] || false
 }
+
+@test "nanoprobes: a Cortex row reads model and effort from the history beside its snapshot path" {
+    row eeee5555 "${BATS_TEST_DIRNAME}/fixtures/cortex/subagent-writer.json"
+    run zsh "$BORG" nanoprobes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"eeee5555"*"claude-haiku-5-5"*"max"* ]] || false
+}
+
+@test "nanoprobes: a Cortex snapshot path with no history prints dashes, not the snapshot" {
+    printf '%s\n' '{"title":"t"}' > "${BATS_TEST_TMPDIR}/n.json"
+    row ffff6666 "${BATS_TEST_TMPDIR}/n.json"
+    run zsh "$BORG" nanoprobes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ffff6666"*" - "*" - "* ]] || false
+}

@@ -1,0 +1,15 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000013",
+ "transcript_path": "/home/user/.snowflake/cortex/conversations/00000000-0000-4000-8000-000000000013.json",
+ "cwd": "/work/probe",
+ "permission_mode": "bypassPermissions",
+ "hook_event_name": "PreToolUse",
+ "tool_name": "Task",
+ "tool_input": {
+  "description": "G2-sfod",
+  "prompt": "Reply with the single word ok. Use no tools.",
+  "run_in_background": false,
+  "subagent_type": "snowflake-object-discovery"
+ },
+ "tool_use_id": "toolu_bdrk_011tYmM18kih5HQbPE1Smqi7"
+}

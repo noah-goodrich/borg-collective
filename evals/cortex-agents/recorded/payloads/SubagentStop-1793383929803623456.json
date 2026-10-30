@@ -1,0 +1,14 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000013",
+ "transcript_path": "/home/user/.snowflake/cortex/conversations/00000000-0000-4000-8000-000000000013.json",
+ "cwd": "/work/probe",
+ "permission_mode": "bypassPermissions",
+ "hook_event_name": "SubagentStop",
+ "agent_id": "00000000-0000-4000-8000-000000000001",
+ "agent_type": "borg-collective:borg-scout",
+ "parent_session_id": "00000000-0000-4000-8000-000000000013",
+ "parent_thread_id": "70901694993",
+ "parent_thread_message_id": "70901740973",
+ "agent_transcript_path": "/home/user/.snowflake/cortex/conversations/00000000-0000-4000-8000-000000000001.json",
+ "stop_hook_active": false
+}

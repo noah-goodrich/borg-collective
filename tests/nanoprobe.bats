@@ -209,3 +209,30 @@ _probe_input_tpath() {
     [ "$(jq -s 'length' "$LOG_FILE")" -eq 1 ]
     [ "$(jq -r 'has("model") and has("effort") and .model == null and .effort == null' "$LOG_FILE")" = "true" ]
 }
+
+@test "nanoprobe log records model and effort from a Cortex history beside the snapshot path" {
+    # tests/fixtures/cortex/subagent-writer.history.jsonl sits beside the (absent) subagent-writer.json snapshot
+    run bash "$BORG_NANOPROBE_LOG" <<< "$(_probe_input_tpath "${BATS_TEST_DIRNAME}/fixtures/cortex/subagent-writer.json")"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .model "$LOG_FILE")" = "claude-haiku-5-5" ]
+    [ "$(jq -r .effort "$LOG_FILE")" = "max" ]
+    [ "$(jq -r .zero_commit "$LOG_FILE")" = "false" ]
+}
+
+@test "nanoprobe log: a Cortex history whose first assistant line has no model takes the next one" {
+    local snap="${BATS_TEST_TMPDIR}/s.json" hist="${BATS_TEST_TMPDIR}/s.history.jsonl"
+    printf '%s\n' '{"role":"assistant","content":[{"type":"text","text":"summary"}]}' \
+        '{"role":"assistant","model":"claude-sonnet-5-5","thinking_effort":"high","content":[]}' > "$hist"
+    run bash "$BORG_NANOPROBE_LOG" <<< "$(_probe_input_tpath "$snap")"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .model "$LOG_FILE")" = "claude-sonnet-5-5" ]
+    [ "$(jq -r .effort "$LOG_FILE")" = "high" ]
+}
+
+@test "nanoprobe log: a Cortex snapshot with no history still writes the row, with null model and effort" {
+    printf '%s\n' '{"title":"t"}' > "${BATS_TEST_TMPDIR}/n.json"
+    run bash "$BORG_NANOPROBE_LOG" <<< "$(_probe_input_tpath "${BATS_TEST_TMPDIR}/n.json")"
+    [ "$status" -eq 0 ]
+    [ "$(jq -s 'length' "$LOG_FILE")" -eq 1 ]
+    [ "$(jq -r '.model == null and .effort == null and .zero_commit == null' "$LOG_FILE")" = "true" ]
+}

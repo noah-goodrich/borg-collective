@@ -36,3 +36,5 @@ templates/supabase/.borg/
 .gate-armed
 evals/lifecycle-manifests/out/
 evals/session-load/out/
+evals/cortex-agents/out/
+evals/cortex-agents/live-runs/

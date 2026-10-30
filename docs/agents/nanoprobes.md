@@ -20,9 +20,11 @@ Rules moved verbatim from the top-level CLAUDE.md.
   Inspect runs with `borg nanoprobes` (alias `np`) and pull transcripts with
   `borg nanoprobe-log <id-prefix>`. Claude Code loads the agent from the borg-collective plugin as
   `borg-collective:borg-nanoprobe`; `borg setup` removes the legacy `~/.claude/agents/` copies. For Cortex
-  Code, `borg setup` copies every `agents/*.md` to `~/.snowflake/cortex/agents/`, where Cortex registers the
-  bare name `borg-nanoprobe` (it has no plugin namespace). Cortex needs one-line `description:` values and
-  full `model:` ids; `tests/agent_frontmatter.bats` pins both.
+  Code, `borg setup` installs every `agents/*.md` into `~/.snowflake/cortex/agents/` with its name rewritten to
+  the same `borg-collective:borg-nanoprobe` (Cortex registers an agent under its exact `name:` and has no plugin
+  namespace), so one name works in both CLIs. Cortex needs one-line `description:` values and full `model:` ids;
+  `tests/agent_frontmatter.bats` pins both. Cortex ignores `effort:`: its subagents run at the session's effort
+  (docs/agent-routing.md, "Cortex Code").
 - **A PR adds its own stack row**: when a brief names a stack manifest (a file under `.stacks/`), the PR adds its own row in the same PR with `python3 -m borg_core.manifest.cli add-row` (`--name`, `--ref`, `--why`, `--status`), because `/borg-link-up` cannot do it for a nanoprobe: it needs a plan slug and a PR on the current branch, and nanoprobe worktrees never run it. A stack whose PRs skip this stays at zero rows and `borg link` shows nothing for the directive. The orchestrator adds the manifest name to every brief.
 - **Bounded termination (agent loops)**: when fanning out nanoprobes or running any retry/until
   loop, set an explicit ceiling (max spawns / max iterations) up front and stop when hit. Never

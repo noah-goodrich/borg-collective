@@ -224,3 +224,128 @@ _run_as() {
     [ -z "$HOOK_OUT" ]
     [ "$(jq -r .evidence_found "$LOG_FILE")" = "false" ]
 }
+
+# --- Cortex Code transcripts ----------------------------------------------------------------------------------------
+# Cortex sends agent_transcript_path = <id>.json (a snapshot with no turns); the turns are in <id>.history.jsonl, one
+# message per line, with nested {tool_use:{name,input,tool_use_id}} calls under lowercase names and
+# {tool_result:{status,tool_use_id}} results. Shapes recorded from live Cortex 1.2.18 runs (evals/cortex-agents).
+
+CX_SNAP() { printf '%s' "${BATS_TEST_TMPDIR}/cx.json"; }
+CX_HIST() { printf '%s' "${BATS_TEST_TMPDIR}/cx.history.jsonl"; }
+
+# _ctx <name> <id> <status> [command]: a Cortex tool call plus its result (status success|error).
+_ctx() {
+    jq -nc --arg n "$1" --arg i "$2" --arg c "${4:-}" \
+        '{role:"assistant",model:"claude-sonnet-5-5",thinking_effort:"high",id:"a",
+          content:[{type:"tool_use",tool_use:{name:$n,tool_use_id:$i,classification:"write",client_side_execute:true,
+            input:(if $c=="" then {file_path:"a.txt",content:"x"} else {command:$c,description:"d"} end)}}]}' >> "$(CX_HIST)"
+    jq -nc --arg n "$1" --arg i "$2" --arg s "$3" \
+        '{role:"user",id:"u",content:[{type:"tool_result",message_id:"m",
+          tool_result:{name:$n,status:$s,tool_use_id:$i,content:[{type:"text",text:"x"}]}}]}' >> "$(CX_HIST)"
+}
+
+# _cpending <name> <id> [command]: a Cortex tool call whose result is not written yet.
+_cpending() {
+    jq -nc --arg n "$1" --arg i "$2" --arg c "${3:-}" \
+        '{role:"assistant",model:"claude-sonnet-5-5",id:"a",
+          content:[{type:"tool_use",tool_use:{name:$n,tool_use_id:$i,
+            input:(if $c=="" then {file_path:"a.txt"} else {command:$c} end)}}]}' >> "$(CX_HIST)"
+}
+
+# _crun [type]: run the hook on the Cortex snapshot path, as Cortex does.
+_crun() {
+    _run_as "${1:-borg-collective:borg-nanoprobe}" "Edited lib/foo.sh:10 done." agent-cx123456 "$(CX_SNAP)"
+}
+
+@test "cortex: a successful write, edit or notebook_edit counts" {
+    local n
+    for n in write edit notebook_edit; do
+        rm -f "$(CX_HIST)"
+        _ctx "$n" tu1 success
+        _crun
+        [ -z "$HOOK_OUT" ] || { echo "not counted: $n"; return 1; }
+        [ "$(jq -r .zero_commit "$LOG_FILE")" = "false" ]
+    done
+}
+
+@test "cortex: bash git commit, git push and file-writing commands count" {
+    local c
+    local -a cmds=(
+        "git -C /work add a.txt && git -C /work commit -m 'add a'"
+        "git push origin fix/x"
+        "printf 'OK' > /work/out/a.txt"
+        "echo hi | tee out.txt"
+        "sed -i '' 's/a/b/' f.txt"
+    )
+    for c in "${cmds[@]}"; do
+        rm -f "$(CX_HIST)"
+        _ctx bash tu1 success "$c"
+        _crun
+        [ -z "$HOOK_OUT" ] || { echo "not counted: $c"; return 1; }
+        [ "$(jq -r .zero_commit "$LOG_FILE")" = "false" ]
+    done
+}
+
+@test "cortex: read-only bash, read, grep and glob do not count" {
+    local c
+    for c in "git status" "ls -la /work/out" "make test >/dev/null 2>&1" "wc -c a.txt"; do
+        rm -f "$(CX_HIST)"
+        _ctx bash tu1 success "$c"
+        _ctx read tu2 success
+        _ctx grep tu3 success
+        _ctx glob tu4 success
+        _crun
+        _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "ZERO-WRITE" || { echo "counted: $c"; return 1; }
+        [ "$(jq -r .zero_commit "$LOG_FILE")" = "true" ]
+    done
+}
+
+@test "cortex: a write or bash write whose result status is error does not count" {
+    _ctx write tu1 error
+    _ctx bash tu2 error "git -C /work commit -m x"
+    _crun
+    _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "ZERO-WRITE"
+    [ "$(jq -r .zero_commit "$LOG_FILE")" = "true" ]
+}
+
+@test "cortex: a write with no result yet counts (the history lags)" {
+    _cpending edit tu1
+    _crun
+    [ -z "$HOOK_OUT" ]
+    [ "$(jq -r .zero_commit "$LOG_FILE")" = "false" ]
+}
+
+@test "cortex: a malformed line and a non-array content are tolerated" {
+    printf '%s\n' '{not json' >> "$(CX_HIST)"
+    printf '%s\n' '{"role":"user","content":"plain string"}' >> "$(CX_HIST)"
+    _ctx write tu1 success
+    _crun
+    [ -z "$HOOK_OUT" ]
+    [ "$(jq -r .zero_commit "$LOG_FILE")" = "false" ]
+}
+
+@test "cortex: a snapshot with no history beside it gives no verdict (was a false ZERO-WRITE)" {
+    printf '%s\n' '{"title":"t","thread":{"threadId":"1"}}' > "$(CX_SNAP)"
+    _crun
+    [ -z "$HOOK_OUT" ]
+    [ "$(jq -r '.zero_commit | type' "$LOG_FILE")" = "null" ]
+}
+
+@test "cortex: a Claude-shaped block inside a Cortex history is not counted" {
+    # a Cortex history never carries .message.content; the Cortex parse must not fall back to it
+    jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"tu1",name:"Write",input:{file_path:"a"}}]}}' >> "$(CX_HIST)"
+    _crun
+    _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "ZERO-WRITE"
+}
+
+@test "cortex: a reviewer with no writes is not flagged, a namespaced grunt with a write is clean" {
+    _ctx read tu1 success
+    _crun borg-collective:borg-reviewer
+    [ -z "$HOOK_OUT" ]
+    [ "$(jq -r '.zero_commit | type' "$LOG_FILE")" = "null" ]
+    rm -f "$(CX_HIST)"
+    _ctx write tu1 success
+    _crun borg-collective:borg-grunt
+    [ -z "$HOOK_OUT" ]
+    [ "$(jq -r .zero_commit "$LOG_FILE")" = "false" ]
+}

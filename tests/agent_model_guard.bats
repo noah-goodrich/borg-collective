@@ -14,6 +14,8 @@ BUILD_PLUGIN="${BATS_TEST_DIRNAME}/../scripts/build-plugin.sh"
 
 setup() {
     setup_temp_dirs
+    # The guard reads CORTEX_PROJECT_DIR as "running under Cortex Code"; the Claude Code cases must not inherit it.
+    unset CORTEX_PROJECT_DIR
 }
 
 # _agent <tool_input-json> [transcript_path] [tool_name]
@@ -22,6 +24,14 @@ _agent() {
     json=$(jq -nc --argjson ti "$1" --arg tp "${2:-}" --arg tn "${3:-Agent}" \
         '{tool_name:$tn, tool_input:$ti} + (if $tp == "" then {} else {transcript_path:$tp} end)')
     run bash -c "printf '%s' \"\$1\" | '$BASH_BIN' '$HOOK' 2>&1" _ "$json"
+}
+
+# _cortex <tool_input-json>: the same call the way Cortex Code delivers it (tool_name Task, CORTEX_PROJECT_DIR set).
+_cortex() {
+    local json
+    json=$(jq -nc --argjson ti "$1" '{hook_event_name:"PreToolUse", tool_name:"Task", tool_input:$ti,
+        transcript_path:"/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json"}')
+    run bash -c "printf '%s' \"\$1\" | CORTEX_PROJECT_DIR=/work '$BASH_BIN' '$HOOK' 2>&1" _ "$json"
 }
 
 # --- 1. deny-by-default -------------------------------------------------------------------------
@@ -293,4 +303,117 @@ MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result
 
 @test "fable-reviewer says agentType, or model + effort" {
     grep -q "agentType, or model + effort" "${BATS_TEST_DIRNAME}/../skills/fable-reviewer/SKILL.md"
+}
+
+# --- Cortex Code (CORTEX_PROJECT_DIR set, tool_name Task) ----------------------------------------------------------
+# Measured live on Cortex 1.2.18 (evals/cortex-agents): agents resolve by their exact `name:`, so borg's are installed
+# as borg-collective:<name>; a per-call model is honored as a full id and ignored as an alias.
+
+CORTEX_SPECIALISTS="snowflake-object-discovery semantic-view-transform dbt-verify sql-verify feedback"
+
+@test "cortex: every namespaced borg agent passes with no overrides" {
+    local t
+    for t in scout grunt nanoprobe researcher reviewer verifier; do
+        _cortex "{\"subagent_type\":\"borg-collective:borg-$t\",\"description\":\"d\",\"prompt\":\"p\"}"
+        [ "$status" -eq 0 ] || { echo "borg-$t: $output"; false; }
+    done
+}
+
+@test "cortex: a full sonnet/haiku id passes and an alias is denied with the full-id fix" {
+    local m
+    for m in claude-sonnet-5-5 claude-haiku-5-5 claude-haiku-4-5; do
+        _cortex "{\"subagent_type\":\"borg-collective:borg-nanoprobe\",\"model\":\"$m\"}"
+        [ "$status" -eq 0 ] || { echo "model $m: $output"; false; }
+    done
+    for m in sonnet haiku Sonnet; do
+        _cortex "{\"subagent_type\":\"borg-collective:borg-nanoprobe\",\"model\":\"$m\"}"
+        [ "$status" -eq 2 ] || { echo "alias $m allowed"; false; }
+        [[ "$output" == *"alias, which Cortex ignores"* ]] || false
+        [[ "$output" == *"claude-sonnet-5-5"* ]] || false
+    done
+}
+
+@test "cortex: an opus pin, xhigh effort or a non-string model is still denied on a borg agent" {
+    _cortex '{"subagent_type":"borg-collective:borg-nanoprobe","model":"claude-opus-5-5"}'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"above the cap"* ]] || false
+    _cortex '{"subagent_type":"borg-collective:borg-nanoprobe","effort":"max"}'
+    [ "$status" -eq 2 ]
+    _cortex '{"subagent_type":"borg-collective:borg-nanoprobe","model":5}'
+    [ "$status" -eq 2 ]
+}
+
+@test "cortex: Explore, Plan, general-purpose and untyped spawns are denied, even with a full-id pin" {
+    local t
+    for t in Explore Plan general-purpose; do
+        _cortex "{\"subagent_type\":\"$t\",\"model\":\"claude-haiku-5-5\"}"
+        [ "$status" -eq 2 ] || { echo "$t allowed"; false; }
+        [[ "$output" == *"borg-collective:borg-"* ]] || false
+    done
+    _cortex '{"description":"d","prompt":"p"}'
+    [ "$status" -eq 2 ]
+}
+
+@test "cortex: a bare borg name is denied and pointed at the namespaced form" {
+    _cortex '{"subagent_type":"borg-verifier"}'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"borg-collective:borg-verifier"* ]] || false
+}
+
+@test "cortex: each Cortex Snowflake agent with no model is denied and the message names the fix" {
+    local t
+    for t in $CORTEX_SPECIALISTS; do
+        _cortex "{\"subagent_type\":\"$t\",\"description\":\"d\",\"prompt\":\"p\"}"
+        [ "$status" -eq 2 ] || { echo "$t allowed unpinned"; false; }
+        [[ "$output" == *"'$t' pins no model"* ]] || false
+        [[ "$output" == *"model: 'claude-sonnet-5-5'"* ]] || false
+    done
+}
+
+@test "cortex: each Cortex Snowflake agent passes with a full sonnet or haiku id" {
+    local t m
+    for t in $CORTEX_SPECIALISTS; do
+        for m in claude-sonnet-5-5 claude-haiku-5-5; do
+            _cortex "{\"subagent_type\":\"$t\",\"model\":\"$m\"}"
+            [ "$status" -eq 0 ] || { echo "$t $m: $output"; false; }
+        done
+    done
+}
+
+@test "cortex: a Cortex Snowflake agent with an alias, an opus pin or xhigh effort is denied" {
+    _cortex '{"subagent_type":"dbt-verify","model":"haiku"}'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"alias, which Cortex ignores"* ]] || false
+    _cortex '{"subagent_type":"sql-verify","model":"claude-opus-5-5"}'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"above the cap"* ]] || false
+    _cortex '{"subagent_type":"snowflake-object-discovery","model":"claude-sonnet-5-5","effort":"xhigh"}'
+    [ "$status" -eq 2 ]
+}
+
+@test "claude: the Cortex Snowflake agents stay off the allowlist, and aliases stay allowed" {
+    local t
+    for t in $CORTEX_SPECIALISTS; do
+        _agent "{\"subagent_type\":\"$t\",\"model\":\"claude-sonnet-5-5\"}"
+        [ "$status" -eq 2 ] || { echo "$t allowed in Claude Code"; false; }
+    done
+    _agent '{"subagent_type":"borg-collective:borg-nanoprobe","model":"sonnet"}'
+    [ "$status" -eq 0 ]
+}
+
+@test "cortex: an empty CORTEX_PROJECT_DIR is Claude Code, and the kill switch works under Cortex" {
+    local json
+    json='{"tool_name":"Task","tool_input":{"subagent_type":"borg-collective:borg-nanoprobe","model":"sonnet"}}'
+    run bash -c "printf '%s' '$json' | CORTEX_PROJECT_DIR= '$BASH_BIN' '$HOOK' 2>&1"
+    [ "$status" -eq 0 ]
+    export BORG_AGENT_MODEL_GUARD=0
+    _cortex '{"subagent_type":"Explore"}'
+    [ "$status" -eq 0 ]
+}
+
+@test "cortex: the Cortex rules sit outside the shared POLICY block" {
+    run bash -c "sed -n '/^# POLICY-BEGIN/,/^# POLICY-END/p' '$HOOK' | grep -c 'CORTEX'"
+    [ "$output" = "0" ]
+    grep -q '^CORTEX_SPECIALISTS = ' "$HOOK"
+    ! grep -q 'CORTEX_SPECIALISTS' "$WF_HOOK"
 }
