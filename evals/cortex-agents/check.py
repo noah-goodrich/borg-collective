@@ -104,7 +104,6 @@ class Session:
             raise Premise(f"{path.name}: no init event with a session_id")
         self.session_id = str(init["session_id"])
         result = next((e for e in events if e.get("type") == "result"), None)
-        self.finished = result is not None
         usage = (result or {}).get("modelUsage")
         self.billed = sorted(usage) if isinstance(usage, dict) else []
         calls: dict[str, list[dict]] = {}
@@ -392,10 +391,7 @@ def replay(run: Run, repo: Path) -> int:
 
 
 def _rewrite_jsonl(path: Path, fn) -> None:
-    lines = []
-    for rec in load_jsonl(path):
-        lines.append(json.dumps(fn(rec)))
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text("".join(json.dumps(fn(rec)) + "\n" for rec in load_jsonl(path)), encoding="utf-8")
 
 
 def _set_first_assistant(path: Path, key: str, value: str) -> None:
@@ -545,13 +541,14 @@ _HOME_RE = re.compile(r"/Users/[^/\s\"']+")
 
 def _leaks(text: str) -> list[str]:
     """Identity and path patterns that must not survive into recorded/ (the sanitize step refuses to write)."""
-    found = []
-    for pat in (r"/Users/", r"/var/folders", r"/private/", r"snowflakecomputing\.com"):
-        if re.search(pat, text):
-            found.append(pat)
-    for word in {os.environ.get("USER", ""), Path.home().name}:
-        if len(word) >= 3 and re.search(r"(?i)\b" + re.escape(word) + r"\b", text):
-            found.append(f"user name {word!r}")
+    found = [
+        pat for pat in (r"/Users/", r"/var/folders", r"/private/", r"snowflakecomputing\.com") if re.search(pat, text)
+    ]
+    found.extend(
+        f"user name {word!r}"
+        for word in {os.environ.get("USER", ""), Path.home().name}
+        if len(word) >= 3 and re.search(r"(?i)\b" + re.escape(word) + r"\b", text)
+    )
     if any(not u.startswith("00000000-0000-4000-8000-") for u in UUID_RE.findall(text)):
         found.append("an id that was not replaced")
     return found
@@ -615,7 +612,7 @@ def _replace_ids(stage: Path) -> list[str]:
     texts = {f: f.read_text(encoding="utf-8") for f in files}
     for f in files:
         for u in UUID_RE.findall(f.name + "\n" + texts[f]):
-            ids.setdefault(u, "00000000-0000-4000-8000-%012d" % (len(ids) + 1))
+            ids.setdefault(u, f"00000000-0000-4000-8000-{len(ids) + 1:012d}")
     leaks = []
     for f in files:
         text = UUID_RE.sub(lambda m: ids[m.group(0)], texts[f])

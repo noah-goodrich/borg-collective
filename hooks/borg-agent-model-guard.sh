@@ -217,20 +217,17 @@ def main():
     if is_cortex() and isinstance(st, str) and st.strip() in CORTEX_SPECIALISTS:
         # Not on the allowlist, which is shared with Claude Code; allowed here on the same caps plus a model pin.
         problems.extend(cap_problems(model, effort, False, st))
-        if not problems:
-            p = cortex_model_problem(st.strip(), model)
-            if p:
-                problems.append(p)
     else:
         p = type_problem(st, research_invoked(data.get("transcript_path")) if research else False)
         if p:
             problems.append(p)
         elif not research:
             problems.extend(cap_problems(model, effort, False, st))
-            if not problems and is_cortex():
-                p = cortex_model_problem(st.strip(), model)
-                if p:
-                    problems.append(p)
+    # Reached only with a str subagent_type that passed its type check and the shared caps.
+    if not problems and not research and is_cortex():
+        p = cortex_model_problem(st.strip(), model)
+        if p:
+            problems.append(p)
     if not problems:
         return 0
     sys.stderr.write("borg agent model guard: Agent call denied.\n")
