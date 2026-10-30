@@ -2,6 +2,8 @@
 
 Rules owned by this directory, moved verbatim from the top-level CLAUDE.md.
 
+Every test here is Tier 1 (deterministic, fully scripted, no model). Tiers 2 and 3 live under `evals/`; the rules for all three are in `docs/agents/testing-tiers.md`.
+
 - **A redirected `HOME` also silently deletes the test sandbox's git identity, and macOS won't tell
   you**: `setup_temp_dirs()` in `tests/test_helper/setup.bash` redirects `HOME`, which means
   `~/.gitconfig` is gone by construction for every bats case — but `recon_adapter_github.bats`'s

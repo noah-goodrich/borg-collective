@@ -39,6 +39,7 @@ Nested CLAUDE.md files load when you read a file in their directory. The `docs/a
 - Before naming anything repository or project in code (`borg_core/`, `lib/`, `hooks/`, `bin/`), help text or messages, read the Vocabulary rule in `docs/agents/cli-rules.md`.
 - Before editing `_borg_print_briefing` or `borg link --brief`, read `docs/agents/link-brief.md`.
 - Before spawning or editing a nanoprobe, or fanning out agents, read `docs/agents/nanoprobes.md`.
+- Before writing or changing a test, eval or grader, read `docs/agents/testing-tiers.md`: the three tiers and the rules for each.
 - To look up a command or flag, read `docs/agents/commands.md`; to find a file, read `docs/agents/files.md`.
 - For what is shipped and the current release, read `docs/agents/implemented.md`.
 - For history moved out of this file, read `docs/agents/learned.md`, heading 'Moved from CLAUDE.md 2026-10-30'.
