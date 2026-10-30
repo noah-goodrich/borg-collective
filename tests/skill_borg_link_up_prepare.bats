@@ -17,6 +17,11 @@ _has() {
     grep -qF -- "$1" "$SKILL" || { echo "SKILL.md lost: $1"; false; }
 }
 
+# A phrase that moved to a reference file (skills/borg-link-up/references/<name>.md).
+_has_ref() {
+    grep -qF -- "$2" "${BATS_TEST_DIRNAME}/../skills/borg-link-up/references/$1.md" || { echo "references/$1.md lost: $2"; false; }
+}
+
 _lacks() {
     ! grep -qF -- "$1" "$SKILL" || { echo "SKILL.md still has: $1"; false; }
 }
@@ -52,16 +57,18 @@ _first_line() {
 }
 
 @test "AC4: a fallback paragraph exists, keyed on STATUS: fallback and on a missing block" {
-    _has "## Fallback"
-    _has "STATUS: fallback"
-    _has "block is missing"
+    _has_ref fallback "# Fallback"
+    _has_ref fallback "STATUS: fallback"
+    _has_ref fallback "block is missing"
+    _has "references/fallback.md"
+    _has "the prepared block is missing"
 }
 
 @test "AC4: the fallback list keeps the legacy steps and the checkpoint-name provenance" {
-    _has "borg checkpoint-name"
-    _has "test -e"
-    _has "borg_core.planstate.cli"
-    _has "borg_core.manifest.cli"
+    _has_ref fallback "borg checkpoint-name"
+    _has_ref fallback "test -e"
+    _has_ref fallback "borg_core.planstate.cli"
+    _has_ref fallback "borg_core.manifest.cli"
 }
 
 @test "AC4: the skill says the verb computes the collision-proof name" {
@@ -141,20 +148,21 @@ _first_line() {
 }
 
 @test "AC6: the criteria reconciliation rules survive" {
-    _has "mechanical, not judged"
-    _has "You do not decide what is met."
-    _has "If absent, skip"
-    _has "Run it **once per link-up**"
-    _has "do NOT retry and do NOT flip anything by hand"
-    _has "NEVER flipped, by the engine or by you"
-    _has "carrying the engine's own"
-    _has "flipped by link-up"
-    _has "A criterion resting only on this session's belief"
-    _has "Never point it at a directive under"
-    _has "One invocation, no retry loop, ever."
-    _has "Omit the whole section when the engine did not"
-    _has "A link-up flip is bookkeeping, not authorization."
-    _has "/borg-assimilate"
+    _has "references/criteria.md"
+    _has_ref criteria "mechanical, not judged"
+    _has_ref criteria "You do not decide what is met."
+    _has_ref criteria "If absent, skip"
+    _has_ref criteria "Run it **once per link-up**"
+    _has_ref criteria "do NOT retry and do NOT flip anything by hand"
+    _has_ref criteria "NEVER flipped, by the engine or by you"
+    _has_ref criteria "carrying the engine's own"
+    _has_ref criteria "flipped by link-up"
+    _has_ref criteria "A criterion resting only on this session's belief"
+    _has_ref criteria "Never point it at a directive under"
+    _has_ref criteria "One invocation, no retry loop, ever."
+    _has_ref criteria "Omit the whole section when the engine did not"
+    _has_ref criteria "A link-up flip is bookkeeping, not authorization."
+    _has_ref criteria "/borg-assimilate"
 }
 
 @test "AC6: the engine is run once, never twice, never by hand, never retried" {
@@ -166,35 +174,47 @@ _first_line() {
 @test "AC6: the manifest row rules survive" {
     _has "**Creation belongs to \`/borg-plan\`.**"
     _has "Never scaffold from link-up"
-    _has "The ref is never recalled from this session's own narrative."
+    _has "it is never recalled from this session's own narrative"
     _has "Never write a stub row for a branch with no PR."
-    _has "Degraded \`gh\`, no PR for this branch, or a detached HEAD"
-    _has "Reuse a lane already in the manifest, verbatim."
-    _has "--new-lane"
-    _has "refused by name"
     _has "**No row.**"
+    _has "**Wrote:**"
     _has "## Manifest Row"
+    _has "references/manifest.md"
+    _has_ref manifest "The ref is never recalled from this session's own narrative."
+    _has_ref manifest "Degraded \`gh\`, no PR for this branch, or a detached HEAD"
+    _has_ref manifest "Reuse a lane already in the manifest, verbatim."
+    _has_ref manifest "--new-lane"
+    _has_ref manifest "refused by name"
 }
 
 @test "AC6: the three extension hook points and their precedence rule survive" {
-    _has "01-context"
-    _has "02-output"
-    _has "03-followup"
-    _has "EXTENSION_01_CONTEXT"
-    _has "EXTENSION_02_OUTPUT"
-    _has "EXTENSION_03_FOLLOWUP"
-    _has "Prefer-tool"
-    _has "the MACHINE layer wins"
-    _has "the repository layer wins"
-    _has "docs/extensions.md"
-    _has "skip silently"
-    _has "do not delete or rewrite the checkpoint"
+    _has "references/extensions.md"
+    _has "EXTENSION_"
+    _has_ref extensions "01-context"
+    _has_ref extensions "02-output"
+    _has_ref extensions "03-followup"
+    _has_ref extensions "EXTENSION_01_CONTEXT"
+    _has_ref extensions "EXTENSION_02_OUTPUT"
+    _has_ref extensions "EXTENSION_03_FOLLOWUP"
+    _has_ref extensions "Prefer-tool"
+    _has_ref extensions "the MACHINE layer wins"
+    _has_ref extensions "the repository layer wins"
+    _has_ref extensions "docs/extensions.md"
+    _has_ref extensions "skip silently"
+    _has_ref extensions "do not delete or rewrite the checkpoint"
 }
 
-@test "AC6: the skill stays under its previous 17.2 KB (ceiling 15000 bytes)" {
+@test "AC6: the default run needs no reference: the core says when to Read each one" {
+    _has "makes no extra tool call"
+    _has "\`PLAN\` is not \`none\`: Read"
+    _has "is not \`not present\`: Read"
+    _has "or the prepared block is missing: Read"
+}
+
+@test "AC6: the skill core stays lean (ceiling 9000 bytes; was 14.9 KB before the references split)" {
     local bytes
     bytes=$(wc -c < "$SKILL")
-    [ "$bytes" -lt 15000 ] || { echo "SKILL.md is $bytes bytes"; false; }
+    [ "$bytes" -lt 9000 ] || { echo "SKILL.md is $bytes bytes"; false; }
 }
 
 @test "AC6: no skill composes a timestamp, and the injected form appears only once" {
