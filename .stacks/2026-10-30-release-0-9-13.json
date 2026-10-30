@@ -71,6 +71,13 @@
       "ref": "noah-goodrich/borg-collective#474",
       "status": "merged",
       "why": "Cortex: one agent name, guard and logger"
+    },
+    {
+      "lane": "_default",
+      "order": "11",
+      "ref": "noah-goodrich/borg-collective#475",
+      "status": "open",
+      "why": "VERSION 0.9.13, release notes, then tag"
     }
   ]
 }
