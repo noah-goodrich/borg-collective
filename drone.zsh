@@ -319,6 +319,26 @@ ensure_postgres() {
     docker compose -f "$POSTGRES_COMPOSE" up -d
 }
 
+# The shared dev-postgres is opt-in: start it only for a repository whose .devcontainer/ names it (a
+# CAIRN_DB_HOST, a depends_on, a connection string). Every other repository gets just the devnet
+# network, which its compose file declares as external. Starting it for everyone kept a database
+# running that no open repository used.
+_repository_uses_shared_postgres() {
+    local repository_dir="$1"
+    [[ -d "$repository_dir/.devcontainer" ]] || return 1
+    grep -rqs -- 'dev-postgres' "$repository_dir/.devcontainer"
+}
+
+ensure_repository_services() {
+    local repository_dir="$1"
+    if _repository_uses_shared_postgres "$repository_dir"; then
+        ensure_postgres
+    else
+        dbg "ensure_repository_services: $repository_dir does not reference dev-postgres, skipping it"
+        ensure_network
+    fi
+}
+
 _read_devcontainer_field() {
     local repository_dir="$1" field="$2"
     local dc_json="$repository_dir/.devcontainer/devcontainer.json"
@@ -537,7 +557,7 @@ cmd_up() {
 
     # ── Devcontainer path ─────────────────────────────────────────────────────
 
-    ensure_postgres
+    ensure_repository_services "$repository_dir"
 
     # The compose files bind-mount the host resume ledger. Create it first: a missing bind source is
     # created by Docker as root, which the host-side watcher could not then write.
@@ -945,7 +965,7 @@ cmd_exec() {
     container=$(get_repository_container "$repository_name" "$repository_dir")
     if [[ -z "$container" ]]; then
         warn "$repository_name: container down — running drone up"
-        ensure_postgres
+        ensure_repository_services "$repository_dir"
         run_initialize_command "$repository_dir"
         _run_pre_up "$repository_dir" "$repository_name"
         docker compose -p "$repository_name" -f "$compose" up -d
