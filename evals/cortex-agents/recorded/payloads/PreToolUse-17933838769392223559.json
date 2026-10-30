@@ -1,0 +1,15 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000022",
+ "transcript_path": "/home/user/.snowflake/cortex/conversations/00000000-0000-4000-8000-000000000022.json",
+ "cwd": "/work/probe",
+ "permission_mode": "bypassPermissions",
+ "hook_event_name": "PreToolUse",
+ "tool_name": "Task",
+ "tool_input": {
+  "description": "A4-name",
+  "prompt": "List the top-level files in /work/probe and reply with their names on one line.",
+  "run_in_background": false,
+  "subagent_type": "borg-collective:borg-scout"
+ },
+ "tool_use_id": "toolu_invented_0013"
+}

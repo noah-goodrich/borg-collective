@@ -1,0 +1,10 @@
+{
+  "probe": "/work/probe",
+  "session_model_flag": "claude-sonnet-5-5",
+  "session_effort_flag": "medium",
+  "cortex_version": "Cortex Code v1.2.24",
+  "date": "2026-10-30T18:12Z",
+  "scout_pin_model": "claude-haiku-5-5",
+  "scout_pin_effort": "low",
+  "grunt_pin_model": "claude-haiku-5-5"
+}

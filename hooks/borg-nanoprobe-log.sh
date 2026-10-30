@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# borg-nanoprobe-log.sh — Claude Code SubagentStop hook
+# borg-nanoprobe-log.sh — Claude Code / Cortex Code SubagentStop hook
 #
 # Fires when a subagent (e.g. borg-nanoprobe) completes. Appends one JSONL line
 # to <state root>/agents.jsonl describing the run so the orchestrator can list
@@ -58,13 +58,27 @@ command -v jq >/dev/null 2>&1 || exit 0
 AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // ""' 2>/dev/null || true)
 AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r 'if .agent_type == null then "?" else .agent_type end' 2>/dev/null || true)
 # Only a PRESENT, empty agent_type marks a Claude Code internal agent. A missing or null key is an unknown
-# payload shape (for example Cortex Code, whose registration in borg.zsh has no matcher): logged as "?".
-# An empty one the matcher lets through must not reach the evidence/zero-commit warnings or the log.
+# payload shape (Cortex Code does send agent_type, verified 2026-10-30, but its registration in borg.zsh has no
+# matcher): logged as "?". An empty one the matcher lets through must not reach the evidence/zero-commit
+# warnings or the log.
 [[ -z "$AGENT_TYPE" ]] && exit 0
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.agent_transcript_path // ""' 2>/dev/null || true)
 LAST_MSG=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // ""' 2>/dev/null || true)
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
 [[ -z "$CWD" ]] && CWD="${PWD:-}"
+
+# Cortex Code sends agent_transcript_path = <id>.json, a conversation snapshot with no turns in it. The turns live
+# beside it in <id>.history.jsonl, one message per line: an assistant line carries model and thinking_effort, a tool
+# call is {type:"tool_use", tool_use:{name, input, tool_use_id}} with a lowercase name (bash, write, edit), and its
+# result is {type:"tool_result", tool_result:{status, tool_use_id}}, where status "error" marks a failed call.
+# Claude Code transcripts end in .jsonl, so a .json path selects the Cortex shape. The ZERO-WRITE and model/effort
+# judgements below read TX_FILE; the summary recovery stays Claude-only (Cortex sends last_assistant_message).
+TX_FILE="$TRANSCRIPT_PATH"
+TX_FMT=claude
+if [[ "$TRANSCRIPT_PATH" == *.json ]]; then
+    TX_FILE="${TRANSCRIPT_PATH%.json}.history.jsonl"
+    TX_FMT=cortex
+fi
 
 # ─── Summary recovery ─────────────────────────────────────────────────────────
 # last_assistant_message is the final assistant TEXT block. Background subagents end on a tool_use with
@@ -174,9 +188,12 @@ fi
 # redirect to anything but /dev/null|stdout|stderr or an fd dup like 2>&1, tee, sed -i, a heredoc to a file),
 # joining each tool_use to its tool_result by tool_use_id and dropping only is_error results (a call with
 # no result yet counts). All patterns run inside the one jq pass over the transcript.
+# Cortex transcripts (TX_FMT=cortex) go through `norm` first, which maps each nested tool_use/tool_result to the
+# Claude block shape (bash/write/edit/notebook_edit -> Bash/Write/Edit/NotebookEdit, status "error" -> is_error),
+# so the counting rules below are the same for both CLIs.
 # zero_commit: true = flagged, false = writes found, null = not applicable (non-writer or no transcript).
 ZERO_COMMIT=null
-if [[ "$IS_WRITER" == "true" && -n "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
+if [[ "$IS_WRITER" == "true" && -n "$TX_FILE" && -r "$TX_FILE" ]]; then
     # git, then any mix of -C <path> (bare or quoted), -c k=v and --long[=value], then commit|push; the
     # lead-in may be start, whitespace, ; & | ( or a quote so `bash -c '...git commit...'` matches.
     _git_re="(^|[[:space:];&|(\"'])git((\\s+-C\\s+(\"[^\"]*\"|'[^']*'|\\S+))|(\\s+-c\\s+\\S+)|(\\s+--[A-Za-z][A-Za-z-]*(=\\S+)?))*\\s+(commit|push)(\\s|\$|[\"'])"
@@ -192,9 +209,19 @@ if [[ "$IS_WRITER" == "true" && -n "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]
     # Line by line: one malformed line (fromjson?) or non-array content must not void the whole parse.
     # A tool_use with no tool_result yet counts (the transcript lags); only an is_error result drops it.
     _writes=$(jq -R -r -n --arg re "$_git_re" --arg dup "$_w_dup" --arg sink "$_w_sink" --arg redir "$_w_redir" \
-        --arg tee "$_w_tee" --arg sed "$_w_sed" '
-        [inputs | fromjson? | (.message.content? // []) | if type == "array" then .[] else empty end
-            | select(type == "object")] as $blocks
+        --arg tee "$_w_tee" --arg sed "$_w_sed" --arg fmt "$TX_FMT" '
+        def norm:
+            if $fmt != "cortex" then .
+            elif .type == "tool_use" and (.tool_use | type) == "object" then
+                .tool_use | {type: "tool_use", id: .tool_use_id, input: (.input // {}),
+                    name: ({bash: "Bash", write: "Write", edit: "Edit", notebook_edit: "NotebookEdit"}[.name // ""]
+                        // .name)}
+            elif .type == "tool_result" and (.tool_result | type) == "object" then
+                .tool_result | {type: "tool_result", tool_use_id, is_error: (.status == "error")}
+            else . end;
+        [inputs | fromjson? | ((if $fmt == "cortex" then .content? else .message.content? end) // [])
+            | if type == "array" then .[] else empty end
+            | select(type == "object") | norm] as $blocks
         | ([$blocks[] | select(.type == "tool_result" and (.is_error // false) == true) | .tool_use_id]) as $bad
         | [$blocks[]
             | select(.type == "tool_use" and (.id as $i | $bad | index($i) == null))
@@ -208,7 +235,7 @@ if [[ "$IS_WRITER" == "true" && -n "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]
                   )))
               )
           ] | length
-    ' "$TRANSCRIPT_PATH" 2>/dev/null || true)
+    ' "$TX_FILE" 2>/dev/null || true)
     if [[ "$_writes" =~ ^[0-9]+$ ]]; then
         if (( _writes == 0 )); then
             ZERO_COMMIT=true
@@ -228,13 +255,19 @@ NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Model + effort from the transcript's first assistant entry (same selection as borg.zsh's
 # _borg_nanoprobe_model_effort). Recorded now because Claude Code prunes transcripts after ~30 days.
-# Absent file or field yields JSON null; never drops the row.
+# A Cortex history line carries them at the top level (model, thinking_effort); the first assistant line that has a
+# model wins. Absent file or field yields JSON null; never drops the row.
 MODEL_JSON=null
 EFFORT_JSON=null
-if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
-    _me=$(jq -c 'select(.type == "assistant") |
-        [(.message.model // null), (.effort // .perTurnEffort // null)]' "$TRANSCRIPT_PATH" 2>/dev/null \
-        | head -1 || true)
+if [[ -n "$TX_FILE" && -f "$TX_FILE" && -r "$TX_FILE" ]]; then
+    if [[ "$TX_FMT" == "cortex" ]]; then
+        _me=$(jq -c 'select(.role == "assistant" and (.model | type) == "string") |
+            [.model, (.thinking_effort // null)]' "$TX_FILE" 2>/dev/null | head -1 || true)
+    else
+        _me=$(jq -c 'select(.type == "assistant") |
+            [(.message.model // null), (.effort // .perTurnEffort // null)]' "$TX_FILE" 2>/dev/null \
+            | head -1 || true)
+    fi
     if [[ -n "$_me" ]]; then
         MODEL_JSON=$(printf '%s' "$_me" | jq -c '.[0]' 2>/dev/null || echo null)
         EFFORT_JSON=$(printf '%s' "$_me" | jq -c '.[1]' 2>/dev/null || echo null)

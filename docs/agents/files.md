@@ -45,6 +45,7 @@ hooks/
     borg-memory-read-log.sh PostToolUse (Read) → logs project-memory reads to memory-hits.log
     borg-dispatch-guard.sh  PreToolUse (Agent/Workflow) → >=92% usage hard-stop veto (default-OFF)
     borg-agent-model-guard.sh     PreToolUse (Agent|Task) → deny-by-default subagent_type allowlist + sonnet/haiku, low-high caps
+                                  Cortex: full model ids; its Snowflake agents need a pin
     borg-workflow-model-guard.sh  PreToolUse (Workflow) → every agent() must pass the same allowlist/caps (fail-closed)
     borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset

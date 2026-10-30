@@ -1,0 +1,15 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "SubagentStop",
+  "agent_id": "subagent-writer",
+  "agent_type": "borg-collective:borg-grunt",
+  "parent_session_id": "00000000-0000-4000-8000-000000000001",
+  "parent_thread_id": "1000000001",
+  "parent_thread_message_id": "1000000002",
+  "agent_transcript_path": "__FIXTURES__/subagent-writer.json",
+  "stop_hook_active": false,
+  "last_assistant_message": "Wrote /work/out/a.txt:1 and committed it."
+}

@@ -35,6 +35,14 @@
         "skills/borg-link/**",
         "skills/borg-next/**"
       ]
+    },
+    "evals/cortex-agents": {
+      "covers": [
+        "evals/cortex-agents/**",
+        "hooks/borg-agent-model-guard.sh",
+        "hooks/borg-nanoprobe-log.sh",
+        "agents/**"
+      ]
     }
   },
   "items": {

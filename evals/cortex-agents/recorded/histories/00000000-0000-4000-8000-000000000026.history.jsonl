@@ -1,0 +1,2 @@
+{"role": "user", "id": "msg_00000000-0000-4000-8000-000000000027", "content": [], "user_sent_time": "2026-10-30T18:11:26.888Z"}
+{"role": "assistant", "id": "70901743349", "content": [{"type": "text", "text": "ok", "message_id": "10000000019"}], "assistant_sent_time": "2026-10-30T18:11:30.145Z", "model": "claude-haiku-5-5", "thinking_effort": "medium", "auto_router_selected": false, "created_on": 1793383889860, "summary_revision": ""}

@@ -2101,6 +2101,8 @@ _borg_unregister_hook() {
 # The hooks borg registers for Cortex Code CLI, as "<event>|<script>[|<matcher>]" entries (scripts live in hooks/ and
 # are copied to <cortex dir>/hooks/ by cmd_setup). The matcher is a tool-name regex and defaults to "" (every tool).
 # Order is registration order. The three plan-mode entries (2026-10-22 directive) fire on the plan-mode tools only.
+# The model guard fires on Cortex's task tool, which reaches hooks as tool_name "Task" (its hook layer maps
+# task -> Task, the same table that maps bash -> Bash).
 typeset -ga _BORG_CORTEX_HOOKS=(
     "SessionStart|borg-link-down.sh"
     "Stop|borg-link-up.sh"
@@ -2113,10 +2115,11 @@ typeset -ga _BORG_CORTEX_HOOKS=(
     "PostToolUse|borg-cortex-plan.sh|EnterPlanMode|enter_plan_mode"
     "PreToolUse|borg-cortex-plan.sh|ExitPlanMode|exit_plan_mode"
     "PostToolUse|borg-plan-promote.sh|ExitPlanMode|exit_plan_mode"
+    "PreToolUse|borg-agent-model-guard.sh|Agent|Task"
 )
 
 # Hooks an older borg registered under names it has since dropped (borg-start.sh/borg-stop.sh became
-# borg-link-down.sh/borg-link-up.sh). They are scrubbed from settings.json along with the eight above.
+# borg-link-down.sh/borg-link-up.sh). They are scrubbed from settings.json along with the entries above.
 typeset -ga _BORG_CORTEX_RENAMED_HOOKS=(
     "SessionStart|borg-start.sh"
     "Stop|borg-stop.sh"
@@ -2185,23 +2188,60 @@ _borg_register_cortex_hooks() {
 # Install borg's agent definitions for Cortex Code CLI in <cortex dir>/agents/, the global agent directory its bundled
 # AGENTS.md lists first. Claude Code never reads that directory, so these copies cannot double-load beside the plugin's
 # namespaced agents the way the legacy ~/.claude/agents copies did (step 4 of cmd_setup removes those). Cortex
-# registers an agent under its bare `name:` (borg-scout, not borg-collective:borg-scout), silently skips a file whose
-# description is a folded `>` block, and resolves `model:` only as a full id (the `sonnet` alias falls back to the
-# session model), so the sources keep one-line descriptions and full ids: tests/agent_frontmatter.bats.
+# registers an agent under its exact `name:` and has no plugin namespace, so each copy's name is rewritten to the
+# plugin form Claude Code registers (name: "borg-collective:borg-scout"): the skills, the routing card and the model
+# guard then use one name in both CLIs. Cortex also silently skips a file whose description is a folded `>` block, and
+# resolves `model:` only as a full id (the `sonnet` alias falls back to the session model), so the sources keep
+# one-line descriptions and full ids: tests/agent_frontmatter.bats.
 #
-# Copies every agents/*.md and touches no other file there; an unchanged copy is not rewritten. Like the hook copies,
+# Installs every agents/*.md and touches no other file there; an unchanged copy is not rewritten. The copy is built in
+# a dot-file that does not end in .md (Cortex loads *.md only), then moved over the target. Like the hook copies,
 # nothing is pruned: a renamed or retired agent needs its own migration line, as borg-start.sh/borg-stop.sh had.
 # Usage: _borg_install_cortex_agents <cortex_dir>
 _borg_install_cortex_agents() {
-    local src_dir="$BORG_HOME/agents" dst_dir="$1/agents" agent_file name
+    local src_dir="$BORG_HOME/agents" dst_dir="$1/agents" agent_file name tmp
     [[ -d "$src_dir" ]] || return 0
     mkdir -p "$dst_dir"
     for agent_file in "$src_dir/"*.md(N); do
         name="${agent_file:t}"
-        cmp -s "$agent_file" "$dst_dir/$name" && continue
-        cp "$agent_file" "$dst_dir/$name"
+        tmp="$dst_dir/.$name.tmp.$$"
+        _borg_cortex_agent_copy "$agent_file" > "$tmp" || { rm -f "$tmp"; warn "  $name: cortex agent copy failed"; continue; }
+        if cmp -s "$tmp" "$dst_dir/$name"; then
+            rm -f "$tmp"
+            continue
+        fi
+        mv "$tmp" "$dst_dir/$name"
         info "  $name (cortex agent)"
     done
+}
+
+# Print agent file $1 with the first frontmatter `name: <n>` line rewritten to `name: "borg-collective:<n>"`; every
+# other byte is unchanged. A file with no frontmatter, or a name that already carries a namespace, prints as is.
+# Usage: _borg_cortex_agent_copy <agent_file>
+_borg_cortex_agent_copy() {
+    awk 'NR == 1 && $0 == "---" { fm = 1; print; next }
+         fm && $0 == "---" { fm = 0 }
+         fm && !done && /^name: [A-Za-z0-9_-]+$/ { sub(/^name: /, "name: \"borg-collective:"); $0 = $0 "\""; done = 1 }
+         { print }' "$1"
+}
+
+# Warn when Cortex runs every session at xhigh or max thinking effort. Cortex Code 1.2.18 has no per-agent effort:
+# its agent parser reads no effort key, and every subagent runs at the session's level, which comes from
+# env.CORTEX_THINKING_EFFORT in <cortex dir>/settings.json (default medium) or /effort. So the `effort:` pins in
+# agents/*.md apply in Claude Code only, and a max session runs even the Haiku scout at max. Silent otherwise.
+# Usage: _borg_cortex_effort_note <cortex settings.json>
+_borg_cortex_effort_note() {
+    local settings="$1" effort
+    [[ -f "$settings" ]] || return 0
+    effort=$(jq -r '.env.CORTEX_THINKING_EFFORT // "" | ascii_downcase' "$settings" 2>/dev/null) || return 0
+    case "$effort" in
+        xhigh|max)
+            warn "  Cortex runs every session at CORTEX_THINKING_EFFORT=$effort ($settings), and its subagents"
+            warn "  inherit it: the agents' effort: pins apply in Claude Code only. Consider \"high\"; raise one"
+            warn "  session with /effort when it needs more."
+            ;;
+    esac
+    return 0
 }
 
 # Contract step of the registry key rename: the retired `projects` key is no longer read, so `borg setup`
@@ -2565,6 +2605,7 @@ CONF
 
         info "Installing agents for CoCo..."
         _borg_install_cortex_agents "$COCO_DIR"
+        _borg_cortex_effort_note "$COCO_SETTINGS"
 
         info "Registering skills with CoCo..."
         for skill_dir in "$BORG_HOME/skills/"*/(N); do
@@ -2955,9 +2996,17 @@ cmd_nanoprobes() {
 # Print "<model>\t<effort>" from the first assistant entry of a transcript; "-" for anything absent
 # (missing file, no assistant entry, no effort recorded). Effort lives at the entry's top-level
 # `effort` (falling back to `perTurnEffort`); model at .message.model.
+# Cortex Code records <id>.json, a conversation snapshot with no turns; they live in <id>.history.jsonl beside it,
+# one message per line, with `model` and `thinking_effort` on each assistant line (same rule as
+# hooks/borg-nanoprobe-log.sh).
 _borg_nanoprobe_model_effort() {
     local tpath="$1" out=""
-    if [[ -n "$tpath" && -f "$tpath" ]]; then
+    if [[ "$tpath" == *.json ]]; then
+        if [[ -f "${tpath%.json}.history.jsonl" ]]; then
+            out=$(jq -r 'select(.role == "assistant" and (.model | type) == "string") |
+                [.model, (.thinking_effort // "-")] | @tsv' "${tpath%.json}.history.jsonl" 2>/dev/null | head -1)
+        fi
+    elif [[ -n "$tpath" && -f "$tpath" ]]; then
         out=$(jq -r 'select(.type == "assistant") |
             [(.message.model // "-"), (.effort // .perTurnEffort // "-")] | @tsv' "$tpath" 2>/dev/null | head -1)
     fi
