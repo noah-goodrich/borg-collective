@@ -55,7 +55,8 @@ Nested CLAUDE.md files load when you read a file in their directory. The `docs/a
 ## Architecture Rules
 
 - Logic goes in a testable core. Shell is a wrapper. New modules ship with tests in the same commit.
-- Prior decisions live in `.borg/checkpoints/` and `docs/plans/assimilated/`: grep them before assuming something is undocumented. `.borg/knowledge/` is a decommissioned export that nothing reads.
+- Prior decisions live in `.borg/checkpoints/` and `docs/plans/assimilated/`: grep them before assuming something is undocumented.
+- `.borg/knowledge/` is a decommissioned export that nothing reads.
 - **Schema evolution is ALWAYS expand → migrate → contract, everywhere, no exceptions.** Add the new form and accept both; migrate every existing instance; only then remove the old form or tighten the validator. Never the other order.
 - **Migrate only what the SURVIVING validator rejects.** An artifact that fails only the validator being deleted needs no migration; the contraction resolves it.
 - **Direction matters:** expand→migrate→contract governs data the new rules reject, not data the old ones did.
