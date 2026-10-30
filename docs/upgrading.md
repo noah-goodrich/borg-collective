@@ -150,6 +150,8 @@ run-in <BORG> ./install.sh
 
 0.9.13 trims the context borg loads and makes borg's agents work in Cortex Code. No migration is needed. What changes after the plugin update and a restart: `/borg-link-up`, `/borg-plan` and `/borg-collective-review` are much shorter and read their detail files from the skill's `references/` folder only when a step needs them (about 5k tokens less after every compaction); the nudge after 75 tool calls now says to link up and start a fresh session; and on a machine with Cortex Code, `borg setup` registers the plan-mode hooks and copies borg's six agents into `~/.snowflake/cortex/agents/`, where Cortex loads them by their bare names (`borg-scout`, not `borg-collective:borg-scout`).
 
+One behavior change on a machine that runs drones: `drone up` and `drone exec` now start the shared `dev-postgres` container only for a repository whose `.devcontainer/` names `dev-postgres`; every repository still gets the `devnet` network. A repository that reaches the shared database some other way, for example a connection string in a root `.env`, stops getting it started: add the name under `.devcontainer/`, or start it by hand with `docker compose -f <the file named by POSTGRES_COMPOSE in drone.zsh> up -d`. To list the repositories that mention it outside `.devcontainer/` (the ones at risk), run `rg -l dev-postgres ~/dev --glob '!**/.devcontainer/**' --glob '!borg-collective/**'` and show the output.
+
 The path from 0.9.12 or earlier, in order (the commands are in section 4):
 
 0. Bring the dotfiles current (section 4, step 0). Skip it only if you already did it as part of this same upgrade.
