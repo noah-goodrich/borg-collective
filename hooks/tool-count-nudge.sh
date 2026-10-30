@@ -23,7 +23,7 @@ if (( COUNT >= 75 )); then
     jq -n '{
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
-            "additionalContext": "SESSION CHECK-IN: 75+ tool calls this session. Consider running /borg-review to check progress against the plan, or /borg-link-up if this is a good save point."
+            "additionalContext": "SESSION CHECK-IN: 75+ tool calls. Run /borg-review to check progress. If this is a save point, run /borg-link-up and then start a fresh session: the checkpoint carries the work over, and a long session re-reads its whole history every turn."
         }
     }'
 fi

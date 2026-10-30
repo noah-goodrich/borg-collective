@@ -480,6 +480,22 @@ EOF
     done
 }
 
+@test "contract: tool-count-nudge at 75 calls suggests /borg-review and a fresh session after /borg-link-up" {
+    export XDG_CACHE_HOME="${BATS_TEST_TMPDIR}/cache"
+    mkdir -p "${XDG_CACHE_HOME}/borg"
+    printf '74' > "${XDG_CACHE_HOME}/borg/tool-count-nudge-sid"
+    local hook="${BATS_TEST_DIRNAME}/../hooks/tool-count-nudge.sh"
+    run bash -c "printf '%s' '{\"session_id\":\"nudge-sid\"}' | '$hook'"
+    [ "$status" -eq 0 ]
+    local ctx
+    ctx="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')"
+    [[ "$ctx" == *"/borg-review"* ]]
+    [[ "$ctx" == *"/borg-link-up"* ]]
+    [[ "$ctx" == *"fresh session"* ]]
+    [[ "$ctx" == *"re-reads its whole history every turn"* ]]
+    [ "${#ctx}" -lt 300 ]
+}
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PART 3 / C4 GATE CLOSURE (2026-08-12) — contract coverage for every remaining borg.zsh dispatch
 # arm. Four groups drafted these in parallel against disjoint command sets; this integration pass

@@ -52,3 +52,36 @@ Entries moved verbatim from the top-level CLAUDE.md. Hook-owned entries live in 
   monkeypatch it — so the inheritance path was the one line no test ever executed. Same shape as the
   usage-watch and memory-gate blind spots below: **when a test supplies the value the production path is
   supposed to derive, it proves nothing about production.**
+
+## Moved from CLAUDE.md 2026-10-30
+
+History moved verbatim out of the Architecture Rules bullets. The rules stay in CLAUDE.md.
+
+- Prior decisions live in `.borg/checkpoints/` and `docs/plans/assimilated/` — grep them before
+  assuming something is undocumented. **`.borg/knowledge/` was removed from this list 2026-09-28 and
+  its 1106 tracked files were NOT deleted.** It is the decommissioned cairn service's export (see
+  the dotfiles `.gitignore`, which says so outright), and no code path has ever read it — so naming
+  it here was a promise to every agent that nothing kept. Retiring a store means deleting the
+  PROMISE, not the data: the files stay, greppable by anyone who wants them, and the reader census
+  (`docs/state-census.md`) now stops caring about them because nothing claims anything about them.
+  The full argument is in `docs/plans/directives/assets/2026-09-28-state-audit-adversarial.md`.
+- **Schema evolution is ALWAYS expand → migrate → contract, everywhere, no exceptions.** Add the new
+  form and accept both; migrate every existing instance; only then remove the old form or tighten the
+  validator. Never the other order. Done this way a schema change cannot produce a regression,
+  because no artifact is ever read by rules it was not written to satisfy — which is the whole reason
+  it is a rule and not a preference. The tell that it was skipped: existing, untouched data suddenly
+  failing validation with no write in between. When that happens the temptation is to weaken the
+  validator, and weakening it is how two validators come to disagree in the first place (AC7 exists
+  to end exactly that). "Additive first" is also why a port lands as a NEW path before any caller is
+  repointed: `borg_core/manifest/shell.write_manifest` shipped 2026-09-01 accepting the strict
+  validator while `coordinator.py` and `gather.py` still used the old one — that commit was the
+  expand phase, and repointing them is the contract phase, which may not happen until the **57**
+  shorthand ref occurrences in `merge-tree/test_coordinator.py` have been migrated to satisfy the
+  stricter rules (that sequence has since run to the end: fixtures migrated, `coordinator.py` repointed,
+  `merge-tree/programs.py` deleted, 2026-10-12). **Migrate only what the SURVIVING validator rejects.** An artifact that fails only
+  the validator being deleted needs no migration at all — it is resolved by the contraction. The
+  first draft of this rule listed `warehouse-rollout.json`'s `kind: "review"` as a prerequisite; it
+  is clean under `core.validate` and fails only merge-tree's `GATE_KINDS` closure, which borg_core
+  removed on purpose. "Migrating" it would have meant rewriting data BACKWARD to satisfy a dying
+  rule, and five oracles pin that literal string. Direction matters: expand→migrate→contract governs
+  data the new rules reject, not data the old ones did.
