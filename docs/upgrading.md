@@ -2,7 +2,7 @@
 
 A runbook for bringing a machine from an older borg to the current release, or for installing borg on a fresh machine. It is written so that a person, or a Claude Code session with no other context, can follow it top to bottom. The GitHub release notes for each version describe what changed; this page holds the per-machine steps, and a future release that needs anything from you adds a row to the migration table in section 5 instead of rewriting the notes.
 
-This page was last checked against release 0.9.12.
+This page was last checked against release 0.9.13.
 
 ## 1. Who this is for and how to use it with Claude Code
 
