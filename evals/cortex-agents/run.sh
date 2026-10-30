@@ -12,6 +12,8 @@
 #             differently on real Cortex input turns this red.
 #   KNOWN-BAD every mutation in check.py MUTATIONS (a fact or a fix made false in a copy of the recording) must be
 #             rejected by the check it targets; a check that passes everything turns this red.
+#   SANITIZE  this repository is public: check.py sanitize must refuse a run that would record an account host, and
+#             must accept the recording itself.
 #   FLOORS    a recording that is missing or unscripted is a failure, never a skip.
 #
 # Flags (shared by every harness `make eval` globs; an unknown flag exits 2):
@@ -104,6 +106,25 @@ run_cases() {
         fi
     done < <("$PYTHON" -c 'import sys; sys.path.insert(0, sys.argv[1]); import check
 for k, v in check.MUTATIONS.items(): print(k, v)' "$HERE")
+
+    # SANITIZE: this repository is public, so the refusal that keeps a leak out of recorded/ must fire on a planted
+    # account host and must not fire on the recording itself.
+    rm -rf "$OUT/leaky" "$OUT/leaky-out" "$OUT/clean-out"
+    cp -R "$REC" "$OUT/leaky"
+    printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"role":"assistant","content":[{"type":"text","text":"see https://xy12345.snowflakecomputing.com"}]}}' \
+        >> "$OUT/leaky/stream-guarded.jsonl"
+    "$PYTHON" "$HERE/check.py" sanitize "$OUT/leaky" "$OUT/leaky-out" > "$OUT/leaky.txt" 2>&1
+    rc=$?
+    if [ "$rc" -eq 3 ] && grep -q 'sanitize refused' "$OUT/leaky.txt" && [ ! -e "$OUT/leaky-out" ]; then
+        ok "sanitize refuses a run that would record an account host, and writes nothing"
+    else
+        bad "sanitize did not refuse a planted account host (exit $rc)"
+    fi
+    if "$PYTHON" "$HERE/check.py" sanitize "$REC" "$OUT/clean-out" > "$OUT/clean.txt" 2>&1; then
+        ok "sanitize accepts the recording itself (nothing in it needs refusing)"
+    else
+        bad "sanitize refuses the committed recording -- $(head -1 "$OUT/clean.txt")"
+    fi
 }
 
 if ! command -v "$PYTHON" >/dev/null 2>&1; then

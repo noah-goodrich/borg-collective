@@ -7,8 +7,8 @@
  "agent_id": "00000000-0000-4000-8000-000000000008",
  "agent_type": "borg-collective:borg-scout",
  "parent_session_id": "00000000-0000-4000-8000-000000000022",
- "parent_thread_id": "70901694973",
- "parent_thread_message_id": "70901740961",
+ "parent_thread_id": "10000000020",
+ "parent_thread_message_id": "10000000021",
  "agent_transcript_path": "/home/user/.snowflake/cortex/conversations/00000000-0000-4000-8000-000000000008.json",
  "stop_hook_active": false
 }

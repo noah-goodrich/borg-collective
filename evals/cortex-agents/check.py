@@ -53,6 +53,13 @@ EXPECTED_GUARD = {
 GUARD_MARK = "borg agent model guard"
 AGENT_ID_RE = re.compile(r"agentId: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+# The other ids Cortex writes: model tool-call ids (toolu_bdrk_...) and its server's numeric thread and message ids.
+TOOL_ID_RE = re.compile(r"toolu_[A-Za-z0-9_]+")
+NUM_ID_RE = re.compile(r'("[A-Za-z_]*(?:_id|Id)": ?")([0-9]{6,})(")')
+INVENTED_TOOL, INVENTED_NUM = "toolu_invented_", "100000"
+# Words the sanitizer itself writes (/home/user, /work/probe, /work/run, /work/tmp): never a user name to hunt for,
+# even when a sandboxed HOME happens to be named after one of them.
+_PLACEHOLDER_WORDS = frozenset({"home", "user", "work", "probe", "run", "tmp"})
 
 
 class Premise(Exception):
@@ -546,11 +553,15 @@ def _leaks(text: str) -> list[str]:
     ]
     found.extend(
         f"user name {word!r}"
-        for word in {os.environ.get("USER", ""), Path.home().name}
+        for word in {os.environ.get("USER", ""), Path.home().name} - _PLACEHOLDER_WORDS
         if len(word) >= 3 and re.search(r"(?i)\b" + re.escape(word) + r"\b", text)
     )
     if any(not u.startswith("00000000-0000-4000-8000-") for u in UUID_RE.findall(text)):
         found.append("an id that was not replaced")
+    if any(not t.startswith(INVENTED_TOOL) for t in TOOL_ID_RE.findall(text)):
+        found.append("a tool-call id that was not replaced")
+    if any(not m.group(2).startswith(INVENTED_NUM) for m in NUM_ID_RE.finditer(text)):
+        found.append("a numeric thread or message id that was not replaced")
     return found
 
 
@@ -604,20 +615,39 @@ def _write_stage(run_dir: Path, stage: Path, redact) -> None:
             (stage / rel).write_text(redact((run_dir / rel).read_text(encoding="utf-8")), encoding="utf-8")
 
 
+def _id_maps(blobs: list[str]) -> tuple[dict, dict, dict]:
+    """Real id -> invented id for the three shapes, numbered in first-seen order over `blobs`, so a re-sanitize of the
+    same run is byte-identical and a real id maps to the same invented one in every file (the checks join on them)."""
+    uuids: dict[str, str] = {}
+    tools: dict[str, str] = {}
+    nums: dict[str, str] = {}
+    for blob in blobs:
+        for u in UUID_RE.findall(blob):
+            uuids.setdefault(u, f"00000000-0000-4000-8000-{len(uuids) + 1:012d}")
+        for t in TOOL_ID_RE.findall(blob):
+            if not t.startswith(INVENTED_TOOL):
+                tools.setdefault(t, f"{INVENTED_TOOL}{len(tools) + 1:04d}")
+        for m in NUM_ID_RE.finditer(blob):
+            nums.setdefault(m.group(2), f"{INVENTED_NUM}{len(nums) + 1:05d}")
+    return uuids, tools, nums
+
+
 def _replace_ids(stage: Path) -> list[str]:
-    """Every id becomes an invented one, in first-seen order over the sorted files (so a re-sanitize of the same run
-    is byte-identical), in file contents and names. Returns the leaks that survived."""
-    ids: dict[str, str] = {}
+    """Every id becomes an invented one, in file contents and names. Returns the leaks that survived."""
     files = sorted(f for f in stage.rglob("*") if f.is_file())
     texts = {f: f.read_text(encoding="utf-8") for f in files}
-    for f in files:
-        for u in UUID_RE.findall(f.name + "\n" + texts[f]):
-            ids.setdefault(u, f"00000000-0000-4000-8000-{len(ids) + 1:012d}")
+    uuids, tools, nums = _id_maps([f.name + "\n" + texts[f] for f in files])
+
+    def rewrite(text: str) -> str:
+        text = UUID_RE.sub(lambda m: uuids[m.group(0)], text)
+        text = TOOL_ID_RE.sub(lambda m: tools.get(m.group(0), m.group(0)), text)
+        return NUM_ID_RE.sub(lambda m: m.group(1) + nums[m.group(2)] + m.group(3), text)
+
     leaks = []
     for f in files:
-        text = UUID_RE.sub(lambda m: ids[m.group(0)], texts[f])
+        text = rewrite(texts[f])
         f.unlink()
-        target = f.with_name(UUID_RE.sub(lambda m: ids[m.group(0)], f.name))
+        target = f.with_name(rewrite(f.name))
         target.write_text(text, encoding="utf-8")
         leaks.extend(f"{target.relative_to(stage)}: {x}" for x in _leaks(text))
     return leaks
