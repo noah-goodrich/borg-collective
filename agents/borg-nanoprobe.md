@@ -2,7 +2,7 @@
 name: borg-nanoprobe
 description: Single-task repository worker. The orchestrator delegates here instead of editing inline.
 tools: Bash, Read, Edit, Write, Grep, Glob, Skill
-model: sonnet
+model: claude-sonnet-5-5
 effort: medium
 background: true
 permissionMode: acceptEdits

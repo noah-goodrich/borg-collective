@@ -12,7 +12,7 @@ fm() { awk '/^---$/{n++; next} n==1' "$1"; }
     [ -f "$VERIFIER" ]
     run fm "$VERIFIER"
     echo "$output" | grep -qx 'name: borg-verifier'
-    echo "$output" | grep -qx 'model: sonnet'
+    echo "$output" | grep -qx 'model: claude-sonnet-5-5'
     echo "$output" | grep -qx 'effort: high'
     echo "$output" | grep -qx 'tools: Bash, Read, Grep, Glob'
     ! echo "$output" | grep -Eq '^tools:.*(Edit|Write)'

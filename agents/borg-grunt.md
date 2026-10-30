@@ -1,9 +1,6 @@
 ---
 name: borg-grunt
-description: >
-  Cheap mechanical leaf-worker. Executes ONE fully-specified change (apply a spec'd edit, run
-  tests/builds, read/grep logs, rote refactor) with NO judgment calls or scope expansion. The
-  orchestrator holds the plan; the grunt executes it exactly.
+description: "Cheap mechanical leaf-worker. Executes ONE fully-specified change (apply a spec'd edit, run tests/builds, read/grep logs, rote refactor) with NO judgment calls or scope expansion. The orchestrator holds the plan; the grunt executes it exactly."
 tools: Bash, Read, Edit, Write, Grep, Glob
 model: claude-haiku-5-5
 effort: low

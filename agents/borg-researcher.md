@@ -2,7 +2,7 @@
 name: borg-researcher
 description: Web-enabled from-zero research worker. The orchestrator delegates one research track here instead of a general subagent.
 tools: Bash, WebSearch, WebFetch, Read, Write, Grep, Glob
-model: sonnet
+model: claude-sonnet-5-5
 effort: medium
 background: true
 ---

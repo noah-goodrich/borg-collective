@@ -2182,6 +2182,28 @@ _borg_register_cortex_hooks() {
     fi
 }
 
+# Install borg's agent definitions for Cortex Code CLI in <cortex dir>/agents/, the global agent directory its bundled
+# AGENTS.md lists first. Claude Code never reads that directory, so these copies cannot double-load beside the plugin's
+# namespaced agents the way the legacy ~/.claude/agents copies did (step 4 of cmd_setup removes those). Cortex
+# registers an agent under its bare `name:` (borg-scout, not borg-collective:borg-scout), silently skips a file whose
+# description is a folded `>` block, and resolves `model:` only as a full id (the `sonnet` alias falls back to the
+# session model), so the sources keep one-line descriptions and full ids: tests/agent_frontmatter.bats.
+#
+# Copies every agents/*.md and touches no other file there; an unchanged copy is not rewritten. Like the hook copies,
+# nothing is pruned: a renamed or retired agent needs its own migration line, as borg-start.sh/borg-stop.sh had.
+# Usage: _borg_install_cortex_agents <cortex_dir>
+_borg_install_cortex_agents() {
+    local src_dir="$BORG_HOME/agents" dst_dir="$1/agents" agent_file name
+    [[ -d "$src_dir" ]] || return 0
+    mkdir -p "$dst_dir"
+    for agent_file in "$src_dir/"*.md(N); do
+        name="${agent_file:t}"
+        cmp -s "$agent_file" "$dst_dir/$name" && continue
+        cp "$agent_file" "$dst_dir/$name"
+        info "  $name (cortex agent)"
+    done
+}
+
 # Contract step of the registry key rename: the retired `projects` key is no longer read, so `borg setup`
 # renames it. `migrate-key` is idempotent: a no-op when the key is already `repositories`, and it writes a
 # timestamped backup before it renames. It never creates the file, so a fresh machine prints nothing.
@@ -2541,6 +2563,9 @@ CONF
         [[ -e "$COCO_DIR/hooks/borg-start.sh" ]] && rm "$COCO_DIR/hooks/borg-start.sh" || true
         [[ -e "$COCO_DIR/hooks/borg-stop.sh" ]] && rm "$COCO_DIR/hooks/borg-stop.sh" || true
 
+        info "Installing agents for CoCo..."
+        _borg_install_cortex_agents "$COCO_DIR"
+
         info "Registering skills with CoCo..."
         for skill_dir in "$BORG_HOME/skills/"*/(N); do
             [[ -d "$skill_dir" ]] || continue
@@ -2570,9 +2595,9 @@ CONF
     # distributable plugin is the deployment vehicle for skills and agents; the
     # ~/.claude copy loops that used to live here were the pre-plugin legacy path
     # and produced double-loading (2026-08-23 install audit, Gap 3). The build in
-    # step 4a-ii below is the single-source mechanism. Cortex Code has no plugin
-    # system, so CoCo skills still install from $BORG_HOME/skills via `cortex
-    # skill add` (step 3) — that path is unaffected.
+    # step 4a-ii below is the single-source mechanism. Cortex Code reads its own
+    # skill and agent locations, so CoCo skills still install from $BORG_HOME/skills
+    # via `cortex skill add` and agents copy to ~/.snowflake/cortex/agents/ (step 3b).
     info "Skills + agents ship via the borg-collective plugin (built in step 4a-ii)"
 
     # One-time migration sweep: remove the orphaned legacy copies so they stop
