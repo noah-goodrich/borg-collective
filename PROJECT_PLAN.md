@@ -1,6 +1,6 @@
 # Directive: Evals that run, and hillclimbing for descriptions
 *Established: 2026-10-30*
-*Status: Proposed. The criteria lock when Noah says "lock the evals plan"; the file then becomes `PROJECT_PLAN.md` (see Promotion Trigger).*
+*Status: Locked 2026-11-01, when Noah said "lock the evals plan". The acceptance criteria are the ones filed 2026-10-30 in PR 476, unchanged.*
 *Parent: `2026-10-03-evals-for-everything.md`*
 
 - Plan-slug: `2026-10-30-evals-and-description-hillclimb`
