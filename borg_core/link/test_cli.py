@@ -1174,12 +1174,23 @@ def _open_pr(number: int, **extra) -> dict:
             "state": "open", "changed": "2026-10-01T00:00:00Z", **extra}
 
 
-def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
+def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly(monkeypatch):
     """Board decision 2026-10-09. MUTATION: build `waiting.rows` from anything but `nextpick_cli.item_rows`
     (or re-run the sweep with different items) and the two lists diverge. The sweep is handed in, so this
     also pins that `borg link` asks `gh` nothing extra."""
+    from datetime import datetime  # pylint: disable=import-outside-toplevel
+
     from borg_core.nextpick import cli as nextpick_cli  # pylint: disable=import-outside-toplevel
     from borg_core.recon import core as recon_core  # pylint: disable=import-outside-toplevel
+
+    # `_open_pr` is dated 2026-10-01 and a draft goes stale after STALE_DRAFT_DAYS, so the clock `item_rows` reads
+    # is pinned ten days later; against the real clock this test went red on 2026-10-31 (CI run 41226009004).
+    class _PinnedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 11, tzinfo=tz)
+
+    monkeypatch.setattr(nextpick_cli, "datetime", _PinnedDatetime)
 
     repositories = {"alpha": {"path": "/nonexistent/alpha", "status": "idle", "last_activity": None, "pinned": False}}
     tracks = [{"source": "github", "ok": True, "items": [_open_pr(n) for n in range(1, 8)]
