@@ -103,8 +103,8 @@ Estimated effort: about 8 sessions of 2 to 3 hours (Option A estimate; the Corte
 
 Noah says "lock the evals plan". Then: copy this file to `PROJECT_PLAN.md` unchanged, the acceptance criteria become locked, and a PR row is added to the stack manifest `.stacks/2026-10-30-evals-and-description-hillclimb.json` for each step as its PR opens.
 
-## Decisions requested
+## Decisions (answered by Noah 2026-11-01, at lock)
 
-- Is the personal Cortex trial still active, and when does it end? It sets the ceiling for AC5.
-- Is the weekly live sweep's dollar total acceptable? A first estimate from the measured case cost: 6 lifecycle cases about $5, plus the link and next cases, so about $8 a week before trigger suites.
-- Do you want the employer-account Cortex probe and passive prompt capture? Default: no, until you say so.
+- **Weekly live sweep cap: $10 a week total, $1.50 per case**, pinned Opus, covering the 6 lifecycle cases plus link and next. A case that would exceed the cap is skipped and raises a `borg next` row (AC1).
+- **Personal Cortex account: not a trial.** Billing is set up, so the trial-end lockout in Risks no longer applies. AC5's evidence file records "billed account, no trial end date" where it asks for the trial end date.
+- **Employer-account Cortex probe and passive prompt capture: no.** AC5's evidence file says "not approved"; only the personal account is used.
