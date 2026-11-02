@@ -5,6 +5,7 @@ description: >
   to run a command that is too dangerous or repository-specific for the global allowlist. This is
   the formal escape hatch — global permission fixes are normal borg-collective work.
 user-invocable: true
+disable-model-invocation: true
 ---
 
 # Break Glass — Local Permission Exception
