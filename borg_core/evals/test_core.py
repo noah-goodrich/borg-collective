@@ -92,6 +92,26 @@ def test_eval_row_needs_covers_and_version() -> None:
     assert any("version" in line for line in out)
 
 
+def _with_tiers(*tiers_by_eval: Any) -> dict[str, Any]:
+    rows = {name: {**LEDGER["evals"][name]} for name in LEDGER["evals"]}
+    for name, tiers in zip(("evals/a", "evals/b"), tiers_by_eval):
+        rows[name]["tiers"] = tiers
+    return {**LEDGER, "evals": rows}
+
+
+def test_valid_tiers_pass_and_absence_is_accepted() -> None:
+    assert problems(_with_tiers([1, 2], [1])) == []
+    assert problems(_with_tiers([1, 2, 3], [3])) == []
+    assert problems() == []
+
+
+def test_malformed_tiers_are_named() -> None:
+    for bad in ([], [0], [4], [2, 1], [1, 1], ["1"], [True], [1.0], 1, "1", None, {"1": 1}):
+        out = problems(_with_tiers(bad, [1]))
+        assert [line for line in out if line.startswith("evals/a:") and "`tiers`" in line], bad
+        assert not [line for line in out if line.startswith("evals/b:")], bad
+
+
 def test_select_picks_only_covering_evals() -> None:
     got = core.select(LEDGER, ["skills/x/SKILL.md"])
     assert got.evals == ["evals/a"] and not got.select_all
