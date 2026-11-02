@@ -378,11 +378,12 @@ _shim_section() {
     [ "$status" -ne 0 ]
 }
 
-@test "wrap rule: borg-link and borg-recon chat output is not hard-wrapped" {
-    for s in borg-link borg-recon; do
-        run grep -F 'Hard-wrap all output' "${REPO_ROOT}/skills/${s}/SKILL.md"
+@test "wrap rule: borg-link and its recon reference chat output is not hard-wrapped" {
+    local f
+    for f in SKILL.md references/recon.md; do
+        run grep -F 'Hard-wrap all output' "${REPO_ROOT}/skills/borg-link/${f}"
         [ "$status" -ne 0 ]
-        grep -qF 'Do not hard-wrap output' "${REPO_ROOT}/skills/${s}/SKILL.md"
+        grep -qF 'Do not hard-wrap output' "${REPO_ROOT}/skills/borg-link/${f}"
     done
 }
 

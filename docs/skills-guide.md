@@ -157,23 +157,13 @@ on 2026-08-08 — its corpus was exported to per-repository `.borg/knowledge/*.m
 grep-reachable and needs no running service. Use when asking to search knowledge, find past
 decisions, or look something up.
 
-### /borg-recon — Cross-Source Synthesis
+### /borg-link — recon route (formerly /borg-recon)
 
-**Activation**: Manual (`/borg-recon`)
+`/borg-recon` folded into `/borg-link` on 2026-11-02. Ask `/borg-link` "what changed", "catch me up", "morning link-up" or "recon" and it routes to `skills/borg-link/references/recon.md` instead of painting the page.
 
-**`borg link` is the front door.** The `recon` VERB retired 2026-08-26 — `borg link` sweeps every
-source itself, so "what's in flight?" is answered there. What survives is the machine surface
-(`borg recon --json`, `borg recon --adapters`), and this skill is the synthesis layer on top of it.
+The recon reference runs `borg recon --json` (the `--json` is mandatory; a bare `borg recon` exits 1 pointing at `borg link`), reconciles findings against each repository's local `.borg` checkpoints, and synthesizes a prioritized, by-repository briefing with Yours-vs-Mine action lists and a recommended parallel kickoff batch. Source-agnostic: adapters are injected, never hardcoded.
 
-Runs `borg recon --json` (the `--json` is mandatory; a bare `borg recon` exits 1 pointing at
-`borg link`), reconciles findings against each repository's local `.borg` checkpoints, and synthesizes
-a prioritized, by-repository briefing with Yours-vs-Mine action lists and a recommended parallel
-kickoff batch. Source-agnostic — adapters are injected, never hardcoded.
-
-Caveat, filed not fixed (see `docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md`,
-Phase 5b): this skill sweeps on recon's own since-ladder and ADVANCES `$BORG_DIR/recon/last-run`,
-while `borg link` cuts a fixed 90-day window and never writes that marker. The two answer over
-different windows.
+Caveat, filed not fixed (see `docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md`, Phase 5b): the recon route sweeps on recon's own since-ladder and ADVANCES `$BORG_DIR/recon/last-run`, while the page cuts a fixed 90-day window and never writes that marker. The two answer over different windows.
 
 ### /borg-verify — Pre-Merge Evaluator Gate
 

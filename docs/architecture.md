@@ -59,7 +59,7 @@ This prevents corruption from concurrent hook executions.
 
 The repo has grown past a size where a full file listing stays accurate for long — run
 `ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
-writing: **17 hooks**, **~14 lib files**, **15 skills**, **6 agents** (+ `docs/agent-routing.md`),
+writing: **17 hooks**, **~14 lib files**, **14 skills**, **6 agents** (+ `docs/agent-routing.md`),
 **4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
 `borg-vinculum-watch`, `borg-notifyd`, `run-in`).
 
@@ -108,7 +108,6 @@ writing: **17 hooks**, **~14 lib files**, **15 skills**, **6 agents** (+ `docs/a
         borg-review/            Mid-session diagnostic + loop detection
         borg-link/              The front door: Queen overview, or this directory's page
         borg-link-up/           Flush session state to a per-repository checkpoint file
-        borg-recon/             Synthesize cross-source recon fan-out into an ELI10 briefing
         borg-next/, borg-resume/, borg-switch/, borg-verify/, break-glass/,
         fable-reviewer/   Remaining user-invocable skills
     agents/
@@ -346,14 +345,13 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | borg-assimilate | Manual | Shipping checklist + Collective review + execution |
 | borg-collective-review | Manual / invoked | Adversarial multi-persona review (The Collective) |
 | borg-review | Manual | Mid-session diagnostic, loop detection, one recommendation |
-| borg-link | Manual | The front door: Queen overview, or this directory's page |
+| borg-link | Manual | The front door: Queen overview, this directory's page, or recon ("catch me up") |
 | borg-link-up | Manual | Flush session state to `<repository>/.borg/checkpoints/<ts>.md` |
-| borg-recon | Manual | Synthesize `borg recon --json` output into a by-repository, urgency-ranked briefing |
 | borg-next / borg-resume / borg-switch / borg-verify | Manual | Skill-form CLI wrappers |
 | break-glass | Manual | Explicit, logged override for a normally-blocked action |
 | fable-reviewer | Manual | Working-discipline guardrails |
 
-The full, current roster (15 skills as of this writing) is always `ls skills/` — this table lists
+The full, current roster (14 skills as of this writing) is always `ls skills/` — this table lists
 role, not an exhaustive spec.
 
 ---
@@ -390,7 +388,7 @@ I last looked?" across every registered repository.
 **`recon` is not a human-facing verb.** It retired 2026-08-26 (AC1 of the one-front-door plan):
 `borg link` folds the same fan-out into its own document, so a human never needs to run the sweep
 directly. Running bare `borg recon` dies with a pointer at `borg link`. What survives is the
-**machine surface** — `borg recon --json` (consumed by the `/borg-recon` skill; the
+**machine surface** — `borg recon --json` (consumed by the `/borg-link` skill's recon reference; the
 `merge-tree/gather.py` consumer retired with the browser board) and `borg recon --adapters` — because the engine was never the thing AC1
 asked to remove. The gate lives in `borg_core/recon/cli.py::main()`, guarding the `_run()` call on
 `args.json_only or args.adapters` — the module that implements the command owns the invariant.
@@ -419,7 +417,7 @@ the move.
 - **Contradiction reconciliation**: recon cross-checks each repository's latest checkpoint against
   fresh source state and flags checkpoint-blocker-vs-resolved-source contradictions (e.g. a
   checkpoint says "blocked on review" but the PR merged since).
-- **Output**: `borg recon --json` emits the reconciled document; `/borg-recon` synthesizes it into
+- **Output**: `borg recon --json` emits the reconciled document; `/borg-link` synthesizes it (recon reference) into
   a by-repository, most-urgent-first, ELI10 briefing plus Yours(human)-vs-Mine(agent) action lists and
   a bounded read-only kickoff batch.
 

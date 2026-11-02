@@ -71,7 +71,7 @@ The first line is the branch (`HEAD` = detached: write `detached at <short sha>`
 
 4. **Waiting row**, from `.waiting.rows`: keep only this directory's session row (`item` `session`, `ref` null; the pipe did this, otherwise drop every row with a `ref`). Print its `next_step`, `item` and `age`; note `.waiting.degraded` once. Add nothing else (no PR rows, manifest decisions, `hidden_lines`, other repositories' rows). No session row: `nothing waits on you here`.
 
-5. **Next action, one line.** The session row's `next_step`; else the `waiting_reason` when `status` is `waiting`; else the newest checkpoint's next-steps line; else "nothing pending here". If the checkpoint claims in-flight work but `relative_activity` shows the directory idle, name that disagreement in the same line and recommend the fix, as `/borg-recon` does (no fixed threshold).
+5. **Next action, one line.** The session row's `next_step`; else the `waiting_reason` when `status` is `waiting`; else the newest checkpoint's next-steps line; else "nothing pending here". If the checkpoint claims in-flight work but `relative_activity` shows the directory idle, name that disagreement in the same line and recommend the fix, as the recon reference does (no fixed threshold).
 
 **Skeleton:**
 

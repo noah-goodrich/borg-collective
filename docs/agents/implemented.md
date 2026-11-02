@@ -33,7 +33,7 @@ Reference moved verbatim from the top-level CLAUDE.md.
 - Usage guardian: 85% checkpoint sweep (bin/borg-usage-watch) + `borg-dispatch-guard.sh`
   >=92% hard-stop veto on new Agent/Workflow dispatch — both fail-open, dispatch-guard is
   default-OFF (`BORG_USAGE_HALT_ENABLED=1` to arm)
-- Recon fan-out: `borg recon --json` / `/borg-recon` — pluggable source adapters, since-mark
+- Recon fan-out: `borg recon --json` / the `/borg-link` recon reference — pluggable source adapters, since-mark
   resolution, checkpoint-vs-source contradiction detection. **`recon` retired as a human verb
   2026-08-26** (bare `borg recon` dies pointing at `borg link`); the engine and its two machine
   flags (`--json`, `--adapters`) survive

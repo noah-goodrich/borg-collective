@@ -225,7 +225,7 @@ EOF
 # ── AC1: `recon` retires as a human-facing verb, engine intact (2026-08-26) ───
 # The 2026-08-10 removals above deleted whole commands. This one is narrower and the difference is
 # the whole test: the HUMAN digest retires, the MACHINE surface survives, because `borg recon --json`
-# and `borg recon --adapters` have a real consumer (skills/borg-recon/SKILL.md) that AC1 never asked to break. (merge-tree/gather.py
+# and `borg recon --adapters` have a real consumer (skills/borg-link/references/recon.md) that AC1 never asked to break. (merge-tree/gather.py
 # and evals/s4-k3 E3 were consumers too until the browser board retired 2026-10-12.)
 
 @test "contract: bare recon exits non-zero and points at 'borg link' (AC1)" {
@@ -281,7 +281,7 @@ EOF
 @test "contract: the recon MACHINE surface survives the retirement (AC1)" {
     # THE SURVIVAL CONTROL. Without it, "bare recon dies" is satisfied by deleting the verb
     # outright, which is the one implementation of this change that breaks four other bats cases,
-    # the /borg-recon skill, and the merge-tree pipeline.
+    # the /borg-link recon reference, and the merge-tree pipeline.
     #
     # ASSERT ON THE MESSAGE, NOT ON THE EXIT CODE, for --json: setup_temp_dirs neutralizes
     # BORG_RECON_ADAPTER_PATH to an empty directory, so the ENGINE's own "no recon adapters found"
@@ -320,8 +320,8 @@ EOF
     [[ "$output" == *"borg link"* ]] || false
 }
 
-@test "contract: every runnable borg-recon line in the skill carries a machine flag (AC1)" {
-    # THE CONSUMER THE RETIREMENT SPARED, GATED. skills/borg-recon/SKILL.md is named in three
+@test "contract: every runnable borg-recon line in the recon reference carries a machine flag (AC1)" {
+    # THE CONSUMER THE RETIREMENT SPARED, GATED. skills/borg-link/references/recon.md is named in three
     # comments in this change as the reason the engine survives, and it is the one file carrying a
     # pass-through flag list. Before S4 it authorized `--since`/`--projects`/`--sources` as
     # standalone flags; every one of those shapes now dies at exit 1, and the failure is invisible to
@@ -331,14 +331,14 @@ EOF
     # ("never `borg recon --since ...`"), so a whole-file grep would be permanently red. The fenced
     # blocks are what an agent copies.
     run awk '/^```/{f=!f; next} f && /borg recon/' \
-        "${BATS_TEST_DIRNAME}/../skills/borg-recon/SKILL.md"
+        "${BATS_TEST_DIRNAME}/../skills/borg-link/references/recon.md"
     [ "$status" -eq 0 ]
     # ANTI-VACUITY: a skill that stopped invoking the engine at all would otherwise pass.
     [ "${#lines[@]}" -ge 1 ]
     local l
     for l in "${lines[@]}"; do
         [[ "$l" == *"--json"* || "$l" == *"--adapters"* ]] \
-            || { echo "retired recon shape in SKILL.md: $l" >&2; false; }
+            || { echo "retired recon shape in recon.md: $l" >&2; false; }
     done
 }
 

@@ -19,7 +19,7 @@ Part of #480, step 0 of `PROJECT_PLAN.md` (AC4). Each of the 16 skills under `sk
 | borg-link-up | self-firing | 103 | 15 |
 | borg-next | self-firing | 4 | 2 |
 | borg-plan | self-firing | 24 | 11 |
-| borg-recon | self-firing | 0 | 0 |
+| borg-recon | folded into borg-link (2026-11-02) | 0 | 0 |
 | borg-resume | self-firing | 0 | 0 |
 | borg-review | self-firing | 0 | 0 |
 | borg-switch | self-firing | 0 | 0 |
@@ -82,3 +82,4 @@ Proposals only. No description or body is changed in this PR.
 
 1. **Hide `break-glass`.** Shipped in #481 (slash-only, `disable-model-invocation: true`).
 2. **Retire `no-unnecessary-read-perms`.** It was hidden from the model while its description claimed "Always active", so its rule never loaded. The skill directory, its ledger waiver and its docs entries are removed. The permission rule itself lives in the user's global `CLAUDE.md` and `borg-managed.md`.
+3. **Fold `borg-recon` into `borg-link`.** `borg-link` is the single entry point: its description gains the recon triggers and its body routes "what changed since a mark" requests to `skills/borg-link/references/recon.md` (the former skill body). The page-painting path is untouched. The `borg recon` CLI and `borg_core/recon/` are unchanged. The only recorded reason against folding, `docs/plans/severed/2026-10-12-borg-recon-reads-the-link-document.md`, is a dropped directive about which sweep recon reads, not a reason to keep a separate skill, and the marker caveat it records still holds on the routed path. `borg-next` stays the chooser.

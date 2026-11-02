@@ -207,7 +207,7 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
             lost += 1
             if item.get("state") != winner.get("state"):
                 # The digest renders project/ref/note; the *_says keys carry the detail for the
-                # /borg-recon synthesis, named for what they are (this is source-vs-source, not the
+                # the /borg-link recon reference, named for what they are (this is source-vs-source, not the
                 # checkpoint-vs-source shape repository_contradictions emits).
                 contradictions.append(
                     {
@@ -530,6 +530,6 @@ def render_digest(doc: dict) -> str:
     lines.append("By repository (most urgent first):")
     lines.append("")
     lines.extend(_render_by_repository_section(doc.get("items_by_project", {})))
-    lines.append("Run /borg-recon for the full morning link-up: reconcile, Yours-vs-Mine action lists,")
+    lines.append("Ask /borg-link to catch you up for the full morning link-up: reconcile, Yours-vs-Mine action lists,")
     lines.append("and a recommended parallel kickoff batch.")
     return "\n".join(lines)

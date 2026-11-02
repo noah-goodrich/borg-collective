@@ -1,13 +1,6 @@
----
-name: borg-recon
-description: >
-  Morning link-up: sweep every repository since a mark and brief what changed, with Yours vs Mine
-  action lists and a parallel kickoff batch. Use when the user says "morning link-up", "what
-  changed", "catch me up", "recon", or starts a session wanting the lay of the land.
-user-invocable: true
----
+# Recon — the Morning Link-Up
 
-# Borg Recon — the Morning Link-Up
+Routed from `/borg-link` when the user asks what changed since a mark ("morning link-up", "what changed", "catch me up", "recon"). This path does NOT paint the page: ignore the injected page and follow the steps below.
 
 You are the synthesis layer on top of the `borg recon` engine. The engine does the mechanical
 sweep; you do the thinking. Explain like the reader is 10: plain language first, jargon only if it

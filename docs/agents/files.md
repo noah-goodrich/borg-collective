@@ -61,11 +61,10 @@ skills/ (16)
     borg-assimilate/        Shipping checklist + Collective review + execution
     borg-collective-review/ Adversarial multi-persona review (The Collective)
     borg-review/            Mid-session diagnostic + loop detection
-    borg-link/              The front door: Queen overview, or this directory's page
+    borg-link/              The front door: Queen overview, this directory's page, recon (references/recon.md)
     borg-link-up/           Flush session state to <repository>/.borg/checkpoints/<ts>.md
     borg-verify/            Independent pre-merge evaluator gate (spawn reviewer, PASS/FAIL verdict)
     borg-next/              "What should I work on?" priority answer
-    borg-recon/             Morning link-up: fan out adapters, reconcile against checkpoints
     borg-resume/            Auto-resume a workflow paused/killed by a session or usage limit
     borg-switch/            Switch to a repository's tmux window by name
     break-glass/            Add a local permission exception to a repository's settings.local.json

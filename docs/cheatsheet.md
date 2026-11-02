@@ -17,7 +17,7 @@ borg next --switch           Recommend AND switch to that repository
 borg switch                  fzf picker → jump to tmux window
 borg switch <name>           Jump directly (skips fzf)
 
-borg recon --json            Machine surface only: reconciled sweep JSON (/borg-recon)
+borg recon --json            Machine surface only: reconciled sweep JSON (the /borg-link recon reference)
 borg recon --adapters        List the source adapters discovered on this machine
                              The human digest retired 2026-08-26 — borg link sweeps now
 
@@ -63,7 +63,6 @@ drone toggle [repository]    Show/hide side pane (2 ↔ 3 panes)
 /borg-link-up                Flush session state to a checkpoint
 /borg-next                   Which repository needs attention first?
 /borg-switch                 Switch to a repository's tmux window
-/borg-recon                  Cross-source synthesis over `borg recon --json` (`borg link` is the front door)
 /borg-verify                 Independent pre-merge evaluator gate (PASS/FAIL)
 /borg-resume                 Auto-resume a workflow paused by a session/usage limit
 /adhd-guardrails             Cognitive load guardrails (always active, auto)
@@ -71,7 +70,7 @@ drone toggle [repository]    Show/hide side pane (2 ↔ 3 panes)
 /fable-reviewer               Fable's 5-gate working discipline (scope, evidence, adversarial review)
 /break-glass                  Add a local permission exception to settings.local.json
 
-Full list (15 skills): docs/skills-guide.md or run /help in a session.
+Full list (14 skills): docs/skills-guide.md or run /help in a session.
 ```
 
 ## Hotkey

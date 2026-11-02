@@ -72,8 +72,8 @@ _description_of() {
 }
 
 @test "skills: the trimmed descriptions keep the phrases users type" {
-    [[ "$(_description_of "$ROOT/skills/borg-recon/SKILL.md")" == *"morning link-up"*"catch me up"*"recon"* ]]
     [[ "$(_description_of "$ROOT/skills/borg-link/SKILL.md")" == *"status"*"overview"*"briefing"* ]]
+    [[ "$(_description_of "$ROOT/skills/borg-link/SKILL.md")" == *"what changed"*"catch me up"*"morning link-up"*"recon"* ]]
     [[ "$(_description_of "$ROOT/skills/fable-reviewer/SKILL.md")" == *"/fable-reviewer"*"apply the gates"*"fable mode"* ]]
     [[ "$(_description_of "$ROOT/skills/borg-resume/SKILL.md")" == *"session limit"*"usage limit"*"resume after reset"* ]]
     [[ "$(_description_of "$ROOT/skills/borg-link-up/SKILL.md")" == *"Link up"*"ending a session"* ]]

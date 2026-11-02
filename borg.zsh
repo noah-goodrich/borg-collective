@@ -3700,7 +3700,7 @@ cmd_version() {
 # a mark, normalize to Items, reconcile against local .borg checkpoints, emit one reconciled doc.
 # Fully migrated to Python (borg_core/recon/{core,shell,cli}.py) -- see the `recon)` case arm below
 # and docs/plans/assimilated/2026-08-12-recon-migration-ledger.md. The judgment/synthesis layer is
-# the /borg-recon skill.
+# the recon reference of the /borg-link skill (skills/borg-link/references/recon.md).
 
 cmd_help() {
     cat <<'EOF'
@@ -3771,7 +3771,7 @@ cmd_help() {
     2026-08-26 — recon retired as a human verb. 'borg link' sweeps every source itself, so
                  there is nothing a human still needs it for. The ENGINE is not retired:
                  'borg recon --json' and 'borg recon --adapters' are the machine surface
-                 /borg-recon consumes, and both still work. (merge-tree/gather.py, a
+                 /borg-link's recon reference consumes, and both still work. (merge-tree/gather.py, a
                  second consumer, retired 2026-10-12 with the browser board.)
     2026-08-31 — program renamed to chain, and chain to stack on 2026-10-14. Same command, same
                  actions, same flags; the word "program" is retired in favour of "stack".
@@ -3794,7 +3794,6 @@ cmd_help() {
     /borg-link              Same as 'borg link' — this directory's page (overview: Queen's root or --overview)
     /borg-next              Same as 'borg next' — what needs attention
     /borg-switch            Same as 'borg switch' — jump to repository
-    /borg-recon             Cross-source synthesis over 'borg recon --json' ('borg link' is the front door)
     /adhd-guardrails        Compassionate constraints (always active)
 
   STATUS
@@ -4330,7 +4329,7 @@ case "${1:-help}" in
         #
         # RETIRED 2026-08-26 AS A HUMAN VERB, ENGINE INTACT (AC1). `borg link` folds the same
         # fan-out into its own document, so the human digest has no reason to exist -- but
-        # `--json` and `--adapters` have a real machine consumer (skills/borg-recon/SKILL.md)
+        # `--json` and `--adapters` have a real machine consumer (skills/borg-link/references/recon.md)
         # and AC1 never asked for the engine to die. (merge-tree/gather.py and evals/s4-k3 E3 were
         # consumers until the browser board retired 2026-10-12.)
         #
