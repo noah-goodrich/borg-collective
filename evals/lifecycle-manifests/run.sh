@@ -105,6 +105,23 @@ ok()   { echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
 skip() { echo "  SKIP  $1"; SKIPPED=$((SKIPPED+1)); }
 
+# ── the run history: ONE RECORD PER LIVE CASE, computed by the Python core ──────────────────────
+# `_rec <case> <pass|fail|skip|error> [reason] [result-json]` appends to the eval history (see
+# borg_core/evals/history.py; BORG_EVAL_HISTORY overrides the file). The shell derives nothing: cost, turns, tokens
+# and the model id come from the kept result. `--skip-model` records NOTHING (an offline run is not a live run, and
+# `make eval` must not fill the history), but a requested sweep that could not run records a skip WITH ITS REASON, so
+# a week in which nothing passed is visible rather than silent. A fail with no captured result is an error.
+_rec() {
+    [ "$SKIP_MODEL" -eq 1 ] && return 0
+    local case_id="$1" verdict="$2" reason="${3:-}" result="${4:-}"
+    if [ "$verdict" = fail ] && [ -n "$result" ] && [ ! -s "$result" ]; then
+        verdict=error; reason="no result captured"
+    fi
+    PYTHONPATH="$REPO" "$PYTHON" -m borg_core.evals.history --record --harness lifecycle-manifests \
+        --case "$case_id" --verdict "$verdict" --reason "$reason" --repo "$REPO" ${result:+--result "$result"} \
+        || echo "warning: could not append to the eval history" >&2
+}
+
 # ── VERBS: the manifest CLI the three skills shell to (pytest, offline) ─────────────────────────
 echo "== VERBS: manifest.cli contract (pytest, offline) =="
 VERBS_TESTS=borg_core/manifest/test_cli.py
@@ -291,7 +308,9 @@ print(json.dumps(ms[0].get("rows") if ms else []))' "$1" 2>/dev/null || echo '[]
 # ── P1 / N1: /borg-plan scaffolds, and never clobbers ────────────────────────────────────────────
 if [ -n "$model_off" ]; then
     skip "P1 /borg-plan scaffolds a manifest ($model_off)"
+    _rec P1 skip "$model_off"
     skip "N1 /borg-plan does not clobber an existing manifest (P1 did not run)"
+    _rec N1 skip "$model_off"
 else
     p1_planned=0
     if _want P1; then
@@ -301,8 +320,10 @@ else
         [ -f "$p1/PROJECT_PLAN.md" ] && p1_planned=1
         if [ "$(_valid_manifest_count "$p1")" = "1" ] && [ "$(_rows_json "$p1")" = "[]" ]; then
             ok "P1 /borg-plan scaffolded a valid manifest with rows: []"
+            _rec P1 pass "" "$OUT/p1.json"
         else
             bad "P1 /borg-plan did not scaffold a valid empty-rows manifest"
+            _rec P1 fail "" "$OUT/p1.json"
         fi
     else
         skip "P1 /borg-plan scaffolds a manifest (not in EVAL_CASES)"
@@ -321,10 +342,13 @@ else
         _run_skill "$n1" "/borg-plan" "add CI and a coverage gate to this library"
         if [ ! -f "$n1/PROJECT_PLAN.md" ] && [ "$p1_planned" -eq 0 ]; then
             skip "N1 /borg-plan never reached its output step — byte-identical would be vacuous"
+            _rec N1 skip "premise unproven: the paired positive case did not pass"
         elif [ "$(_canon "$n1f")" = "$before" ]; then
             ok "N1 declared rows are UNCHANGED (canonical) after a /borg-plan that DID write a plan"
+            _rec N1 pass "" "$OUT/n1.json"
         else
             bad "N1 /borg-plan rewrote a declared manifest — a clobbering scaffold destroys a program"
+            _rec N1 fail "" "$OUT/n1.json"
         fi
     else
         skip "N1 /borg-plan does not clobber an existing manifest (not in EVAL_CASES)"
@@ -334,7 +358,9 @@ fi
 # ── P2 / N2: /borg-link-up adds the row, and never scaffolds ─────────────────────────────────────
 if [ -n "$model_off" ]; then
     skip "P2 /borg-link-up adds one row for the branch's PR ($model_off)"
+    _rec P2 skip "$model_off"
     skip "N2 /borg-link-up does not scaffold where none exists (P2 did not run)"
+    _rec N2 skip "$model_off"
 else
     p2_rows='[]'
     if _want P2; then
@@ -348,8 +374,10 @@ else
         p2_rows="$(_rows_json "$p2")"
         if printf '%s' "$p2_rows" | grep -q '#7'; then
             ok "P2 /borg-link-up added a row for the stubbed PR ref"
+            _rec P2 pass "" "$OUT/p2.json"
         else
             bad "P2 /borg-link-up added no row for the stubbed PR ref"
+            _rec P2 fail "" "$OUT/p2.json"
         fi
     else
         skip "P2 /borg-link-up adds one row for the branch's PR (not in EVAL_CASES)"
@@ -365,6 +393,7 @@ else
         _run_skill "$n2" "/borg-link-up" "record where this session got to"
         if ! printf '%s' "$p2_rows" | grep -q '#7'; then
             skip "N2 link-up never wrote a row even where one was declared — premise unproven"
+            _rec N2 skip "premise unproven: the paired positive case did not pass"
         # ALL THREE ROOTS (`.stacks/` too: scaffold creates there when git ignores `.borg/`), and BOTH
         # `.borg` SPELLINGS, because the writer under test may know either. `.borg/programs` is being
         # renamed to `.borg/chains` as expand -> migrate -> contract (#222); during the expand phase a
@@ -373,8 +402,10 @@ else
         elif [ ! -e "$n2/.borg/programs" ] && [ ! -e "$n2/.borg/chains" ] \
             && [ ! -e "$n2/.stacks" ]; then
             ok "N2 no manifest was created — creation still belongs to /borg-plan"
+            _rec N2 pass "" "$OUT/n2.json"
         else
             bad "N2 /borg-link-up scaffolded — the ratified creation split is dissolved"
+            _rec N2 fail "" "$OUT/n2.json"
         fi
     else
         skip "N2 /borg-link-up does not scaffold where none exists (not in EVAL_CASES)"
@@ -384,7 +415,9 @@ fi
 # ── P3 / N3: /borg-assimilate closes the row, and never adds one ─────────────────────────────────
 if [ -n "$model_off" ]; then
     skip "P3 /borg-assimilate closes the merged row ($model_off)"
+    _rec P3 skip "$model_off"
     skip "N3 /borg-assimilate does not add a row it was meant to verify (P3 did not run)"
+    _rec N3 skip "$model_off"
 else
     p3_closed=0
     if _want P3; then
@@ -399,8 +432,10 @@ else
         printf '%s' "$(_rows_json "$p3")" | grep -q '"merged"' && p3_closed=1
         if [ "$p3_closed" -eq 1 ]; then
             ok "P3 /borg-assimilate set the declared row's status to merged"
+            _rec P3 pass "" "$OUT/p3.json"
         else
             bad "P3 /borg-assimilate did not close the declared row"
+            _rec P3 fail "" "$OUT/p3.json"
         fi
     else
         skip "P3 /borg-assimilate closes the merged row (not in EVAL_CASES)"
@@ -419,10 +454,13 @@ else
         _run_skill "$n3" "/borg-assimilate" "ship the work on this branch"
         if [ "$p3_closed" -eq 0 ]; then
             skip "N3 assimilate never closed a row it DID declare — premise unproven"
+            _rec N3 skip "premise unproven: the paired positive case did not pass"
         elif [ "$(_canon "$n3f")" = "$before3" ]; then
             ok "N3 declared rows are UNCHANGED (canonical) — no fallback add-row"
+            _rec N3 pass "" "$OUT/n3.json"
         else
             bad "N3 /borg-assimilate wrote to a manifest that never declared the ref"
+            _rec N3 fail "" "$OUT/n3.json"
         fi
     else
         skip "N3 /borg-assimilate does not add a row it was meant to verify (not in EVAL_CASES)"
