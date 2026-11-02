@@ -36,6 +36,13 @@
       "ref": "noah-goodrich/borg-collective#492",
       "status": "open",
       "why": "Step 1c-A: weekly eval sweep driver, caps, pinned model, sweep-last.json (AC1); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#493",
+      "status": "open",
+      "why": "Step 1c-B: weekly eval sweep launchd agent, borg doctor row, borg next row incl. staleness (AC1); tracking #480"
     }
   ]
 }
