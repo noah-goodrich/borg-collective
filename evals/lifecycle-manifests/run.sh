@@ -343,7 +343,7 @@ else
         _run_skill "$n1" "/borg-plan" "add CI and a coverage gate to this library"
         if [ ! -f "$n1/PROJECT_PLAN.md" ] && [ "$p1_planned" -eq 0 ]; then
             skip "N1 /borg-plan never reached its output step — byte-identical would be vacuous"
-            _rec N1 skip "premise unproven: the paired positive case did not pass"
+            _rec N1 skip "premise unproven: the paired positive case did not pass" "$OUT/n1.json"
         elif [ "$(_canon "$n1f")" = "$before" ]; then
             ok "N1 declared rows are UNCHANGED (canonical) after a /borg-plan that DID write a plan"
             _rec N1 pass "" "$OUT/n1.json"
@@ -394,7 +394,7 @@ else
         _run_skill "$n2" "/borg-link-up" "record where this session got to"
         if ! printf '%s' "$p2_rows" | grep -q '#7'; then
             skip "N2 link-up never wrote a row even where one was declared — premise unproven"
-            _rec N2 skip "premise unproven: the paired positive case did not pass"
+            _rec N2 skip "premise unproven: the paired positive case did not pass" "$OUT/n2.json"
         # ALL THREE ROOTS (`.stacks/` too: scaffold creates there when git ignores `.borg/`), and BOTH
         # `.borg` SPELLINGS, because the writer under test may know either. `.borg/programs` is being
         # renamed to `.borg/chains` as expand -> migrate -> contract (#222); during the expand phase a
@@ -455,7 +455,7 @@ else
         _run_skill "$n3" "/borg-assimilate" "ship the work on this branch"
         if [ "$p3_closed" -eq 0 ]; then
             skip "N3 assimilate never closed a row it DID declare — premise unproven"
-            _rec N3 skip "premise unproven: the paired positive case did not pass"
+            _rec N3 skip "premise unproven: the paired positive case did not pass" "$OUT/n3.json"
         elif [ "$(_canon "$n3f")" = "$before3" ]; then
             ok "N3 declared rows are UNCHANGED (canonical) — no fallback add-row"
             _rec N3 pass "" "$OUT/n3.json"
