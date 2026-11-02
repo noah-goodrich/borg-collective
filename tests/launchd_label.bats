@@ -454,20 +454,21 @@ MOCK
 # ─── the weekly eval sweep agent ──────────────────────────────────────────────
 
 @test "eval-sweep plist: weekly Sunday 04:00, never runs at load, runs the sweep module from the repo root" {
-    local f="$LAUNCHD_DIR/borg.eval-sweep.plist"
-    [ "$(plutil -extract StartCalendarInterval.Weekday raw "$f")" = 0 ]
-    [ "$(plutil -extract StartCalendarInterval.Hour raw "$f")" = 4 ]
-    [ "$(plutil -extract StartCalendarInterval.Minute raw "$f")" = 0 ]
-    [ "$(plutil -extract RunAtLoad raw "$f")" = false ]
-    [ "$(plutil -extract ProgramArguments.1 raw "$f")" = "-m" ]
-    [ "$(plutil -extract ProgramArguments.2 raw "$f")" = "borg_core.evals.sweep.cli" ]
-    [ "$(plutil -extract WorkingDirectory raw "$f")" = "{{BORG_ROOT}}" ]
-    [ "$(plutil -extract EnvironmentVariables.PYTHONPATH raw "$f")" = "{{BORG_ROOT}}" ]
-    [ "$(plutil -extract StandardErrorPath raw "$f")" = "{{LOG_DIR}}/eval-sweep.stderr.log" ]
-    [ "$(plutil -extract StandardOutPath raw "$f")" = "{{LOG_DIR}}/eval-sweep.stdout.log" ]
-    plutil -extract EnvironmentVariables.USER raw "$f" >/dev/null
-    plutil -extract EnvironmentVariables.PATH raw "$f" >/dev/null
-    plutil -extract EnvironmentVariables.BORG_CLAUDE_BIN raw "$f" >/dev/null
+    # plistlib, not plutil: the CI test job is Linux and has no plutil.
+    run python3 - "$LAUNCHD_DIR/borg.eval-sweep.plist" <<'PY'
+import plistlib, sys
+d = plistlib.load(open(sys.argv[1], "rb"))
+env = d["EnvironmentVariables"]
+assert d["StartCalendarInterval"] == {"Weekday": 0, "Hour": 4, "Minute": 0}, d["StartCalendarInterval"]
+assert d["RunAtLoad"] is False
+assert d["ProgramArguments"][1:] == ["-m", "borg_core.evals.sweep.cli"], d["ProgramArguments"]
+assert d["WorkingDirectory"] == "{{BORG_ROOT}}" and env["PYTHONPATH"] == "{{BORG_ROOT}}"
+assert d["StandardErrorPath"] == "{{LOG_DIR}}/eval-sweep.stderr.log"
+assert d["StandardOutPath"] == "{{LOG_DIR}}/eval-sweep.stdout.log"
+for key in ("USER", "HOME", "PATH", "XDG_STATE_HOME", "BORG_CLAUDE_BIN"):
+    assert key in env, key
+PY
+    [ "$status" -eq 0 ] || { echo "$output"; false; }
 }
 
 @test "eval-sweep install: opt-in (it spends money), BORG_EVAL_SWEEP=0 tears down, and it never kickstarts" {
