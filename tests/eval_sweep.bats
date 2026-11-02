@@ -102,3 +102,71 @@ sweep() {
     grep -q -- '--model claude-opus-5-5 --effort high' "$STUB_LOG"
     ! grep -q -- '--model opus' "$STUB_LOG"
 }
+
+# ── evals/link-next/live.sh: per-case output, the cost parse and the verdict mapping ─────────────────────────────
+# A stub `plugin eval` that writes the documented aggregate-result.json into --output-dir and exits with $STUB_EVAL_RC.
+_eval_stub() {
+    cat > "$BATS_TEST_TMPDIR/stubbin/claude" <<'STUB'
+#!/bin/sh
+[ "$1 $2" = "plugin eval" ] || exit 0
+while [ $# -gt 0 ]; do [ "$1" = "--output-dir" ] && out="$2"; shift; done
+mkdir -p "$out"
+printf '{"schemaVersion":1,"costUsd":0.31,"partial":false,"partialReason":%s,"unknownField":1}\n' "${STUB_PARTIAL:-null}" > "$out/aggregate-result.json"
+echo "runner output"
+exit "${STUB_EVAL_RC:-0}"
+STUB
+    chmod +x "$BATS_TEST_TMPDIR/stubbin/claude"
+}
+
+_live() {
+    PATH="$BATS_TEST_TMPDIR/stubbin:$PATH" run bash "$SANDBOX/evals/link-next/live.sh" "$@"
+}
+
+@test "live.sh --case clears only that case's output, so a loop over cases keeps every case's evidence" {
+    _eval_stub
+    _live --runs 1 --case next-rows-chooser
+    [ "$status" -eq 0 ]
+    _live --runs 1 --case link-verdict-honest-none
+    [ "$status" -eq 0 ]
+    [ -f "$SANDBOX/evals/link-next/out/live/next-rows-chooser/stdout.txt" ]
+    [ -f "$SANDBOX/evals/link-next/out/live/link-verdict-honest-none/stdout.txt" ]
+    _live --runs 1
+    [ -f "$SANDBOX/evals/link-next/out/live/next-empty-no-declined/stdout.txt" ]
+}
+
+@test "live.sh refuses a case name that is not a case directory before removing anything" {
+    _eval_stub
+    mkdir -p "$SANDBOX/evals/link-next/out/live/keep"
+    _live --case ../live
+    [ "$status" -eq 2 ]
+    [ -d "$SANDBOX/evals/link-next/out/live/keep" ]
+}
+
+@test "live.sh records the runner's costUsd and maps its exit codes to verdicts" {
+    _eval_stub
+    _live --case next-rows-chooser
+    run jq -r '[.verdict, (.cost_usd|tostring)] | join(" ")' "$BORG_EVAL_HISTORY"
+    [ "$output" = "pass 0.31" ]
+    : > "$BORG_EVAL_HISTORY"
+    STUB_EVAL_RC=2 STUB_PARTIAL='"cost_ceiling"' _live --case next-rows-chooser
+    [ "$(jq -r .verdict "$BORG_EVAL_HISTORY")" = skip ]
+    [[ "$(jq -r .reason "$BORG_EVAL_HISTORY")" == *"cost ceiling"* ]] || false
+    : > "$BORG_EVAL_HISTORY"
+    STUB_EVAL_RC=2 STUB_PARTIAL='"auth_failed"' _live --case next-rows-chooser
+    [ "$(jq -r .verdict "$BORG_EVAL_HISTORY")" = error ]
+    : > "$BORG_EVAL_HISTORY"
+    STUB_EVAL_RC=143 _live --case next-rows-chooser
+    [ "$(jq -r .verdict "$BORG_EVAL_HISTORY")" = error ]
+    : > "$BORG_EVAL_HISTORY"
+    STUB_EVAL_RC=1 _live --case next-rows-chooser
+    [ "$(jq -r .verdict "$BORG_EVAL_HISTORY")" = fail ]
+}
+
+@test "live.sh: a runner that writes no aggregate file records a null cost, not a guess" {
+    cat > "$BATS_TEST_TMPDIR/stubbin/claude" <<'STUB'
+#!/bin/sh
+exit 0
+STUB
+    _live --case next-rows-chooser
+    [ "$(jq -r '.cost_usd|tostring' "$BORG_EVAL_HISTORY")" = null ]
+}
