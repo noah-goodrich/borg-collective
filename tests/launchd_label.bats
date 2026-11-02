@@ -14,7 +14,7 @@ load test_helper/setup
 LIB="${BATS_TEST_DIRNAME}/../lib/launchd-label.zsh"
 INSTALL_SH="${BATS_TEST_DIRNAME}/../install.sh"
 LAUNCHD_DIR="${BATS_TEST_DIRNAME}/../launchd"
-AGENTS="notifyd cortex-wake usage-watch reap pr-watch memory-gate resume-watch"
+AGENTS="notifyd cortex-wake usage-watch reap pr-watch memory-gate resume-watch eval-sweep"
 
 setup() {
     setup_temp_dirs
@@ -136,6 +136,8 @@ _label() { zsh -c "source '$LIB' && _borg_launchd_label \"\$@\"" -- "$@"; }
     grep -q 'launchctl bootout "gui/\$UID/\$legacy"' "$INSTALL_SH"
     local a
     for a in $AGENTS; do
+        # eval-sweep was born after the prefix existed: no legacy label can be loaded under it.
+        [ "$a" = eval-sweep ] && continue
         grep -qE "_launchd_retire_legacy $a " "$INSTALL_SH" || { echo "no legacy migration for $a"; false; }
     done
 }
@@ -147,7 +149,7 @@ _label() { zsh -c "source '$LIB' && _borg_launchd_label \"\$@\"" -- "$@"; }
     for a in $AGENTS; do
         [ -f "$LAUNCHD_DIR/borg.$a.plist" ] || { echo "missing launchd/borg.$a.plist"; false; }
     done
-    [ "$(ls "$LAUNCHD_DIR" | wc -l | tr -d ' ')" -eq 7 ]
+    [ "$(ls "$LAUNCHD_DIR" | wc -l | tr -d ' ')" -eq 8 ]
     ! ls "$LAUNCHD_DIR" | grep -q 'stillpoint'
 }
 
@@ -157,8 +159,8 @@ _label() { zsh -c "source '$LIB' && _borg_launchd_label \"\$@\"" -- "$@"; }
         grep -A1 '<key>Label</key>' "$LAUNCHD_DIR/borg.$a.plist" | grep -q '<string>{{LABEL}}</string>' \
             || { echo "borg.$a.plist Label is not {{LABEL}}"; false; }
     done
-    # Six built-in sed blocks plus the one extension-template pipeline: seven {{LABEL}} substitutions.
-    [ "$(grep -c 's|{{LABEL}}|' "$INSTALL_SH")" -eq 7 ]
+    # Seven built-in sed blocks plus the one extension-template pipeline: eight {{LABEL}} substitutions.
+    [ "$(grep -c 's|{{LABEL}}|' "$INSTALL_SH")" -eq 8 ]
 }
 
 @test "plists: templating a plist with a resolved label yields a valid plist with that Label and no placeholders left" {
@@ -182,6 +184,7 @@ _label() { zsh -c "source '$LIB' && _borg_launchd_label \"\$@\"" -- "$@"; }
             -e "s|{{CLAUDE_BIN}}|/x/bin/claude|g" \
             -e "s|{{XDG_STATE_HOME}}|/x/state|g" \
             -e "s|{{BORG_ROOT}}|/x/borg-collective|g" \
+            -e "s|{{PYTHON_BIN}}|/x/python3|g" \
             -e "s|{{LOG_DIR}}|/x/share/borg|g" \
             -e "s|{{USER}}|tester|g" \
             -e "s|{{HOME}}|/x/home|g" \
@@ -446,4 +449,33 @@ MOCK
     grep -q '^_launchd_install_extensions$' "$INSTALL_SH"
     # The legacy migration is keyed on borg's own agents only.
     [ "$(grep -c '_launchd_retire_legacy ' "$INSTALL_SH")" -eq 7 ]
+}
+
+# ─── the weekly eval sweep agent ──────────────────────────────────────────────
+
+@test "eval-sweep plist: weekly Sunday 04:00, never runs at load, runs the sweep module from the repo root" {
+    local f="$LAUNCHD_DIR/borg.eval-sweep.plist"
+    [ "$(plutil -extract StartCalendarInterval.Weekday raw "$f")" = 0 ]
+    [ "$(plutil -extract StartCalendarInterval.Hour raw "$f")" = 4 ]
+    [ "$(plutil -extract StartCalendarInterval.Minute raw "$f")" = 0 ]
+    [ "$(plutil -extract RunAtLoad raw "$f")" = false ]
+    [ "$(plutil -extract ProgramArguments.1 raw "$f")" = "-m" ]
+    [ "$(plutil -extract ProgramArguments.2 raw "$f")" = "borg_core.evals.sweep.cli" ]
+    [ "$(plutil -extract WorkingDirectory raw "$f")" = "{{BORG_ROOT}}" ]
+    [ "$(plutil -extract EnvironmentVariables.PYTHONPATH raw "$f")" = "{{BORG_ROOT}}" ]
+    [ "$(plutil -extract StandardErrorPath raw "$f")" = "{{LOG_DIR}}/eval-sweep.stderr.log" ]
+    [ "$(plutil -extract StandardOutPath raw "$f")" = "{{LOG_DIR}}/eval-sweep.stdout.log" ]
+    plutil -extract EnvironmentVariables.USER raw "$f" >/dev/null
+    plutil -extract EnvironmentVariables.PATH raw "$f" >/dev/null
+    plutil -extract EnvironmentVariables.BORG_CLAUDE_BIN raw "$f" >/dev/null
+}
+
+@test "eval-sweep install: opt-in (it spends money), BORG_EVAL_SWEEP=0 tears down, and it never kickstarts" {
+    local block
+    block="$(sed -n '/^# ── 3d2\./,/^# ── 3e\./p' "$INSTALL_SH")"
+    [[ "$block" == *'case "${BORG_EVAL_SWEEP:-}" in'* ]] || false
+    [[ "$block" == *"1)"*"launchctl bootstrap"* ]] || false
+    [[ "$block" == *"0)"*"launchctl bootout"*'rm -f "$EVAL_SWEEP_PLIST_DEST"'* ]] || false
+    [[ "$block" != *"launchctl kickstart -k \"gui"* ]] || false
+    [[ "$block" == *'_borg_launchd_label eval-sweep'* ]] || false
 }

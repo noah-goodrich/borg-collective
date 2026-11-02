@@ -396,6 +396,61 @@ info "  launchd agent bootstrapped (runs daily; logs -> $LOG_DIR/memory-gate.{st
 info "  kickstarting first run..."
 launchctl kickstart -k "gui/$UID/$MEMORY_GATE_LABEL" 2>/dev/null || true
 
+# ── 3d2. Weekly eval sweep (opt-in: it SPENDS MONEY, at most $10 a run) ──────
+#
+# BORG_EVAL_SWEEP=1 installs and bootstraps the agent; BORG_EVAL_SWEEP=0 is the teardown (booted out, plist
+# removed); unset leaves whatever is there alone. Opt-in, like borg-pr-watch, because a paid job must not appear on
+# a machine (or a CI runner) that only ran ./install.sh. It never kickstarts: the first run is an explicit
+# `launchctl kickstart`, because installing must not spend.
+EVAL_SWEEP_LABEL="$(_borg_launchd_label eval-sweep)"
+EVAL_SWEEP_PLIST_DEST="$LA_DIR/$EVAL_SWEEP_LABEL.plist"
+case "${BORG_EVAL_SWEEP:-}" in
+    1)
+        info "Installing the weekly eval sweep (Sunday 04:00; BORG_EVAL_SWEEP=0 removes it)..."
+        EVAL_SWEEP_CLAUDE=""
+        if [[ -f "$BORG_HOME/lib/borg/claude-bin.sh" ]]; then
+            source "$BORG_HOME/lib/borg/claude-bin.sh" 2>/dev/null
+            borg_resolve_claude_bin 2>/dev/null && EVAL_SWEEP_CLAUDE="$BORG_CLAUDE_BIN"
+        fi
+        [[ -n "$EVAL_SWEEP_CLAUDE" ]] || warn "  claude not found: the sweep will record an error for every case until it is"
+        EVAL_SWEEP_PYTHON="$BORG_HOME/.venv/bin/python"
+        [[ -x "$EVAL_SWEEP_PYTHON" ]] || EVAL_SWEEP_PYTHON="$(command -v python3)"
+        EVAL_SWEEP_PATH_VALUE="$HOME/.local/bin"
+        [[ -n "$EVAL_SWEEP_CLAUDE" ]] && EVAL_SWEEP_PATH_VALUE="$EVAL_SWEEP_PATH_VALUE:${EVAL_SWEEP_CLAUDE%/*}"
+        EVAL_SWEEP_PATH_VALUE="$EVAL_SWEEP_PATH_VALUE:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        mkdir -p "$LA_DIR" "$LOG_DIR"
+        sed \
+            -e "s|{{LABEL}}|$EVAL_SWEEP_LABEL|g" \
+            -e "s|{{PYTHON_BIN}}|$EVAL_SWEEP_PYTHON|g" \
+            -e "s|{{BORG_ROOT}}|$BORG_HOME|g" \
+            -e "s|{{CLAUDE_BIN}}|$EVAL_SWEEP_CLAUDE|g" \
+            -e "s|{{XDG_STATE_HOME}}|${XDG_STATE_HOME:-$HOME/.local/state}|g" \
+            -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+            -e "s|{{USER}}|$USER|g" \
+            -e "s|{{HOME}}|$HOME|g" \
+            -e "s|{{PATH_VALUE}}|$EVAL_SWEEP_PATH_VALUE|g" \
+            "$BORG_HOME/launchd/borg.eval-sweep.plist" > "$EVAL_SWEEP_PLIST_DEST"
+        info "  plist -> $EVAL_SWEEP_PLIST_DEST"
+        if launchctl list "$EVAL_SWEEP_LABEL" &>/dev/null 2>&1; then
+            info "  reloading launchd agent..."
+            launchctl bootout "gui/$UID/$EVAL_SWEEP_LABEL" 2>/dev/null || true
+        fi
+        launchctl bootstrap "gui/$UID" "$EVAL_SWEEP_PLIST_DEST"
+        info "  launchd agent bootstrapped (weekly; logs -> $LOG_DIR/eval-sweep.{stdout,stderr}.log). Not run yet:"
+        info "  first run:  launchctl kickstart -k gui/$UID/$EVAL_SWEEP_LABEL"
+        ;;
+    0)
+        info "BORG_EVAL_SWEEP=0 — removing the weekly eval sweep agent."
+        if launchctl list "$EVAL_SWEEP_LABEL" &>/dev/null 2>&1; then
+            launchctl bootout "gui/$UID/$EVAL_SWEEP_LABEL" 2>/dev/null || true
+        fi
+        rm -f "$EVAL_SWEEP_PLIST_DEST"
+        ;;
+    *)
+        info "Weekly eval sweep NOT installed (it spends money, so it is opt-in: BORG_EVAL_SWEEP=1 ./install.sh)."
+        ;;
+esac
+
 # ── 3e. Extension agents: drop-in launchd templates ──────────────────────────
 #
 # borg's installer is the ONLY launchd installer on the machine. Anything else that wants a

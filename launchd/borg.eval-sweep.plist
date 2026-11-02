@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LABEL}}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{PYTHON_BIN}}</string>
+        <string>-m</string>
+        <string>borg_core.evals.sweep.cli</string>
+    </array>
+    <!-- The weekly PAID live eval sweep (borg_core/evals/sweep): at most $10 a run. Sunday 04:00 local. launchd runs
+         a calendar job it missed while the machine slept on the next wake. RunAtLoad is false on purpose:
+         installing must never spend; the first run is an explicit `launchctl kickstart`. -->
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>{{BORG_ROOT}}</string>
+    <!-- launchd hands jobs a minimal environment: USER is unset, and ~/.local/bin (where claude lives) is not on
+         PATH. PATH here carries git, bash, jq and python3, and BORG_CLAUDE_BIN is the ABSOLUTE claude path the
+         sweep resolves first (empty when install could not find one: the sweep then records an error for every
+         case instead of passing). XDG_STATE_HOME pins the history and sweep-last.json to the installer's state root. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>USER</key>
+        <string>{{USER}}</string>
+        <key>HOME</key>
+        <string>{{HOME}}</string>
+        <key>PATH</key>
+        <string>{{PATH_VALUE}}</string>
+        <key>PYTHONPATH</key>
+        <string>{{BORG_ROOT}}</string>
+        <key>XDG_STATE_HOME</key>
+        <string>{{XDG_STATE_HOME}}</string>
+        <key>BORG_CLAUDE_BIN</key>
+        <string>{{CLAUDE_BIN}}</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/eval-sweep.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/eval-sweep.stderr.log</string>
+</dict>
+</plist>
