@@ -98,3 +98,26 @@ _sandbox_repo() {
     [ -f "$PLUGIN_DIR_OVERRIDE/skills/fixture/SKILL.md" ]
     [ ! -e "$PLUGIN_DIR_OVERRIDE/skills/fixture/.DS_Store" ]
 }
+
+# A skill retired or folded in source must leave the plugin build, or it keeps loading from there.
+@test "a mirror skill dir with no source skill is pruned, references and all" {
+    _sandbox_repo
+    mkdir -p "$PLUGIN_DIR_OVERRIDE/skills/borg-recon/references"
+    echo old > "$PLUGIN_DIR_OVERRIDE/skills/borg-recon/SKILL.md"
+    echo old > "$PLUGIN_DIR_OVERRIDE/skills/borg-recon/references/x.md"
+    run bash "$SB/scripts/build-plugin.sh"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"pruned stale skill dir: borg-recon"* ]]
+    [ ! -e "$PLUGIN_DIR_OVERRIDE/skills/borg-recon" ]
+    [ -f "$PLUGIN_DIR_OVERRIDE/skills/fixture/SKILL.md" ]
+}
+
+@test "dry-run reports a stale skill dir but leaves it in place" {
+    _sandbox_repo
+    mkdir -p "$PLUGIN_DIR_OVERRIDE/skills/fable-reviewer"
+    echo old > "$PLUGIN_DIR_OVERRIDE/skills/fable-reviewer/SKILL.md"
+    run bash "$SB/scripts/build-plugin.sh" --dry-run
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"would prune stale skill dir: fable-reviewer"* ]]
+    [ -e "$PLUGIN_DIR_OVERRIDE/skills/fable-reviewer/SKILL.md" ]
+}

@@ -1,10 +1,10 @@
 ---
 name: borg-link
 description: >
-  The front door to the collective. In the Queen session it is the cross-repository overview with
-  directives and recent ships; in a repository or worktree, or for a named repository, it is a page
-  on that one directory. Use when the user asks for status, overview, briefing, "what's going on",
-  or repository details.
+  The front door to the collective. In the Queen session it is the cross-repository overview; in a
+  repository, worktree or named repository, a page on that one directory. Use for status, overview,
+  briefing, "what's going on", repository details, "what changed", "catch me up", "morning link-up",
+  "recon".
 user-invocable: true
 allowed-tools: Bash(borg link *) Bash(echo *)
 ---
@@ -30,6 +30,10 @@ The user asked to see the board, so show it:
 ## Fallback
 
 Use this when the markers hold the unexpanded injection line (Cortex Code expands no dynamic injection) or hold `BORG-LINK-UNAVAILABLE`. Make ONE Bash call, `NO_COLOR=1 borg link [<repository>]`, then paint its output by the rules above. If that call fails too (non-zero exit, `borg` missing), Read `references/fallback.md` (relative to this skill's base directory) and follow it. Read it only then.
+
+## Since a mark
+
+When the user asks what changed since a mark ("morning link-up", "what changed", "catch me up", "recon"), skip the paint: Read `references/recon.md` (relative to this skill's base directory) and follow it. It runs `borg recon --json`, a different read from the page. Asking to see the board, status or overview stays on the paint path above.
 
 ## Questions
 

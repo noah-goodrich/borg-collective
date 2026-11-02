@@ -2,7 +2,7 @@
 
 Rules owned by this directory, moved verbatim from the top-level CLAUDE.md.
 
-- **Recon fan-out (`borg recon --json` + `/borg-recon`)**: source-agnostic sweep primitive.
+- **Recon fan-out (`borg recon --json` + the `/borg-link` recon reference)**: source-agnostic sweep primitive.
   **Retired as a human verb 2026-08-26** — `borg link` folds the same fan-out into its own document,
   so bare `borg recon` (and any invocation without `--json`/`--adapters`) dies with a pointer at
   `borg link`. The gate lives in `borg_core/recon/cli.py::main()`, guarding the `_run()` call on
@@ -19,7 +19,7 @@ Rules owned by this directory, moved verbatim from the top-level CLAUDE.md.
   repo dir) — dropping a file registers a source, no code change. Sources are NEVER hardcoded: employer
   adapters (Slack/Jira/Notion) are a separate machine-injected layer; this repo ships ONE reference
   adapter (`lib/recon/adapters/recon-adapter-github`, via `gh`). `borg recon --json` emits the
-  reconciled doc the `/borg-recon` skill synthesizes into a by-repository, most-urgent-first, ELI10
+  reconciled doc the `/borg-link` skill's `references/recon.md` synthesizes into a by-repository, most-urgent-first, ELI10
   briefing + Yours(human)-vs-Mine(agent) action lists + a bounded read-only kickoff batch. zsh gotchas
   baked in: never a `path` loop var (tied to `$PATH`); quoted `find`, not bare globs (zsh NOMATCH is
   fatal); jq `//` treats `false` as empty (use `if has("ok")`, not `.ok // true`).

@@ -8,6 +8,13 @@
       "ref": "noah-goodrich/borg-collective#481",
       "status": "open",
       "why": "Step 0: triage the 16 skills by invocation mode and hide slash-only ones from the model listing"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#482",
+      "status": "open",
+      "why": "Step 0b: apply the 2026-11-02 triage decisions (retire read-perms, fold recon into link, merge fable into review)"
     }
   ]
 }

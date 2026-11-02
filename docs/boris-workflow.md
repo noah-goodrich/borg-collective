@@ -372,7 +372,7 @@ the plumbing — borg handles it.
 | `/adhd-guardrails` | Always-on skill | Scope discipline, break reminders, shame-free language |
 | `/borg-link` | Skill — this directory's page (Queen: overview) | "What's the state of this repository?" |
 | `/borg-link-up` | Skill — flush session state to a checkpoint | Persist context before stopping |
-| `/borg-recon` | Skill — fan out across GitHub (and other adapters) per repository | "What changed everywhere?" |
+| `/borg-link` (recon route) | Skill — fan out across GitHub (and other adapters) per repository | "What changed everywhere?" |
 | `/borg-next` | Skill — recommend + switch to the most pressing repository | "What should I do right now?" |
 | `/borg-resume` | Skill — pick back up after a usage-window reset or Guardian veto | "Continue where I was blocked" |
 | `/borg-switch` | Skill — fzf-style repository switch from inside a session | "Switch to a different repository" |

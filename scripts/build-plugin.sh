@@ -169,6 +169,21 @@ else
             done < <(cd "$SKILLS_DST/$skill_name" && find . -type f -not -path '*/.*' | LC_ALL=C sort)
         fi
     done
+    # Prune: a skill directory in the mirror with no source SKILL.md (retired or folded in source) would
+    # otherwise keep loading from the plugin build forever, and its stale files would register as a live skill.
+    for _stale_dir in "$SKILLS_DST"/*/; do
+        [[ -f "${_stale_dir}SKILL.md" ]] || continue
+        _stale_name="${_stale_dir%/}"
+        _stale_name="${_stale_name##*/}"
+        [[ -f "$SKILLS_SRC/$_stale_name/SKILL.md" ]] && continue
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            _dry "would prune stale skill dir: $_stale_name"
+        else
+            rm -rf "${SKILLS_DST:?}/$_stale_name"
+            _info "  pruned stale skill dir: $_stale_name"
+        fi
+        skills_changed=$((skills_changed + 1))
+    done
     if [[ "$skills_changed" -eq 0 ]]; then
         _info "  all skills in sync"
     fi

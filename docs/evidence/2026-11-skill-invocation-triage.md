@@ -19,17 +19,17 @@ Part of #480, step 0 of `PROJECT_PLAN.md` (AC4). Each of the 16 skills under `sk
 | borg-link-up | self-firing | 103 | 15 |
 | borg-next | self-firing | 4 | 2 |
 | borg-plan | self-firing | 24 | 11 |
-| borg-recon | self-firing | 0 | 0 |
+| borg-recon | folded into borg-link (2026-11-02) | 0 | 0 |
 | borg-resume | self-firing | 0 | 0 |
 | borg-review | self-firing | 0 | 0 |
 | borg-switch | self-firing | 0 | 0 |
 | borg-verify | self-firing | 1 | 12 |
 | break-glass | slash-only | 0 | 0 |
-| fable-reviewer | self-firing | 0 | 0 |
-| no-unnecessary-read-perms | self-firing (*) | 0 | 0 |
+| fable-reviewer | merged into borg-review (2026-11-02) | 0 | 0 |
+| no-unnecessary-read-perms | retired (2026-11-02) | 0 | 0 |
 | pane | self-firing | 0 | 4 |
 
-(*) Already carries `disable-model-invocation: true` on main. See its bullet; the file is not changed here.
+Retired and folded rows keep their evidence; the skill directories are gone. See "Decisions (Noah, 2026-11-02)".
 
 Typed for borg-link and borg-link-up adds the plugin-prefixed and bare forms (`/borg-collective:borg-link` 35 plus `/borg-link` 31; link-up 90 plus 12 plus 1). Model for `pane` adds the bare and prefixed forms (2 plus 2).
 
@@ -77,3 +77,10 @@ Proposals only. No description or body is changed in this PR.
 - Overlap: review says "Mid-session diagnostic. Checks progress against the plan, detects scope creep and bad loops ... Use when stuck, scattered, or unsure if you're still building the right thing". Fable-reviewer says "Use when starting a non-trivial change, when a task risks scope creep". Collective-review says "debate a plan or shipping decision ... Can also be invoked directly for ad-hoc design reviews". Verify says "Independent pre-merge evaluator ... re-run tests, map acceptance criteria to diff evidence". Scope creep appears in both review and fable-reviewer; "review" of a plan or change appears in collective-review, fable-reviewer and verify; fable-reviewer's own body escalates to `borg-reviewer` for blind review, which is verify's job.
 - Usage: collective-review model 30, typed 0 (called by plan and assimilate); verify model 12, typed 1; review 0 and 0 but a hook nudges it; fable-reviewer 0 and 0.
 - Proposed restructure: separate by moment, not by wording. Keep `borg-collective-review` (called by plan and assimilate) and `borg-verify` (merge gate) as they are, since the evidence shows they fire in their own lifecycle slots. Merge `fable-reviewer` into `borg-review`: review owns "during the work" (progress, scope creep, loops, and the five gates as its checklist), and fable-reviewer's start-of-change gates become the first section of review. That removes the shared "scope creep" trigger and one listed description.
+
+## Decisions (Noah, 2026-11-02)
+
+1. **Hide `break-glass`.** Shipped in #481 (slash-only, `disable-model-invocation: true`).
+2. **Retire `no-unnecessary-read-perms`.** It was hidden from the model while its description claimed "Always active", so its rule never loaded. The skill directory, its ledger waiver and its docs entries are removed. The permission rule itself lives in the user's global `CLAUDE.md` and `borg-managed.md`.
+3. **Fold `borg-recon` into `borg-link`.** `borg-link` is the single entry point: its description gains the recon triggers and its body routes "what changed since a mark" requests to `skills/borg-link/references/recon.md` (the former skill body). The page-painting path is untouched. The `borg recon` CLI and `borg_core/recon/` are unchanged. The only recorded reason against folding, `docs/plans/severed/2026-10-12-borg-recon-reads-the-link-document.md`, is a dropped directive about which sweep recon reads, not a reason to keep a separate skill, and the marker caveat it records still holds on the routed path. `borg-next` stays the chooser.
+4. **Merge `fable-reviewer` into `borg-review`.** The five gates now live in `skills/borg-review/references/gates.md`, and a "Start-of-change gates" section of the `borg-review` body routes to them. `borg-review` gains "starting a non-trivial change", "apply the gates" and "fable mode" in its description, so only `borg-review` claims "scope creep". `skills/fable-reviewer/` is removed with no alias. `borg-collective-review` and `borg-verify` are unchanged.

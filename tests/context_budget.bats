@@ -24,9 +24,11 @@ SKILL_CAP=8192
     [ -s "${SKILL_DIR}/references/queen-view.md" ]
     [ -s "${SKILL_DIR}/references/fallback.md" ]
     [ -s "${SKILL_DIR}/references/rationale.md" ]
+    [ -s "${SKILL_DIR}/references/recon.md" ]
     run cat "${SKILL_DIR}/SKILL.md"
     [[ "$output" == *'references/questions.md'* ]] || false
     [[ "$output" == *'references/fallback.md'* ]] || false
+    [[ "$output" == *'references/recon.md'* ]] || false
 }
 
 # The top-level CLAUDE.md loads into every session in this repository. A nested CLAUDE.md loads only when a file in

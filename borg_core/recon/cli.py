@@ -17,8 +17,8 @@ False -- no argv combination through the shipped CLI does, see `test_main_*` in 
 core.py -- is consequently DEAD THROUGH THE FRONT DOOR ONLY, not dead code: it is the engine's own
 digest capability, still exercised directly by `test_run_digest_output` and the rest of the core
 suite, which call `_run()` (not `main()`) with `json_only=False` on purpose. No real consumer
-reaches it that way -- `/borg-recon`, `merge-tree/` and `evals/` all go through `borg recon --json`
-or `--adapters`. Filed with its measurements in
+reaches it that way -- the recon reference of `/borg-link`, `merge-tree/` and `evals/` all go through
+`borg recon --json` or `--adapters`. Filed with its measurements in
 docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md.
 """
 
