@@ -94,6 +94,7 @@ findings:
   original task), perfectionism spiral (criteria met but still refining)
 - **Verification gaps**: Criteria completed but not verified
 - **Energy/momentum**: Detects declining message quality, suggests breaks or simpler tasks
+- **Start-of-change gates** (formerly `/fable-reviewer`, merged 2026-11-02): when a non-trivial change is starting, or you say "apply the gates" or "fable mode", it routes to `skills/borg-review/references/gates.md`: scope, evidence, adversarial self-review, real test runs, calibrated replies, with a one-line ledger per gate
 
 Ends with **ONE recommendation** — not a menu. One action. Because multiple choices cause decision
 paralysis.
@@ -179,15 +180,6 @@ issue a structured PASS/FAIL verdict. Call after a nanoprobe completes and befor
 Auto-resumes a workflow or long task paused or killed by a session/usage limit. Schedules a
 one-shot trigger to re-run the workflow with `resumeFromRunId` after the limit resets, so cached
 completed agents return instantly and only unfinished steps re-run.
-
-### /fable-reviewer — Fable's 5-Gate Working Discipline
-
-**Activation**: Manual (`/fable-reviewer`) or by request ("apply the gates", "fable mode")
-
-Distills Fable's 5-gate discipline (scope-before-work, evidence-before-reasoning, adversarial
-self-review, verification against real test suites, response calibration) so Opus/Sonnet inherit
-the same rigor in the Borg environment. Use for non-trivial changes at risk of scope creep or
-vibe-coding.
 
 ### /break-glass — Permission Escape Hatch
 

@@ -1,14 +1,6 @@
----
-name: fable-reviewer
-description: >
-  Fable's 5-gate working discipline: scope before work, evidence before reasoning, adversarial
-  self-review, real test runs, calibrated replies. Use when starting a non-trivial change, when a
-  task risks scope creep, or when the user says /fable-reviewer, "apply the gates", or "fable
-  mode".
-user-invocable: true
----
+# The 5-Gate Discipline (start-of-change gates)
 
-# fable-reviewer — the 5-Gate Discipline
+Routed from `/borg-review` when a non-trivial change is starting or the user says "apply the gates" or "fable mode". Formerly the `fable-reviewer` skill.
 
 This skill exists because the most capable model on this machine (Fable 5) is leaving the subscription tier.
 Its operating rigor should not leave with it. What made Fable's output reliable was never raw model strength —

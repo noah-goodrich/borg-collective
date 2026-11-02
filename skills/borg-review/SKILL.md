@@ -1,9 +1,9 @@
 ---
 name: borg-review
 description: >
-  Mid-session diagnostic. Checks progress against the plan, detects scope creep and bad loops,
-  and gives you ONE recommendation for what to do next. Use when stuck, scattered, or unsure
-  if you're still building the right thing.
+  Mid-session diagnostic and start-of-change gates. Checks progress against the plan, detects scope
+  creep and bad loops, and gives you ONE recommendation. Use when stuck, scattered, unsure you're
+  building the right thing, starting a non-trivial change, or to "apply the gates" or "fable mode".
 user-invocable: true
 ---
 
@@ -26,6 +26,10 @@ Everything else is repository policy and the repository layer wins. Full rules: 
 
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
+
+## Start-of-change gates
+
+When a non-trivial change is about to start, or the user says "apply the gates" or "fable mode", this is not a mid-session diagnostic: Read `references/gates.md` (relative to this skill's base directory) and run its five gates (scope, evidence, adversarial self-review, real test runs, calibrated replies), emitting the ledger before the first edit. Otherwise skip this section and go on to Step 1.
 
 ## Step 1: Load Context (silently)
 

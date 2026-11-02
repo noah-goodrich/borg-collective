@@ -57,7 +57,7 @@ drone toggle [repository]    Show/hide side pane (2 ↔ 3 panes)
 ```
 /borg-plan                   Project planning (Claude proposes, you validate)
 /borg-assimilate             Shipping checklist + Collective review + execution
-/borg-review                 Mid-session diagnostic + loop detection
+/borg-review                 Mid-session diagnostic + loop detection + start-of-change gates
 /borg-collective-review      Adversarial multi-persona review (The Collective)
 /borg-link                   This directory's page (Queen: overview)
 /borg-link-up                Flush session state to a checkpoint
@@ -67,10 +67,9 @@ drone toggle [repository]    Show/hide side pane (2 ↔ 3 panes)
 /borg-resume                 Auto-resume a workflow paused by a session/usage limit
 /adhd-guardrails             Cognitive load guardrails (always active, auto)
 /simplify                    Review changed code for reuse, quality, efficiency (Claude Code built-in)
-/fable-reviewer               Fable's 5-gate working discipline (scope, evidence, adversarial review)
 /break-glass                  Add a local permission exception to settings.local.json
 
-Full list (14 skills): docs/skills-guide.md or run /help in a session.
+Full list (13 skills): docs/skills-guide.md or run /help in a session.
 ```
 
 ## Hotkey

@@ -59,7 +59,7 @@ This prevents corruption from concurrent hook executions.
 
 The repo has grown past a size where a full file listing stays accurate for long — run
 `ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
-writing: **17 hooks**, **~14 lib files**, **14 skills**, **6 agents** (+ `docs/agent-routing.md`),
+writing: **17 hooks**, **~14 lib files**, **13 skills**, **6 agents** (+ `docs/agent-routing.md`),
 **4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
 `borg-vinculum-watch`, `borg-notifyd`, `run-in`).
 
@@ -109,7 +109,7 @@ writing: **17 hooks**, **~14 lib files**, **14 skills**, **6 agents** (+ `docs/a
         borg-link/              The front door: Queen overview, or this directory's page
         borg-link-up/           Flush session state to a per-repository checkpoint file
         borg-next/, borg-resume/, borg-switch/, borg-verify/, break-glass/,
-        fable-reviewer/   Remaining user-invocable skills
+        (borg-review/ also carries the start-of-change gates, references/gates.md)
     agents/
         borg-grunt.md            Haiku — fully-specified mechanical execution
         borg-scout.md            Haiku — read-only locate/search
@@ -344,14 +344,13 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | borg-plan | Manual | Propose + lock project objectives and acceptance criteria |
 | borg-assimilate | Manual | Shipping checklist + Collective review + execution |
 | borg-collective-review | Manual / invoked | Adversarial multi-persona review (The Collective) |
-| borg-review | Manual | Mid-session diagnostic, loop detection, one recommendation |
+| borg-review | Manual | Mid-session diagnostic, loop detection, start-of-change gates, one recommendation |
 | borg-link | Manual | The front door: Queen overview, this directory's page, or recon ("catch me up") |
 | borg-link-up | Manual | Flush session state to `<repository>/.borg/checkpoints/<ts>.md` |
 | borg-next / borg-resume / borg-switch / borg-verify | Manual | Skill-form CLI wrappers |
 | break-glass | Manual | Explicit, logged override for a normally-blocked action |
-| fable-reviewer | Manual | Working-discipline guardrails |
 
-The full, current roster (14 skills as of this writing) is always `ls skills/` — this table lists
+The full, current roster (13 skills as of this writing) is always `ls skills/` — this table lists
 role, not an exhaustive spec.
 
 ---

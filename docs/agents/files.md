@@ -60,7 +60,7 @@ skills/ (16)
     borg-plan/              Project planning + Collective review
     borg-assimilate/        Shipping checklist + Collective review + execution
     borg-collective-review/ Adversarial multi-persona review (The Collective)
-    borg-review/            Mid-session diagnostic + loop detection
+    borg-review/            Mid-session diagnostic + loop detection + start-of-change gates (references/gates.md)
     borg-link/              The front door: Queen overview, this directory's page, recon (references/recon.md)
     borg-link-up/           Flush session state to <repository>/.borg/checkpoints/<ts>.md
     borg-verify/            Independent pre-merge evaluator gate (spawn reviewer, PASS/FAIL verdict)
@@ -68,7 +68,6 @@ skills/ (16)
     borg-resume/            Auto-resume a workflow paused/killed by a session or usage limit
     borg-switch/            Switch to a repository's tmux window by name
     break-glass/            Add a local permission exception to a repository's settings.local.json
-    fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
     pane/                   Split the current tmux pane in a given direction
 agents/ (6, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
     borg-nanoprobe.md       Default worker: one discrete unit of work, manages its own worktree

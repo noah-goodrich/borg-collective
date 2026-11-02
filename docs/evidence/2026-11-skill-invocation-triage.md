@@ -25,7 +25,7 @@ Part of #480, step 0 of `PROJECT_PLAN.md` (AC4). Each of the 16 skills under `sk
 | borg-switch | self-firing | 0 | 0 |
 | borg-verify | self-firing | 1 | 12 |
 | break-glass | slash-only | 0 | 0 |
-| fable-reviewer | self-firing | 0 | 0 |
+| fable-reviewer | merged into borg-review (2026-11-02) | 0 | 0 |
 | no-unnecessary-read-perms | retired (2026-11-02) | 0 | 0 |
 | pane | self-firing | 0 | 4 |
 
@@ -83,3 +83,4 @@ Proposals only. No description or body is changed in this PR.
 1. **Hide `break-glass`.** Shipped in #481 (slash-only, `disable-model-invocation: true`).
 2. **Retire `no-unnecessary-read-perms`.** It was hidden from the model while its description claimed "Always active", so its rule never loaded. The skill directory, its ledger waiver and its docs entries are removed. The permission rule itself lives in the user's global `CLAUDE.md` and `borg-managed.md`.
 3. **Fold `borg-recon` into `borg-link`.** `borg-link` is the single entry point: its description gains the recon triggers and its body routes "what changed since a mark" requests to `skills/borg-link/references/recon.md` (the former skill body). The page-painting path is untouched. The `borg recon` CLI and `borg_core/recon/` are unchanged. The only recorded reason against folding, `docs/plans/severed/2026-10-12-borg-recon-reads-the-link-document.md`, is a dropped directive about which sweep recon reads, not a reason to keep a separate skill, and the marker caveat it records still holds on the routed path. `borg-next` stays the chooser.
+4. **Merge `fable-reviewer` into `borg-review`.** The five gates now live in `skills/borg-review/references/gates.md`, and a "Start-of-change gates" section of the `borg-review` body routes to them. `borg-review` gains "starting a non-trivial change", "apply the gates" and "fable mode" in its description, so only `borg-review` claims "scope creep". `skills/fable-reviewer/` is removed with no alias. `borg-collective-review` and `borg-verify` are unchanged.

@@ -301,8 +301,8 @@ MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result
     ! grep -q "inherit-ok" "$hook"
 }
 
-@test "fable-reviewer says agentType, or model + effort" {
-    grep -q "agentType, or model + effort" "${BATS_TEST_DIRNAME}/../skills/fable-reviewer/SKILL.md"
+@test "borg-review gates reference says agentType, or model + effort" {
+    grep -q "agentType, or model + effort" "${BATS_TEST_DIRNAME}/../skills/borg-review/references/gates.md"
 }
 
 # --- Cortex Code (CORTEX_PROJECT_DIR set, tool_name Task) ----------------------------------------------------------
