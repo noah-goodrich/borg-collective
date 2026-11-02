@@ -2198,6 +2198,29 @@ _borg_register_cortex_hooks() {
 # a dot-file that does not end in .md (Cortex loads *.md only), then moved over the target. Like the hook copies,
 # nothing is pruned: a renamed or retired agent needs its own migration line, as borg-start.sh/borg-stop.sh had.
 # Usage: _borg_install_cortex_agents <cortex_dir>
+typeset -ga _BORG_CORTEX_SKILL_FAILED=()
+
+# Run `cortex skill add <skill_dir>`, keeping what it says instead of discarding it. On failure, warn with the first
+# non-empty line of its output, record the skill name in _BORG_CORTEX_SKILL_FAILED and return 1; the caller carries on
+# with the next skill. Silent on success: the caller says what it installed.
+# Usage: _borg_cortex_skill_add <skill_dir>
+_borg_cortex_skill_add() {
+    local skill_dir="$1" name="${1:t}" out first
+    out=$(cortex skill add "$skill_dir" 2>&1) && return 0
+    first="${${(f)out}[(r)*[^[:space:]]*]}"
+    first="${first#"${first%%[![:space:]]*}"}"
+    warn "  $name: cortex skill add failed${first:+: $first}"
+    _BORG_CORTEX_SKILL_FAILED+=("$name")
+    return 1
+}
+
+# Print one summary line naming every skill _borg_cortex_skill_add failed on, then clear the list. Silent when none failed.
+_borg_cortex_skill_summary() {
+    (( ${#_BORG_CORTEX_SKILL_FAILED} )) || return 0
+    warn "  cortex skill add failed for ${#_BORG_CORTEX_SKILL_FAILED} skill(s): ${(j:, :)_BORG_CORTEX_SKILL_FAILED}"
+    _BORG_CORTEX_SKILL_FAILED=()
+}
+
 _borg_install_cortex_agents() {
     local src_dir="$BORG_HOME/agents" dst_dir="$1/agents" agent_file name tmp
     [[ -d "$src_dir" ]] || return 0
@@ -2611,8 +2634,9 @@ CONF
         for skill_dir in "$BORG_HOME/skills/"*/(N); do
             [[ -d "$skill_dir" ]] || continue
             local name="${skill_dir:t}"
-            cortex skill add "$skill_dir" 2>/dev/null && info "  $name (cortex)" || warn "  $name: cortex skill add failed"
+            _borg_cortex_skill_add "$skill_dir" && info "  $name (cortex)"
         done
+        _borg_cortex_skill_summary
 
         local _coco_base="$BORG_HOME/config/cortex/settings.base.json"
         if [[ -f "$_coco_base" ]]; then
@@ -2683,9 +2707,11 @@ CONF
             local name="${skill_dir:t}"
             ln -sfn "$skill_dir" "$CLAUDE_SKILLS_DIR/$name"
             info "  $name (extension)"
-            command -v cortex &>/dev/null \
-                && cortex skill add "$skill_dir" 2>/dev/null || true
+            if command -v cortex &>/dev/null; then
+                _borg_cortex_skill_add "$skill_dir" || true
+            fi
         done
+        _borg_cortex_skill_summary
     fi
 
     if [[ -d "$_ext_dir/hooks" ]]; then

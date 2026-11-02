@@ -1,9 +1,6 @@
 ---
 name: borg-plan
-description: >
-  Project planning that does the thinking so you can focus on validating and deciding. Reads the
-  codebase, proposes objectives and acceptance criteria, and asks you to validate. Locks criteria
-  once confirmed. Use at the start of a project or when objectives are unclear.
+description: "Project planning that does the thinking so you can focus on validating and deciding. Reads the codebase, proposes objectives and acceptance criteria, and asks you to validate. Locks criteria once confirmed. Use at the start of a project or when objectives are unclear."
 user-invocable: true
 ---
 

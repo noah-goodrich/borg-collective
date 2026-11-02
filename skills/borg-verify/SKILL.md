@@ -1,9 +1,6 @@
 ---
 name: borg-verify
-description: >
-  Independent pre-merge evaluator gate. Spawns a fresh reviewer subagent to re-run tests,
-  map acceptance criteria to diff evidence, and issue a structured PASS/FAIL verdict before
-  gh pr merge. Call after a nanoprobe completes and before merging its PR.
+description: "Independent pre-merge evaluator gate. Spawns a fresh reviewer subagent to re-run tests, map acceptance criteria to diff evidence, and issue a structured PASS/FAIL verdict before gh pr merge. Call after a nanoprobe completes and before merging its PR."
 user-invocable: true
 ---
 

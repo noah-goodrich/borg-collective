@@ -1,10 +1,6 @@
 ---
 name: borg-collective-review
-description: >
-  Adversarial review by The Collective — six always-present core personas plus domain code owners
-  and one rotating specialist debate a plan or shipping decision. Called by borg-plan (before
-  proposing objectives) and borg-assimilate (before shipping). Can also be invoked directly for
-  ad-hoc design reviews.
+description: "Adversarial review by The Collective — six always-present core personas plus domain code owners and one rotating specialist debate a plan or shipping decision. Called by borg-plan (before proposing objectives) and borg-assimilate (before shipping). Can also be invoked directly for ad-hoc design reviews."
 user-invocable: true
 ---
 

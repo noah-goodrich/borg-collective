@@ -1,9 +1,6 @@
 ---
 name: break-glass
-description: >
-  Add a local permission exception to a repository's settings.local.json. Use when a repository needs
-  to run a command that is too dangerous or repository-specific for the global allowlist. This is
-  the formal escape hatch — global permission fixes are normal borg-collective work.
+description: "Add a local permission exception to a repository's settings.local.json. Use when a repository needs to run a command that is too dangerous or repository-specific for the global allowlist. This is the formal escape hatch — global permission fixes are normal borg-collective work."
 user-invocable: true
 disable-model-invocation: true
 ---

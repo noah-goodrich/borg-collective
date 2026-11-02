@@ -15,6 +15,13 @@
       "ref": "noah-goodrich/borg-collective#482",
       "status": "open",
       "why": "Step 0b: apply the 2026-11-02 triage decisions (retire read-perms, fold recon into link, merge fable into review)"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#483",
+      "status": "open",
+      "why": "Step 1b: Cortex load check, quoted skill descriptions, setup error reporting (AC1)"
     }
   ]
 }
