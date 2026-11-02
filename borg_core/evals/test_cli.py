@@ -12,7 +12,7 @@ from borg_core.evals import cli
 
 LEDGER: dict[str, Any] = {
     "version": 1,
-    "evals": {"evals/a": {"covers": ["evals/a/**", "skills/x/**"]}},
+    "evals": {"evals/a": {"covers": ["evals/a/**", "skills/x/**"], "tiers": [1]}},
     "items": {"skills/x": {"eval": "evals/a"}, "agents/y": {"waiver": "later", "review_by": "2026-12-01"}},
 }
 

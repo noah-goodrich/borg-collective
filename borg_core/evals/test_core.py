@@ -11,8 +11,8 @@ from borg_core.evals import core
 LEDGER: dict[str, Any] = {
     "version": 1,
     "evals": {
-        "evals/a": {"covers": ["evals/a/**", "skills/x/**", "borg_core/mod/*.py"]},
-        "evals/b": {"covers": ["borg_core/**/shared.py"]},
+        "evals/a": {"covers": ["evals/a/**", "skills/x/**", "borg_core/mod/*.py"], "tiers": [1, 2]},
+        "evals/b": {"covers": ["borg_core/**/shared.py"], "tiers": [1]},
     },
     "items": {
         "skills/x": {"eval": "evals/a"},
@@ -99,10 +99,16 @@ def _with_tiers(*tiers_by_eval: Any) -> dict[str, Any]:
     return {**LEDGER, "evals": rows}
 
 
-def test_valid_tiers_pass_and_absence_is_accepted() -> None:
+def test_valid_tiers_pass() -> None:
     assert problems(_with_tiers([1, 2], [1])) == []
     assert problems(_with_tiers([1, 2, 3], [3])) == []
-    assert problems() == []
+
+
+def test_missing_tiers_is_named() -> None:
+    rows = {name: {k: v for k, v in row.items() if k != "tiers"} for name, row in LEDGER["evals"].items()}
+    out = problems({**LEDGER, "evals": rows})
+    assert [line for line in out if line.startswith("evals/a:") and "needs `tiers`" in line]
+    assert [line for line in out if line.startswith("evals/b:") and "needs `tiers`" in line]
 
 
 def test_malformed_tiers_are_named() -> None:

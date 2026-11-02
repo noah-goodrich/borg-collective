@@ -27,7 +27,7 @@ setup() {
 write_ledger() {
     cat > "$SB/evals/ledger.json" <<JSON
 {"version": 1,
- "evals": {"evals/e1": {"covers": ["evals/e1/**", "skills/alpha/**"]}},
+ "evals": {"evals/e1": {"covers": ["evals/e1/**", "skills/alpha/**"], "tiers": [1]}},
  "items": {$1}}
 JSON
 }
@@ -90,6 +90,26 @@ gate() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"skills/beta: waiver has no reason"* ]] || false
     [[ "$output" == *"agents/gamma: waiver needs review_by"* ]] || false
+}
+
+@test "ledger: an eval entry without tiers fails, naming it" {
+    cat > "$SB/evals/ledger.json" <<'JSON'
+{"version": 1,
+ "evals": {"evals/e1": {"covers": ["evals/e1/**", "skills/alpha/**"]}},
+ "items": {"skills/alpha": {"eval": "evals/e1"},
+           "skills/beta": {"waiver": "later", "review_by": "2026-12-01"},
+           "agents/gamma": {"waiver": "later", "review_by": "2026-12-01"}}}
+JSON
+    gate
+    [ "$status" -eq 1 ]
+    [[ "$output" == *'evals/e1: needs `tiers`'* ]] || false
+}
+
+@test "ledger: a malformed tiers fails, naming it" {
+    sed -i.bak 's/"tiers": \[1\]/"tiers": [2, 1]/' "$SB/evals/ledger.json"
+    gate
+    [ "$status" -eq 1 ]
+    [[ "$output" == *'evals/e1: `tiers` must be'* ]] || false
 }
 
 @test "ledger: a row for an item that no longer exists fails" {

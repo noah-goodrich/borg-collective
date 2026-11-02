@@ -11,7 +11,7 @@ with nothing to install; YAML would add a parser dependency to a gate whose poin
      "items": {"skills/<name>": {"eval": "evals/<name>"},
                "agents/<name>": {"waiver": "<reason>", "review_by": "YYYY-MM-DD"}}}
 
-`tiers` names the testing tiers a harness has (docs/agents/testing-tiers.md): a non-empty, ascending list of
+`tiers` is REQUIRED on every eval and names the testing tiers a harness has (docs/agents/testing-tiers.md): a non-empty, ascending list of
 distinct integers from 1, 2, 3. `[1, 2]` is a harness with an offline face and a live face graded by script.
 
 `items` is CLOSED over `skills/*/SKILL.md` and `agents/*.md`: every one is an eval or a dated waiver,
@@ -84,7 +84,7 @@ def matches(path: str, globs: list[str] | tuple[str, ...]) -> bool:
 
 def _tiers_problems(name: str, row: dict) -> list[str]:
     if "tiers" not in row:
-        return []
+        return [f"{name}: needs `tiers` (a non-empty ascending list from {list(TIERS)})"]
     tiers = row["tiers"]
     ok = isinstance(tiers, list) and tiers and all(type(t) is int and t in TIERS for t in tiers)
     if not ok or tiers != sorted(set(tiers)):
