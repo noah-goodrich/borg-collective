@@ -163,9 +163,10 @@ fi
 # without credentials and would keep the two cases indistinguishable. It runs ONLY when the sweep
 # was requested: under `--skip-model` a probe would spend a model call to decide nothing.
 model_off=""
-# Pinned, never inherited: this eval grades orchestrator-session skills, so it runs the production tier.
-EVAL_MODEL=opus
-EVAL_EFFORT=xhigh
+# Defaults to the production tier, because this eval grades orchestrator-session skills. The weekly sweep
+# (borg_core/evals/sweep) overrides EVAL_MODEL with a full model id so a moving alias cannot change what it measures.
+EVAL_MODEL="${EVAL_MODEL:-opus}"
+EVAL_EFFORT="${EVAL_EFFORT:-xhigh}"
 # THE COMMANDS THE SKILLS RUN, GRANTED BY NAME. `--permission-mode acceptEdits` approves edits and nothing
 # else, and a headless `-p` run has no one to approve a Bash command, so the skills' scaffold and add-row
 # calls (`PYTHONPATH=<dir> python3 -m borg_core.manifest.cli ...`, which an allow rule for `python3` does NOT
