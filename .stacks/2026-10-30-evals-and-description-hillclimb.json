@@ -29,6 +29,13 @@
       "ref": "noah-goodrich/borg-collective#484",
       "status": "open",
       "why": "Step 1a: live eval run history (JSONL) and Wilson/per-SHA report; tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#492",
+      "status": "open",
+      "why": "Step 1c-A: weekly eval sweep driver, caps, pinned model, sweep-last.json (AC1); tracking #480"
     }
   ]
 }
