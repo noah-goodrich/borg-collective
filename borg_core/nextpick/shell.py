@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from borg_core import paths, retention
 from borg_core.link import core as link_core
 from borg_core.link import shell as link_shell
+from borg_core.nextpick import sweeprow
 from borg_core.planstate import shell as planstate_shell
 from borg_core.recon import core as recon_core
 
@@ -125,19 +127,66 @@ def checkpoint_owned(repositories: dict[str, Any], names: list[str]) -> dict[str
 QUEEN = "queen"
 
 
+def sweep_path() -> Path:
+    """`<state root>/evals/sweep-last.json`, the weekly eval sweep's summary (contract: borg_core/evals/sweep/core.py)."""
+    return paths.state_root() / "evals" / "sweep-last.json"
+
+
+def sweep_agent_installed_epoch() -> float | None:
+    """The mtime of the sweep agent's installed plist, or None when it is not installed. The label's prefix is the
+    machine's, so this matches on the `borg.eval-sweep.plist` suffix instead of re-deriving the label (the one
+    resolver is lib/launchd-label.zsh)."""
+    try:
+        agents = os.environ.get("BORG_LAUNCH_AGENTS_DIR") or str(Path.home() / "Library" / "LaunchAgents")
+        found = list(Path(agents).glob("*borg.eval-sweep.plist"))
+        return max(p.stat().st_mtime for p in found) if found else None
+    except OSError:
+        return None
+
+
+def sweep_items(now_epoch: float) -> list[dict[str, str]]:
+    """The `borg next` item the weekly eval sweep raises, or []. Fail-open: any failure reading it is no item, so a
+    broken summary can never break `borg next` or `borg link`. The decisions are `sweeprow.sweep_items`."""
+    try:
+        target = sweep_path()
+        present = target.is_file()
+        doc: Any = None
+        if present:
+            try:
+                doc = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                doc = None
+        ts_epoch = None
+        if isinstance(doc, dict) and isinstance(doc.get("ts"), str):
+            try:
+                ts_epoch = datetime.fromisoformat(doc["ts"].replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                ts_epoch = None
+        look = f"PYTHONPATH={Path(__file__).resolve().parents[2]} python3 -m borg_core.evals.history --report"
+        return sweeprow.sweep_items(present, doc, now_epoch, ts_epoch, sweep_agent_installed_epoch(), look)
+    # JUSTIFICATION: an unreadable sweep summary must mean no item, never a failed chooser.
+    except Exception:  # pylint: disable=broad-exception-caught
+        return []
+
+
 def queen_owned() -> dict[str, dict[str, Any]]:
-    """`{"queen": {"items": owned items, "mtime": float | None}}` of the Queen's newest checkpoint, or `{}`. Fail-open.
+    """`{"queen": {"items": owned items, "mtime": float | None}}`: the Queen's newest checkpoint items plus the
+    weekly eval sweep's item, or `{}`. Fail-open.
 
     The Queen is not in the registry; its checkpoints live in `<orchestrator root>/.borg/checkpoints`. The read is the
     one repositories use (`link.shell.read_latest_checkpoint`, then `recon.core.checkpoint_owned_items`), so the rows
-    carry the same owners and freshness. A missing or unreadable directory, or one yielding no items, gives `{}`.
+    carry the same owners and freshness. A missing or unreadable directory yields no checkpoint items; the sweep item
+    is added after them (it is an orchestrator-level wait, not any repository's).
     """
+    items: list[dict[str, str]] = []
+    mtime = None
     try:
         text, mtime = link_shell.read_latest_checkpoint([(QUEEN, link_shell.orchestrator_root())])
         items = recon_core.checkpoint_owned_items(text)
     # JUSTIFICATION: an unreadable Queen checkpoint must mean no Queen rows, never a failed chooser.
     except Exception:  # pylint: disable=broad-exception-caught
-        return {}
+        items = []
+    items = [*items, *sweep_items(datetime.now(timezone.utc).timestamp())]
     return {QUEEN: {"items": items, "mtime": mtime}} if items else {}
 
 

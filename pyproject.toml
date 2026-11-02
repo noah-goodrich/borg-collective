@@ -158,7 +158,7 @@ allowed_prefixes = ["borg_core", "__future__"]
 # borg_core/evals/test_runstats.py pins its imports to the exact roots `{"__future__", "json", "math", "typing"}`
 # by AST walk; `history.py`, which reads the file, the environment and git, is unclassified on purpose.
 [tool.clean-arch.module_map]
-Domain = ["across.py", "arrival.py", "core.py", "errors.py", "grid.py", "migrate.py", "picture.py", "prepare.py", "refs.py", "render.py", "placement.py", "runstats.py", "worktree.py"]
+Domain = ["across.py", "arrival.py", "core.py", "errors.py", "grid.py", "migrate.py", "picture.py", "prepare.py", "refs.py", "render.py", "placement.py", "runstats.py", "sweeprow.py", "worktree.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]
