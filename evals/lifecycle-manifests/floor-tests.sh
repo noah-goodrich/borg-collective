@@ -56,6 +56,9 @@ for entry in "$REPO"/*; do
     ln -sfn "$entry" "$SANDBOX/${entry##*/}"
 done
 export BORG_EVAL_REPO="$SANDBOX" BORG_EVAL_PYTHON="$PYTHON"
+# THE HISTORY STORE IS REDIRECTED FOR EVERY run.sh BELOW. A live-mode run appends to the eval history, and case 8 runs
+# the sweep with a stub `claude`; without this those rows would land in the real ~/.local/state/borg/evals file.
+export BORG_EVAL_HISTORY="$WORK/history-default.jsonl"
 
 echo "== floor: fixture builders =="
 
@@ -266,6 +269,11 @@ echo "== floor: run.sh's own guards =="
 # RESULT line -- see case 7 for the measurement that made that rule.
 if [ -x "$RUN" ]; then
     out="$("$RUN" --skip-model 2>&1)"; rc=$?
+    if [ ! -e "$BORG_EVAL_HISTORY" ]; then
+        ok "--skip-model records nothing in the history (an offline run is not a live run)"
+    else
+        bad "--skip-model wrote to the history: make eval would fill it with offline runs"
+    fi
     if [ "$rc" -eq 0 ]; then ok "--skip-model exits 0"; else bad "--skip-model exits $rc"; fi
     n_skip=$(printf '%s\n' "$out" | grep -cE '^  SKIP  .*--skip-model|^  SKIP  .*did not run')
     n_pass=$(printf '%s\n' "$out" | grep -cE '^  PASS  VERBS')
@@ -305,7 +313,8 @@ if [ -x "$RUN" ]; then
     for b in bash sh env git jq python3 sed grep awk cat printf date mkdir rm ls dirname basename tr wc sort head tail; do
         src=$(command -v "$b" 2>/dev/null) && ln -sf "$src" "$nodir/$b"
     done
-    out="$(PATH="$nodir" "$RUN" 2>&1)"; rc=$?
+    hist7="$WORK/history-case7.jsonl"
+    out="$(PATH="$nodir" BORG_EVAL_HISTORY="$hist7" "$RUN" 2>&1)"; rc=$?
     if [ "$rc" -ne 0 ]; then
         ok "model floor FIRES at rc $rc when claude is unavailable"
     else
@@ -338,6 +347,26 @@ if [ -x "$RUN" ]; then
         bad "expected 6 SKIP / 0 FAIL case lines, got $n_skip / $n_fail — absent input read as a defect"
     fi
 
+    # ── 7b. a case that COULD NOT RUN still leaves a record, with its reason ──────────────────────
+    #
+    # The history exists so that a sweep in which nothing could pass is visible. Case 7's run skipped all six cases
+    # because claude was hidden: each must have appended one `skip` record naming that reason, and the report must
+    # show them. Counted on the parsed file, not on a word that also appears elsewhere. MUTATION CHECK (done by hand
+    # when this case was written): neutering the `--record` call in run.sh's `_rec` turns this case, and only the
+    # history cases, red.
+    n_rows=$("$PYTHON" -c 'import json,sys; rows=[json.loads(l) for l in open(sys.argv[1])]; print(sum(1 for r in rows if r["verdict"]=="skip" and r["harness"]=="lifecycle-manifests" and r["reason"]=="claude unavailable"))' "$hist7" 2>/dev/null || echo 0)
+    n_all=$(wc -l < "$hist7" 2>/dev/null || echo 0)
+    if [ "$n_rows" -eq 6 ] && [ "$n_all" -eq 6 ]; then
+        ok "claude unavailable appends exactly six skip records, each naming the reason"
+    else
+        bad "expected 6 skip records naming 'claude unavailable' in the history, got $n_rows of $n_all rows"
+    fi
+    if PYTHONPATH="$REPO" "$PYTHON" -m borg_core.evals.history --report --path "$hist7" 2>/dev/null | grep -q 'lifecycle-manifests/P1  n=0 pass=0 skip=1'; then
+        ok "the report shows a skipped case that never ran"
+    else
+        bad "the report does not show the skipped case"
+    fi
+
     # ── 8. EVAL_PLUGIN_DIR reaches the six model cases and not the probe ─────────────────────────
     #
     # Without it a live run after a skill change loads the INSTALLED plugin and grades the previous
@@ -356,7 +385,8 @@ if [ -x "$RUN" ]; then
     done
     CLAUDE_ARGS_LOG="$WORK/args-with.log"; export CLAUDE_ARGS_LOG
     : > "$CLAUDE_ARGS_LOG"
-    PATH="$stubdir:/usr/bin:/bin" EVAL_PLUGIN_DIR="/plugin/under/test" EVAL_MAX_BUDGET_USD=3 "$RUN" >/dev/null 2>&1
+    hist8="$WORK/history-case8.jsonl"
+    PATH="$stubdir:/usr/bin:/bin" EVAL_PLUGIN_DIR="/plugin/under/test" EVAL_MAX_BUDGET_USD=3 BORG_EVAL_HISTORY="$hist8" "$RUN" >/dev/null 2>&1
     n_calls=$(grep -c -- ' --model ' "$CLAUDE_ARGS_LOG")
     n_flag=$(grep -c -- '--plugin-dir /plugin/under/test' "$CLAUDE_ARGS_LOG")
     n_budget=$(grep -c -- '--max-budget-usd 3' "$CLAUDE_ARGS_LOG")
@@ -367,6 +397,14 @@ if [ -x "$RUN" ]; then
         ok "EVAL_PLUGIN_DIR, EVAL_MAX_BUDGET_USD and the tool allow-list reach all six model cases and not the probe"
     else
         bad "plugin-dir/budget/allow-list forwarding: expected 7 calls, 6 flagged, 6 budgeted, 0 on the probe, 6 allowed; got $n_calls/$n_flag/$n_budget/$n_probe/$n_allow"
+    fi
+    # A live sweep that ran appends EXACTLY ONE record per case it attempted: six lines, six distinct case ids, and
+    # none of them a skip (the stub answered the probe, so the sweep was not skipped).
+    n_cases=$("$PYTHON" -c 'import json,sys; rows=[json.loads(l) for l in open(sys.argv[1])]; print(len({r["case"] for r in rows}) if len(rows)==6 and all(r["reason"]!="claude unavailable" for r in rows) else -1)' "$hist8" 2>/dev/null || echo -1)
+    if [ "$n_cases" -eq 6 ]; then
+        ok "a live sweep appends exactly one record per case (six cases, six records)"
+    else
+        bad "expected 6 records for 6 distinct cases from the stubbed sweep, got $n_cases"
     fi
     CLAUDE_ARGS_LOG="$WORK/args-without.log"; export CLAUDE_ARGS_LOG
     : > "$CLAUDE_ARGS_LOG"

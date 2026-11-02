@@ -88,7 +88,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 
 PASS=0; FAIL=0; SKIPPED=0
-SKILLS_RAN=0; HOOKS_RAN=0
+SKILLS_RAN=0; HOOKS_RAN=0; SKILLS_FAIL=0; HOOKS_FAIL=0
 ok()   { echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
 skip() { echo "  SKIP  $1"; SKIPPED=$((SKIPPED+1)); }
@@ -99,11 +99,29 @@ _report() {
     while IFS= read -r line; do
         case "$line" in
             "CHECK pass skills "*) SKILLS_RAN=$((SKILLS_RAN+1)); ok "${line#CHECK pass skills }" ;;
-            "CHECK fail skills "*) SKILLS_RAN=$((SKILLS_RAN+1)); bad "${line#CHECK fail skills }" ;;
+            "CHECK fail skills "*) SKILLS_RAN=$((SKILLS_RAN+1)); SKILLS_FAIL=$((SKILLS_FAIL+1)); bad "${line#CHECK fail skills }" ;;
             "CHECK pass hooks "*)  HOOKS_RAN=$((HOOKS_RAN+1));   ok "${line#CHECK pass hooks }" ;;
-            "CHECK fail hooks "*)  HOOKS_RAN=$((HOOKS_RAN+1));   bad "${line#CHECK fail hooks }" ;;
+            "CHECK fail hooks "*)  HOOKS_RAN=$((HOOKS_RAN+1));   HOOKS_FAIL=$((HOOKS_FAIL+1)); bad "${line#CHECK fail hooks }" ;;
         esac
     done < "$1"
+}
+
+# ── the run history: ONE RECORD PER REQUESTED LIVE MODE ("skills", "hooks"), computed by the Python core ──────
+# `_rec_modes <pass|fail|skip|error> <reason>` appends one record per mode this run was asked to grade, so a LIVE
+# request that could not run is a visible skip or error, never an absence. Cost, turns, tokens and the model id are
+# read from the kept session stream. `--skip-model` never reaches LIVE and records nothing. See
+# borg_core/evals/history.py; BORG_EVAL_HISTORY overrides the file.
+_rec_one() {
+    PYTHONPATH="$REPO" "$PYTHON" -m borg_core.evals.history --record --harness session-load --case "$1" \
+        --verdict "$2" --reason "$3" --repo "$REPO" ${4:+--result "$4"} \
+        || echo "warning: could not append to the eval history" >&2
+}
+_rec_modes() {
+    local result=""
+    [ -s "$OUT/session.jsonl" ] && result="$OUT/session.jsonl"
+    [ "$MODE" != hooks ] && _rec_one skills "$1" "$2" "$result"
+    [ "$MODE" != skills ] && _rec_one hooks "$1" "$2" "$result"
+    return 0
 }
 
 # ── CHECKER (offline) ────────────────────────────────────────────────────────────────────────────
@@ -157,6 +175,7 @@ if [ "$SKIP_MODEL" -eq 0 ]; then
     LIVE_REQUESTED=1
     if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
         skip "LIVE: resolved claude CLI '$CLAUDE_BIN' not found -- install it or set BORG_EVAL_CLAUDE"
+        _rec_modes skip "claude unavailable: '$CLAUDE_BIN' not found"
     elif ! command -v "$PYTHON" >/dev/null 2>&1; then
         skip "LIVE: interpreter '$PYTHON' not found -- set BORG_EVAL_PYTHON"
     else
@@ -169,14 +188,26 @@ if [ "$SKIP_MODEL" -eq 0 ]; then
         session_rc=$?
         if [ "$session_rc" -ne 0 ] && [ ! -s "$OUT/session.jsonl" ]; then
             bad "LIVE: premise broken: '$CLAUDE_BIN -p' exited $session_rc with no events -- $(head -1 "$OUT/session.err" 2>/dev/null)"
+            _rec_modes error "premise broken: claude -p exited $session_rc with no events"
         else
             "$PYTHON" "$CHECK" --events "$OUT/session.jsonl" --repo "$REPO" --claude-home "$CLAUDE_HOME" \
                 --mode "$MODE" > "$OUT/live.out" 2> "$OUT/live.err"
             check_rc=$?
             if [ "$check_rc" -eq 3 ]; then
                 bad "LIVE: $(head -1 "$OUT/live.err")"
+                _rec_modes error "checker could not grade the session: $(head -1 "$OUT/live.err")"
             else
                 _report "$OUT/live.out"
+                if [ "$MODE" != hooks ]; then
+                    if [ "$SKILLS_RAN" -eq 0 ]; then _rec_one skills error "no skill was graded" "$OUT/session.jsonl"
+                    elif [ "$SKILLS_FAIL" -gt 0 ]; then _rec_one skills fail "" "$OUT/session.jsonl"
+                    else _rec_one skills pass "" "$OUT/session.jsonl"; fi
+                fi
+                if [ "$MODE" != skills ]; then
+                    if [ "$HOOKS_RAN" -eq 0 ]; then _rec_one hooks error "no hook event was graded" "$OUT/session.jsonl"
+                    elif [ "$HOOKS_FAIL" -gt 0 ]; then _rec_one hooks fail "" "$OUT/session.jsonl"
+                    else _rec_one hooks pass "" "$OUT/session.jsonl"; fi
+                fi
             fi
         fi
     fi

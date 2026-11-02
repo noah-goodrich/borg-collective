@@ -42,12 +42,24 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+# THE RUN HISTORY (borg_core/evals/history.py; BORG_EVAL_HISTORY overrides the file): every graded check appends ONE
+# record, and an environmental abort appends one `error` record, so a run that could not pass is visible. The shell
+# derives nothing: the core reads turns, tokens and the model id from the session stream. `_rec <case> <verdict>
+# <reason> [stream]`.
+_rec() {
+    command -v python3 >/dev/null 2>&1 || return 0
+    PYTHONPATH="$REPO" python3 -m borg_core.evals.history --record --harness cortex-agents --case "$1" \
+        --verdict "$2" --reason "$3" --repo "$REPO" ${4:+--result "$4"} \
+        || echo "warning: could not append to the eval history" >&2
+}
+_abort() { _rec preflight error "$1"; echo "$1" >&2; exit 2; }
+
 for tool in cortex jq python3 zsh git; do
-    command -v "$tool" >/dev/null 2>&1 || { echo "$tool not found on PATH; the live run cannot start" >&2; exit 2; }
+    command -v "$tool" >/dev/null 2>&1 || _abort "$tool not found on PATH; the live run cannot start"
 done
 if [ ! -f "$REPO/borg.zsh" ]; then
-    echo "ERROR: REPO does not look like the borg-collective checkout: $REPO" >&2
-    exit 2
+    _abort "ERROR: REPO does not look like the borg-collective checkout: $REPO"
 fi
 CONV="$HOME/.snowflake/cortex/conversations"
 
@@ -70,7 +82,7 @@ git -C "$PROBE" commit -q -m init
 # The agents, exactly as borg setup installs them (namespaced name, everything else byte-identical).
 BORG_HOME="$REPO" zsh -c "source '$REPO/borg.zsh' >/dev/null 2>&1; _borg_install_cortex_agents '$PROBE/.cortex'" \
     > "$RUN/install.log" 2>&1
-[ -f "$PROBE/.cortex/agents/borg-scout.md" ] || { echo "agent install failed: $(cat "$RUN/install.log")" >&2; exit 2; }
+[ -f "$PROBE/.cortex/agents/borg-scout.md" ] || _abort "agent install failed: $(head -c 300 "$RUN/install.log")"
 pin() { sed -n "s/^$2: //p" "$PROBE/.cortex/agents/$1.md" | head -1; }
 
 # The recorder: every payload Cortex sends to the hooks below, verbatim.
@@ -155,6 +167,24 @@ jq -n --arg probe "$PROBE" --arg model "$MODEL" --arg effort "$EFFORT" --arg cv 
 
 python3 "$HERE/check.py" grade "$RUN" | tee "$RUN/grade.txt"
 rc=${PIPESTATUS[0]}
+
+# One record per graded check. The session's stream (turns, tokens, model) rides on the FIRST check that reads that
+# session, so summing a column over the history never counts a session twice: A4 -> assume, A1 -> alias, G0 -> guarded.
+if grep -q '^PREMISE' "$RUN/grade.txt"; then
+    _rec premise error "$(grep -m1 '^PREMISE' "$RUN/grade.txt" | head -c 300)"
+fi
+while read -r _tag verdict cid _rest; do
+    [ "$_tag" = CHECK ] || continue
+    case "$cid" in
+        A4) stream="$RUN/stream-assume.jsonl" ;;
+        A1) stream="$RUN/stream-alias.jsonl" ;;
+        G0) stream="$RUN/stream-guarded.jsonl" ;;
+        *) stream="" ;;
+    esac
+    reason=""; [ "$verdict" = skip ] && reason="$_rest"
+    _rec "$cid" "$verdict" "$reason" "$stream"
+done < "$RUN/grade.txt"
+
 python3 "$HERE/check.py" replay "$RUN" "$REPO" | tee "$RUN/replay.txt"
 [ "${PIPESTATUS[0]}" -eq 0 ] || rc=1
 if [ "$RECORD" -eq 1 ]; then

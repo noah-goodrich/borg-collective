@@ -140,7 +140,7 @@ _sandbox_repo() {
 }
 
 _live() {
-    run env BORG_EVAL_REPO="$(_sandbox_repo)" BORG_EVAL_CLAUDE="$1" BORG_EVAL_CLAUDE_HOME="$CH" \
+    run env BORG_EVAL_HISTORY="$BATS_TEST_TMPDIR/history.jsonl" BORG_EVAL_REPO="$(_sandbox_repo)" BORG_EVAL_CLAUDE="$1" BORG_EVAL_CLAUDE_HOME="$CH" \
         bash "$BORG_HOME/evals/session-load/run.sh" "${@:2}"
 }
 
@@ -186,4 +186,31 @@ _live() {
     run grep -E -- '-p .*--model' "$BORG_HOME/evals/session-load/run.sh"
     [ "$status" -eq 0 ]
     [[ "$output" == *"--effort"* ]] || false
+}
+
+@test "run.sh live: every requested mode appends one history record (pass, fail, and a skip naming why)" {
+    _events 1 - 3 2 > "$BATS_TEST_TMPDIR/clean.jsonl"
+    _stub_claude "$BATS_TEST_TMPDIR/clean.jsonl"
+    _live "$BATS_TEST_TMPDIR/claude"
+    [ "$status" -eq 0 ]
+    run jq -s -r 'map("\(.harness)/\(.case)=\(.verdict)") | sort | join(" ")' "$BATS_TEST_TMPDIR/history.jsonl"
+    [ "$output" = "session-load/hooks=pass session-load/skills=pass" ]
+    rm "$BATS_TEST_TMPDIR/history.jsonl"
+    _events 2 - 3 2 > "$BATS_TEST_TMPDIR/dup.jsonl"
+    _stub_claude "$BATS_TEST_TMPDIR/dup.jsonl"
+    _live "$BATS_TEST_TMPDIR/claude"
+    run jq -s -r 'map("\(.case)=\(.verdict)") | sort | join(" ")' "$BATS_TEST_TMPDIR/history.jsonl"
+    [ "$output" = "hooks=pass skills=fail" ]
+    rm "$BATS_TEST_TMPDIR/history.jsonl"
+    _live "$BATS_TEST_TMPDIR/no-such-claude" --skills-only
+    run jq -s -r 'map("\(.case)=\(.verdict):\(.reason)") | join("|")' "$BATS_TEST_TMPDIR/history.jsonl"
+    [[ "$output" == "skills=skip:claude unavailable"* ]] || false
+    [ "$(wc -l < "$BATS_TEST_TMPDIR/history.jsonl")" -eq 1 ]
+}
+
+@test "run.sh --skip-model records nothing in the history" {
+    run env BORG_EVAL_HISTORY="$BATS_TEST_TMPDIR/history.jsonl" BORG_EVAL_REPO="$(_sandbox_repo)" \
+        bash "$BORG_HOME/evals/session-load/run.sh" --skip-model
+    [ "$status" -eq 0 ]
+    [ ! -e "$BATS_TEST_TMPDIR/history.jsonl" ]
 }
