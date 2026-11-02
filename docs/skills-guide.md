@@ -206,13 +206,6 @@ vibe-coding.
 Adds a local permission exception to a repository's `settings.local.json`. The formal escape hatch for
 commands too dangerous or repository-specific for the global allowlist.
 
-### /no-unnecessary-read-perms — Suppress Redundant Read Prompts
-
-**Activation**: Automatic (always active)
-
-Suppresses unnecessary read-permission prompts for files already accessible via normal tool use.
-Applies to Claude's own tool calls and to subagent prompts that include the system subagent rules.
-
 ### /adhd-guardrails — Cognitive Load Guardrails
 
 **Activation**: Automatic (always active)

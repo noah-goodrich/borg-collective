@@ -70,7 +70,6 @@ skills/ (16)
     borg-switch/            Switch to a repository's tmux window by name
     break-glass/            Add a local permission exception to a repository's settings.local.json
     fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
-    no-unnecessary-read-perms/  Suppress redundant read-permission prompts (always active)
     pane/                   Split the current tmux pane in a given direction
 agents/ (6, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
     borg-nanoprobe.md       Default worker: one discrete unit of work, manages its own worktree

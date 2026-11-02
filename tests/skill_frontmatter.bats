@@ -90,7 +90,7 @@ _description_of() {
             flagged="$flagged ${name##*/}"
         fi
     done
-    [ "$flagged" = " break-glass no-unnecessary-read-perms" ] || { echo "flagged:$flagged"; false; }
+    [ "$flagged" = " break-glass" ] || { echo "flagged:$flagged"; false; }
 }
 
 @test "skills: the triage doc names every skill" {

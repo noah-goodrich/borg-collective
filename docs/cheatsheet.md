@@ -70,9 +70,8 @@ drone toggle [repository]    Show/hide side pane (2 ↔ 3 panes)
 /simplify                    Review changed code for reuse, quality, efficiency (Claude Code built-in)
 /fable-reviewer               Fable's 5-gate working discipline (scope, evidence, adversarial review)
 /break-glass                  Add a local permission exception to settings.local.json
-/no-unnecessary-read-perms     Suppress redundant read-permission prompts (always active)
 
-Full list (16 skills): docs/skills-guide.md or run /help in a session.
+Full list (15 skills): docs/skills-guide.md or run /help in a session.
 ```
 
 ## Hotkey

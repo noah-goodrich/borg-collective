@@ -121,10 +121,6 @@
       "waiver": "Phase 4 long-tail review (evals-for-everything)",
       "review_by": "2027-01-31"
     },
-    "skills/no-unnecessary-read-perms": {
-      "waiver": "always-on guidance with no observable output to grade; revisit in the Phase 4 waiver review",
-      "review_by": "2027-01-31"
-    },
     "skills/pane": {
       "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
       "review_by": "2027-01-31"
