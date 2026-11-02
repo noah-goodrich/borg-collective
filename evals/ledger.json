@@ -10,6 +10,10 @@
         "borg_core/manifest/**",
         "borg_core/planstate/**",
         "lib/promote-next.sh"
+      ],
+      "tiers": [
+        1,
+        2
       ]
     },
     "evals/session-load": {
@@ -18,6 +22,10 @@
         "skills/**",
         "hooks/**",
         "scripts/build-plugin.sh"
+      ],
+      "tiers": [
+        1,
+        2
       ]
     },
     "evals/s4-k3": {
@@ -27,6 +35,9 @@
         "borg_core/recon/**",
         "lib/recon/**",
         "merge-tree/**"
+      ],
+      "tiers": [
+        1
       ]
     },
     "evals/link-next": {
@@ -34,6 +45,10 @@
         "evals/link-next/**",
         "skills/borg-link/**",
         "skills/borg-next/**"
+      ],
+      "tiers": [
+        1,
+        2
       ]
     },
     "evals/cortex-agents": {
@@ -42,6 +57,10 @@
         "hooks/borg-agent-model-guard.sh",
         "hooks/borg-nanoprobe-log.sh",
         "agents/**"
+      ],
+      "tiers": [
+        1,
+        2
       ]
     }
   },
