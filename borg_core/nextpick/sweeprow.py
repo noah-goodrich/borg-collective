@@ -61,6 +61,25 @@ def _attention_text(doc: dict[str, Any], look: str) -> str:
     return f"{head}{': ' + detail if detail else ''}. Look: {look}"
 
 
+def _missing(installed_days: float | None, look: str) -> list[dict[str, str]]:
+    if installed_days is not None and installed_days > STALE_DAYS:
+        text = f"the eval sweep agent was installed {int(installed_days)} days ago and has never produced a sweep"
+        return [_item(f"{text}. Look: {look}")]
+    return []
+
+
+def _present(
+    summary: dict[str, Any] | None, age_days: float | None, installed: bool, look: str
+) -> list[dict[str, str]]:
+    if summary is None or age_days is None:
+        unreadable = f"sweep-last.json is unreadable (malformed or an unknown schema). Look: {look}"
+        return [_item(unreadable)] if installed else []
+    if installed and age_days > STALE_DAYS:
+        return [_item(f"no eval sweep for {int(age_days)} days; the weekly launchd job is not running. Look: {look}")]
+    return [_item(_attention_text(summary, look))] if summary["needs_attention"] else []
+
+
+# JUSTIFICATION: six independent facts of one decision (file, clock, two stamps, command); a wrapper only renames them
 def sweep_items(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     present: bool,
     doc: Any,
@@ -74,21 +93,9 @@ def sweep_items(  # pylint: disable=too-many-arguments,too-many-positional-argum
     mtime, None when the agent is not installed; `look` the command to read the evidence."""
     installed_days = None if installed_epoch is None else (now_epoch - installed_epoch) / _DAY
     if not present:
-        if installed_days is not None and installed_days > STALE_DAYS:
-            text = f"the eval sweep agent was installed {int(installed_days)} days ago and has never produced a sweep"
-            return [_item(f"{text}. Look: {look}")]
-        return []
-    summary = sweep_summary(doc)
-    if summary is None or ts_epoch is None:
-        if installed_epoch is None:
-            return []
-        return [_item(f"sweep-last.json is unreadable (malformed or an unknown schema). Look: {look}")]
-    age_days = (now_epoch - ts_epoch) / _DAY
-    if installed_epoch is not None and age_days > STALE_DAYS:
-        return [_item(f"no eval sweep for {int(age_days)} days; the weekly launchd job is not running. Look: {look}")]
-    if summary["needs_attention"]:
-        return [_item(_attention_text(summary, look))]
-    return []
+        return _missing(installed_days, look)
+    age_days = None if ts_epoch is None else (now_epoch - ts_epoch) / _DAY
+    return _present(sweep_summary(doc), age_days, installed_epoch is not None, look)
 
 
 def _item(text: str) -> dict[str, str]:

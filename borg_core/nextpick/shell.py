@@ -128,7 +128,7 @@ QUEEN = "queen"
 
 
 def sweep_path() -> Path:
-    """`<state root>/evals/sweep-last.json`, the weekly eval sweep's summary (contract: borg_core/evals/sweep/core.py)."""
+    """`<state root>/evals/sweep-last.json`, the weekly eval sweep's summary (contract: evals/sweep/core.py)."""
     return paths.state_root() / "evals" / "sweep-last.json"
 
 
