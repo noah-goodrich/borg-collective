@@ -35,7 +35,8 @@ A skip or error is COUNTED AND SHOWN by the report but excluded from the pass ra
 CLI::
 
     python3 -m borg_core.evals.history --record --harness H --case C --verdict V [--reason R]
-                                       [--result FILE] [--repo DIR] [--sha SHA] [--path FILE]
+                                       [--result FILE] [--plugin-eval-result FILE] [--repo DIR] [--sha SHA]
+                                       [--path FILE]
     python3 -m borg_core.evals.history --report [--path FILE]
 
 `--result FILE` is a `claude -p --output-format json` result object or a stream-json file (one event per line).
@@ -52,7 +53,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from borg_core.evals.runstats import VERDICTS, make_record, parse_lines, report
+from borg_core.evals.runstats import VERDICTS, make_record, parse_lines, parse_plugin_eval, report
 from borg_core.paths import state_root
 
 
@@ -102,6 +103,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--verdict", choices=VERDICTS)
     p.add_argument("--reason", default="")
     p.add_argument("--result", help="captured claude result JSON or stream-json file")
+    p.add_argument("--plugin-eval-result", help="a `claude plugin eval` aggregate-result.json: records its costUsd")
     p.add_argument("--repo", help="checkout whose HEAD is the build under review (default: cwd)")
     p.add_argument("--sha", help="override the git sha")
     p.add_argument("--path", help="history file (default: $BORG_EVAL_HISTORY or the state root)")
@@ -127,18 +129,23 @@ def main(argv: list[str] | None = None) -> int:
             text = Path(args.result).read_text(encoding="utf-8", errors="replace")
         except OSError:
             text = ""
-    append(
-        make_record(
-            args.harness,
-            args.case,
-            args.verdict,
-            reason=args.reason,
-            git_sha=args.sha or _git_sha(args.repo),
-            result_text=text,
-            ts=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        ),
-        args.path,
+    record = make_record(
+        args.harness,
+        args.case,
+        args.verdict,
+        reason=args.reason,
+        git_sha=args.sha or _git_sha(args.repo),
+        result_text=text,
+        ts=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
+    if args.plugin_eval_result:
+        try:
+            cost, _reason = parse_plugin_eval(Path(args.plugin_eval_result).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            cost = None
+        if cost is not None and record.get("cost_usd") is None:
+            record["cost_usd"] = cost
+    append(record, args.path)
     return 0
 
 

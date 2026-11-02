@@ -150,3 +150,16 @@ def test_record_without_a_result_still_records_a_skip_with_its_reason(tmp_path):
 
 def test_record_requires_harness_case_and_verdict(tmp_path):
     assert history.main(["--record", "--harness", "h", "--path", str(tmp_path / "h.jsonl")]) == 2
+
+
+def test_record_with_plugin_eval_result_stores_its_cost_and_a_bad_file_stores_null(tmp_path):
+    good = tmp_path / "agg.json"
+    good.write_text(json.dumps({"schemaVersion": 1, "costUsd": 0.31}))
+    bad = tmp_path / "bad.json"
+    bad.write_text("{nope")
+    path = tmp_path / "h.jsonl"
+    base = ["--record", "--harness", "link-next", "--case", "c", "--verdict", "pass", "--sha", "s", "--path", str(path)]
+    assert history.main([*base, "--plugin-eval-result", str(good)]) == 0
+    assert history.main([*base, "--plugin-eval-result", str(bad)]) == 0
+    assert history.main([*base, "--plugin-eval-result", str(tmp_path / "missing.json")]) == 0
+    assert [r["cost_usd"] for r in history.read_records(path)[0]] == [0.31, None, None]
