@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
 from pathlib import Path
 
 import pytest
 
-from borg_core.evals import history
+from borg_core.evals import history, runstats
 
 REPO = Path(__file__).resolve().parents[2]
 RECORDED = REPO / "evals" / "cortex-agents" / "recorded"
@@ -31,16 +30,6 @@ def test_empty_or_missing_file_reports_nothing_and_exits_zero(tmp_path, capsys):
     assert captured.out == "" and captured.err == ""
 
 
-def test_ten_identical_passes_have_wilson_lower_bound_near_072():
-    low, high = history.wilson(10, 10)
-    assert low == pytest.approx(0.722, abs=0.002)
-    assert high == pytest.approx(1.0)
-
-
-def test_wilson_of_no_evidence_is_none_not_zero():
-    assert history.wilson(0, 0) is None
-
-
 def test_mixed_verdicts_and_skip_error_counted_but_not_in_the_rate(tmp_path, capsys):
     path = tmp_path / "h.jsonl"
     verdicts = ["pass", "pass", "pass", "fail", "skip", "error", "skip"]
@@ -48,7 +37,7 @@ def test_mixed_verdicts_and_skip_error_counted_but_not_in_the_rate(tmp_path, cap
     assert history.main(["--report", "--path", str(path)]) == 0
     first = capsys.readouterr().out.splitlines()[0]
     assert "h/P1" in first and "n=4 pass=3 skip=2 error=1" in first
-    low, high = history.wilson(3, 4)
+    low, high = runstats.wilson(3, 4)
     assert f"[{low:.3f}, {high:.3f}]" in first
 
 
@@ -103,39 +92,6 @@ def test_env_override_names_the_store(tmp_path, monkeypatch):
     monkeypatch.delenv("BORG_EVAL_HISTORY")
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     assert history.history_path() == tmp_path / "state" / "borg" / "evals" / "history.jsonl"
-
-
-def test_parser_derives_turns_tokens_and_models_from_a_recorded_result_event():
-    # A REAL recorded stream (evals/cortex-agents/recorded), not a fixture that sets what production must derive.
-    derived = history.parse_result((RECORDED / "stream-assume.jsonl").read_text())
-    assert derived["turns"] == 3
-    assert derived["input_tokens"] == 8 + 10
-    assert derived["output_tokens"] == 376 + 233
-    assert derived["cache_read_tokens"] == 182619 + 14273
-    assert derived["model"] == "claude-haiku-5-5,claude-sonnet-5-5"
-    assert derived["cost_usd"] is None  # Cortex reports no cost; it is not estimated
-
-
-def test_parser_falls_back_to_the_init_model_and_reads_claude_cost_and_usage():
-    # The shape `claude -p --output-format json` prints (the fields run.sh's _report_run reads), after an init.
-    stream = "\n".join(
-        json.dumps(e)
-        for e in [
-            {"type": "system", "subtype": "init", "model": "claude-opus-5-5"},
-            {
-                "type": "result",
-                "subtype": "success",
-                "total_cost_usd": 0.4321,
-                "num_turns": 7,
-                "usage": {"input_tokens": 12, "output_tokens": 345, "cache_read_input_tokens": 9},
-            },
-        ]
-    )
-    derived = history.parse_result(stream)
-    assert (derived["cost_usd"], derived["turns"]) == (0.4321, 7)
-    assert (derived["input_tokens"], derived["output_tokens"], derived["cache_read_tokens"]) == (12, 345, 9)
-    assert derived["model"] == "claude-opus-5-5"
-    assert history.parse_result("")["model"] is None
 
 
 def test_cli_record_derives_from_the_result_file_and_stamps_the_sha(tmp_path):
@@ -194,8 +150,3 @@ def test_record_without_a_result_still_records_a_skip_with_its_reason(tmp_path):
 
 def test_record_requires_harness_case_and_verdict(tmp_path):
     assert history.main(["--record", "--harness", "h", "--path", str(tmp_path / "h.jsonl")]) == 2
-
-
-def test_make_record_stamps_a_utc_second_resolution_ts():
-    now = datetime(2026, 11, 2, 3, 4, 5, 678, tzinfo=timezone.utc)
-    assert history.make_record("h", "c", "pass", now=now)["ts"] == "2026-11-02T03:04:05Z"

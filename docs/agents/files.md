@@ -22,7 +22,8 @@ lib/
     borg-sync.zsh           mtime-based file sync helpers for the zsh CLI (mirrors borg-hooks.sh)
 borg_core/                  Python core the CLI dispatches into (see Architecture Rules)
     paths.py                Config-path resolution + defaults (the CLI's `_borg_py` mirror)
-    evals/history.py        Eval run history: append, Wilson interval, report
+    evals/history.py        Eval run history: store I/O + CLI
+    evals/runstats.py       Pure half: parse result, record, Wilson, report
     registry/               Registry read/write core, shell adapter, CLI entry
     recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
     extensions/             Local-extension resolution: layer precedence, prefer-tool, liveness
@@ -101,4 +102,4 @@ docs/
 
 ### Machine-local stores
 
-- `~/.local/state/borg/evals/history.jsonl` (`${XDG_STATE_HOME:-$HOME/.local/state}/borg/evals/history.jsonl`): the eval run history, one JSON line per live eval case (ts, harness, case, git_sha, model, cost_usd, turns, input/output tokens, verdict, reason). Never committed. `BORG_EVAL_HISTORY` overrides the path, and every test sets it. Writer: `python3 -m borg_core.evals.history --record`, called by the live harnesses under `evals/` (lifecycle-manifests, session-load, cortex-agents, link-next); `--skip-model` runs record nothing. Reader: `python3 -m borg_core.evals.history --report` (a Wilson 95% interval per case, then the per-SHA trend; skip and error are counted, not rated). `history.py` does file and environment I/O, so it is not in the `[tool.clean-arch.module_map]` Domain list on purpose (like `shell.py`).
+- `~/.local/state/borg/evals/history.jsonl` (`${XDG_STATE_HOME:-$HOME/.local/state}/borg/evals/history.jsonl`): the eval run history, one JSON line per live eval case (ts, harness, case, git_sha, model, cost_usd, turns, input/output tokens, verdict, reason). Never committed. `BORG_EVAL_HISTORY` overrides the path, and every test sets it. Writer: `python3 -m borg_core.evals.history --record`, called by the live harnesses under `evals/` (lifecycle-manifests, session-load, cortex-agents, link-next); `--skip-model` runs record nothing. Reader: `python3 -m borg_core.evals.history --report` (a Wilson 95% interval per case, then the per-SHA trend; skip and error are counted, not rated). The pure half (parsing, Wilson, summary, report lines) is `borg_core/evals/runstats.py`, listed under Domain; `history.py` does the file, environment and git I/O and is unclassified on purpose (like `shell.py`).
