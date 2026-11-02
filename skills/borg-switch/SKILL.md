@@ -1,8 +1,6 @@
 ---
 name: borg-switch
-description: >
-  Switch to a different repository's tmux window. Use when the user says "switch to X",
-  "go to X", "jump to X", or wants to change repositories.
+description: "Switch to a different repository's tmux window. Use when the user says \"switch to X\", \"go to X\", \"jump to X\", or wants to change repositories."
 ---
 
 If the user named a specific repository: run `borg switch <name>` with the Bash tool.

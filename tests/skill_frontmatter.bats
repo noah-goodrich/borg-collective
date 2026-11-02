@@ -53,7 +53,11 @@ _description_of() {
         /^description:/ { sub(/^description:[ \t]*>?[ \t]*/, ""); d = $0; grab = 1; next }
         grab && /^[ \t]/ { d = d " " $0; next }
         { grab = 0 }
-        END { gsub(/[ \t]+/, " ", d); sub(/^ /, "", d); sub(/ $/, "", d); printf "%s", d }
+        END {
+            gsub(/[ \t]+/, " ", d); sub(/^ /, "", d); sub(/ $/, "", d)
+            if (d ~ /^".*"$/) { d = substr(d, 2, length(d) - 2); gsub(/\\"/, "\"", d) }
+            printf "%s", d
+        }
     ' "$1"
 }
 

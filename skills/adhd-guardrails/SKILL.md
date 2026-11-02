@@ -1,9 +1,6 @@
 ---
 name: adhd-guardrails
-description: >
-  Cognitive load guardrails. Always active. Pushes back on perfectionism, flags scope expansion,
-  suggests breaks after sustained work, uses shame-free language, and includes clear done criteria
-  in every plan. Prevents burnout from AI-assisted development without limiting productivity.
+description: "Cognitive load guardrails. Always active. Pushes back on perfectionism, flags scope expansion, suggests breaks after sustained work, uses shame-free language, and includes clear done criteria in every plan. Prevents burnout from AI-assisted development without limiting productivity."
 user-invocable: false
 ---
 

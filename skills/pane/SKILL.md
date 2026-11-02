@@ -1,8 +1,6 @@
 ---
 name: pane
-description: >
-  Split the current tmux pane in a given direction. Use when the user says "split the pane",
-  "open a pane to the right/left/top/bottom", or wants a new terminal pane in the current window.
+description: "Split the current tmux pane in a given direction. Use when the user says \"split the pane\", \"open a pane to the right/left/top/bottom\", or wants a new terminal pane in the current window."
 ---
 
 If the user named a direction (top, bottom, left, or right): run `drone pane <direction>` with

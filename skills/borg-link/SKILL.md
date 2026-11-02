@@ -1,10 +1,6 @@
 ---
 name: borg-link
-description: >
-  The front door to the collective. In the Queen session it is the cross-repository overview; in a
-  repository, worktree or named repository, a page on that one directory. Use for status, overview,
-  briefing, "what's going on", repository details, "what changed", "catch me up", "morning link-up",
-  "recon".
+description: "The front door to the collective. In the Queen session it is the cross-repository overview; in a repository, worktree or named repository, a page on that one directory. Use for status, overview, briefing, \"what's going on\", repository details, \"what changed\", \"catch me up\", \"morning link-up\", \"recon\"."
 user-invocable: true
 allowed-tools: Bash(borg link *) Bash(echo *)
 ---

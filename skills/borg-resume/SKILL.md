@@ -1,10 +1,6 @@
 ---
 name: borg-resume
-description: >
-  Manual and fallback resume for work a session or usage limit paused or killed. Use
-  when a Workflow fails with a "session limit" / "usage limit" / "resets <time>" error, or the user
-  says "resume after reset", "auto-resume the workflow" or "pick it back up when the limit
-  clears". Checks the resume watcher first.
+description: "Manual and fallback resume for work a session or usage limit paused or killed. Use when a Workflow fails with a \"session limit\" / \"usage limit\" / \"resets <time>\" error, or the user says \"resume after reset\", \"auto-resume the workflow\" or \"pick it back up when the limit clears\". Checks the resume watcher first."
 ---
 
 # borg-resume: manual and fallback resume

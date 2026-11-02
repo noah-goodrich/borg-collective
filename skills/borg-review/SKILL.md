@@ -1,9 +1,6 @@
 ---
 name: borg-review
-description: >
-  Mid-session diagnostic and start-of-change gates. Checks progress against the plan, detects scope
-  creep and bad loops, and gives you ONE recommendation. Use when stuck, scattered, unsure you're
-  building the right thing, starting a non-trivial change, or to "apply the gates" or "fable mode".
+description: "Mid-session diagnostic and start-of-change gates. Checks progress against the plan, detects scope creep and bad loops, and gives you ONE recommendation. Use when stuck, scattered, unsure you're building the right thing, starting a non-trivial change, or to \"apply the gates\" or \"fable mode\"."
 user-invocable: true
 ---
 

@@ -1,9 +1,6 @@
 ---
 name: borg-assimilate
-description: >
-  Shipping checklist + execution. Evaluates current state against PROJECT_PLAN.md acceptance
-  criteria, then executes shipping (merge PR, archive plan) with confirmation. Use when you
-  think you might be done, or when you're tempted to add "one more thing."
+description: "Shipping checklist + execution. Evaluates current state against PROJECT_PLAN.md acceptance criteria, then executes shipping (merge PR, archive plan) with confirmation. Use when you think you might be done, or when you're tempted to add \"one more thing.\""
 user-invocable: true
 ---
 

@@ -1,8 +1,6 @@
 ---
 name: borg-next
-description: >
-  Show what repository needs attention most urgently and let the user pick one to open. Use when the user asks
-  "what should I work on?", "what's next?", or wants to know priorities.
+description: "Show what repository needs attention most urgently and let the user pick one to open. Use when the user asks \"what should I work on?\", \"what's next?\", or wants to know priorities."
 ---
 
 You are the chooser. Run `borg next --rows --json` with the Bash tool (it logs nothing). It prints one JSON object: `rows` (one per piece of work, so a repository can have several; each with `n`, `project`, `item`, `next_step`, `owner`, `ready`, `ref`, `status`, `age`, `waiting_reason`, `card`), `rec`, `suggestion` (a row number or null), `quiet` (names of repositories with nothing to do, already left out of `rows`), `hidden` (`{agent, stale, overflow, unowned}`: counts of rows borg capped out of `rows`; `unowned` counts rows whose owner is —, which are nobody's task yet), and `degraded` (null, or a note that a source such as the GitHub sweep failed; mention it in one short line when set).
