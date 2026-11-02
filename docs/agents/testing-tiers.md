@@ -21,9 +21,9 @@ Every test or eval belongs to exactly one tier. Pick the cheapest tier that can 
 3. **Pair every positive with a negative.** "Fires when it should" and "stays quiet when it should" are different claims; a positive alone is satisfied by a skill that does the thing unconditionally. A negative must SKIP, not pass, when its positive did not reach the output step, or "nothing changed" reads as "declined" (the lifecycle-manifests harness header records the measurement).
 4. **SKIP is not PASS.** No `claude`, no login, no Cortex account is a SKIP with the reason named, never a FAIL and never a PASS. Every harness also runs at least one case with the model off, so a green offline run is never a run of nothing; `tests/eval_floor.bats` holds every harness to that floor.
 5. **A fixture that supplies the derived value proves nothing.** Build the input the way production does, then assert on what the code derived.
-6. **Name the tier.** A harness with two faces declares both. Until `evals/ledger.json` carries a `tiers` field (the plan below adds it), the table under "Where the evals sit today" is the record, and a change to a harness updates that table in the same PR.
+6. **Name the tier.** A harness with two faces declares both. The `tiers` field on each `evals/*` entry in `evals/ledger.json` is the record (for example `[1, 2]`: sorted, distinct, from 1, 2, 3) and the ledger check fails an entry without it or with a malformed one. A change to a harness updates its `tiers` in the same PR. The table under "Where the evals sit today" adds the Tier 1 face and the judge, which the ledger does not carry; where the two disagree, the ledger is authoritative.
 7. **Prove the environment before the model.** A Tier 2 harness has a Tier 1 case that runs inside its sandbox PATH and checks that every command the skill names resolves there. The lifecycle harness went red on all three positives for weeks because its allowlist had no `borg`, and the model's answer ("`borg` isn't on PATH") was read as the skill declining.
-8. **A live eval nobody runs is a stale eval.** CI runs only Tier 1, so a Tier 2 or 3 harness needs a schedule (or a recorded last-green date that something checks). Not enforced yet; the plan adds a scheduled sweep.
+8. **A live eval nobody runs is a stale eval.** CI runs only Tier 1, so a Tier 2 or 3 harness needs a schedule (or a recorded last-green date that something checks). The weekly sweep is the schedule: the launchd agent `borg.eval-sweep` runs the live harnesses under a pinned model, a per-case cap and a total cap, and a skipped or errored case raises a `borg next` row.
 
 ## Tier 1
 
@@ -67,7 +67,7 @@ Audited 2026-10-30. Tier 1 is the offline face; Tier 2 and 3 are the live face.
 
 - Only `evals/plugin-eval/linkup-writes` uses a judge (`graders/criteria.md`, type `llm`), and it has no Tier 1 shadow: nothing proves that grader can fail. Its second claim (the summary names the retry-loop fix and the open items) is a candidate for a Tier 2 regex.
 - No harness records the model id or tokens of a live run, and no harness stores results, so a trend cannot be read.
-- The ledger names harnesses and what they cover; it does not declare tiers yet.
+- The ledger names harnesses, what they cover and their `tiers`. `plugin-eval/linkup-writes` has no ledger entry: it lives under `evals/plugin-eval/` with no `run.sh` of its own, and the ledger check requires `evals/<name>/run.sh` for every entry.
 - The lifecycle-manifests live sweep is only trustworthy against the build under review when `EVAL_PLUGIN_DIR` is set. On 2026-10-30 all three of its positive cases failed against both the trimmed skills and the previous release's, because the sandbox PATH had no `borg`; rule 7 now has a floor case for it.
 
 ## Hillclimbing

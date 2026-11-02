@@ -11,8 +11,8 @@ from borg_core.evals import core
 LEDGER: dict[str, Any] = {
     "version": 1,
     "evals": {
-        "evals/a": {"covers": ["evals/a/**", "skills/x/**", "borg_core/mod/*.py"]},
-        "evals/b": {"covers": ["borg_core/**/shared.py"]},
+        "evals/a": {"covers": ["evals/a/**", "skills/x/**", "borg_core/mod/*.py"], "tiers": [1, 2]},
+        "evals/b": {"covers": ["borg_core/**/shared.py"], "tiers": [1]},
     },
     "items": {
         "skills/x": {"eval": "evals/a"},
@@ -90,6 +90,32 @@ def test_eval_row_needs_covers_and_version() -> None:
     out = problems(bad, disk=[])
     assert sum("covers" in line for line in out) == 2
     assert any("version" in line for line in out)
+
+
+def _with_tiers(*tiers_by_eval: Any) -> dict[str, Any]:
+    rows = {name: {**LEDGER["evals"][name]} for name in LEDGER["evals"]}
+    for name, tiers in zip(("evals/a", "evals/b"), tiers_by_eval):
+        rows[name]["tiers"] = tiers
+    return {**LEDGER, "evals": rows}
+
+
+def test_valid_tiers_pass() -> None:
+    assert problems(_with_tiers([1, 2], [1])) == []
+    assert problems(_with_tiers([1, 2, 3], [3])) == []
+
+
+def test_missing_tiers_is_named() -> None:
+    rows = {name: {k: v for k, v in row.items() if k != "tiers"} for name, row in LEDGER["evals"].items()}
+    out = problems({**LEDGER, "evals": rows})
+    assert [line for line in out if line.startswith("evals/a:") and "needs `tiers`" in line]
+    assert [line for line in out if line.startswith("evals/b:") and "needs `tiers`" in line]
+
+
+def test_malformed_tiers_are_named() -> None:
+    for bad in ([], [0], [4], [2, 1], [1, 1], ["1"], [True], [1.0], 1, "1", None, {"1": 1}):
+        out = problems(_with_tiers(bad, [1]))
+        assert [line for line in out if line.startswith("evals/a:") and "`tiers`" in line], bad
+        assert not [line for line in out if line.startswith("evals/b:")], bad
 
 
 def test_select_picks_only_covering_evals() -> None:

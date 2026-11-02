@@ -43,6 +43,13 @@
       "ref": "noah-goodrich/borg-collective#493",
       "status": "open",
       "why": "Step 1c-B: weekly eval sweep launchd agent, borg doctor row, borg next row incl. staleness (AC1); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "7",
+      "ref": "noah-goodrich/borg-collective#494",
+      "status": "open",
+      "why": "Step 2: tiers on every ledger harness, expand/migrate/contract (AC2); tracking #480"
     }
   ]
 }

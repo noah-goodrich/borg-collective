@@ -7,9 +7,13 @@ LEDGER SHAPE (`evals/ledger.json`, JSON because the Python core, bats via `jq` a
 with nothing to install; YAML would add a parser dependency to a gate whose point is zero cost):
 
     {"version": 1,
-     "evals": {"evals/<name>": {"covers": ["<glob>", ...]}},
+     "evals": {"evals/<name>": {"covers": ["<glob>", ...], "tiers": [1, 2]}},
      "items": {"skills/<name>": {"eval": "evals/<name>"},
                "agents/<name>": {"waiver": "<reason>", "review_by": "YYYY-MM-DD"}}}
+
+`tiers` is REQUIRED on every eval and names the testing tiers a harness has (docs/agents/testing-tiers.md):
+a non-empty, ascending list of distinct integers from 1, 2, 3.
+`[1, 2]` is a harness with an offline face and a live face graded by script.
 
 `items` is CLOSED over `skills/*/SKILL.md` and `agents/*.md`: every one is an eval or a dated waiver,
 so the next skill cannot arrive with neither. `evals` is the selector's table: an eval is chosen when
@@ -37,6 +41,8 @@ VERSION = 1
 # its eval targets: telling the two apart needs a parser for make, and over-selecting on a Makefile
 # change is the cheap direction to be wrong in.
 SELECT_ALL_GLOBS = ("evals/*", "Makefile", "borg_core/evals/**")
+
+TIERS = (1, 2, 3)
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -75,6 +81,20 @@ def glob_regex(pattern: str) -> re.Pattern[str]:
 def matches(path: str, globs: list[str] | tuple[str, ...]) -> bool:
     """True when `path` matches any glob."""
     return any(glob_regex(g).match(path) for g in globs)
+
+
+def _tiers_problems(name: str, row: dict) -> list[str]:
+    if "tiers" not in row:
+        return [f"{name}: needs `tiers` (a non-empty ascending list from {list(TIERS)})"]
+    tiers = row["tiers"]
+    ok = (
+        isinstance(tiers, list)
+        and tiers
+        and all(isinstance(t, int) and not isinstance(t, bool) and t in TIERS for t in tiers)
+    )
+    if not ok or tiers != sorted(set(tiers)):
+        return [f"{name}: `tiers` must be a non-empty ascending list of distinct tiers from {list(TIERS)}"]
+    return []
 
 
 def _row_problems(name: str, row: object, evals: dict, today: str) -> list[str]:
@@ -116,6 +136,8 @@ def ledger_problems(ledger: dict, on_disk: list[str], existing_evals: set[str], 
         covers = row.get("covers") if isinstance(row, dict) else None
         if not isinstance(covers, list) or not covers or not all(isinstance(c, str) and c for c in covers):
             problems.append(f"{name}: needs a non-empty `covers` list of globs")
+        if isinstance(row, dict):
+            problems.extend(_tiers_problems(name, row))
     for name, row in sorted(items.items()):
         problems.extend(_row_problems(name, row, evals, today))
     return problems
