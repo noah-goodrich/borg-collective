@@ -2733,11 +2733,10 @@ CONF
     info "Ensuring .borg/state.json is gitignored in registered repositories..."
     while IFS=$'\t' read -r _proj_path _proj_repo; do
         [[ -n "$_proj_path" && -d "$_proj_path" ]] || continue
-        local _gi="$_proj_path/.gitignore"
         # Add .borg/state.json to .gitignore (NOT the entire .borg/ dir —
-        # that would break the !.borg/checkpoints/ negation carve-out).
-        if ! grep -qF '.borg/state.json' "$_gi" 2>/dev/null; then
-            echo '.borg/state.json' >> "$_gi"
+        # that would break the !.borg/checkpoints/ negation carve-out) only when git says it is not already
+        # ignored: git evaluates broader rules and negations (lib/gitignore.zsh).
+        if _borg_ensure_state_gitignored "$_proj_path"; then
             info "  Added .borg/state.json to ${_proj_path##*/}/.gitignore"
         fi
         # Initialise an empty state.json if one doesn't exist yet.
