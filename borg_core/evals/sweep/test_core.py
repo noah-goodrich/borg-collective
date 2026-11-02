@@ -150,3 +150,18 @@ def test_core_imports_only_pure_modules():
         elif isinstance(node, ast.ImportFrom):
             roots.add((node.module or "").split(".")[0])
     assert roots == {"__future__", "dataclasses", "typing"}
+
+
+def test_a_recorded_link_next_cost_is_charged_instead_of_the_ceiling():
+    records = [rec("next-rows-chooser", 0.35, harness=core.LINK_NEXT_HARNESS)]
+    assert core.group_spend(ONE, records) == pytest.approx(0.35)
+    assert core.group_spend(ONE, [rec("next-rows-chooser", None, harness=core.LINK_NEXT_HARNESS)]) == 1.5
+
+
+def test_with_recorded_costs_all_four_link_next_cases_fit_after_a_typical_lifecycle():
+    spent = 6 * 0.7
+    for group in core.plan_groups(["a", "b", "c", "d"])[1:]:
+        run, _ = core.decide(group, spent)
+        assert run  # decide() reserves the ceiling before the run; the recorded 0.4 is what is then charged
+        spent += core.group_spend(group, [rec(group.cases[0], 0.4, harness=core.LINK_NEXT_HARNESS)])
+    assert spent == pytest.approx(4.2 + 4 * 0.4)

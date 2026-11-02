@@ -80,3 +80,37 @@ def test_parse_lines_skips_malformed_and_sorts_by_time():
     early = json.dumps({"harness": "h", "case": "c", "ts": "2026-11-01T00:00:00Z", "verdict": "fail"})
     records, bad = history.parse_lines(good + "\nnope\n" + early + "\n\n")
     assert [r["verdict"] for r in records] == ["fail", "pass"] and bad == 1
+
+
+# A document built ONLY from the fields code.claude.com/docs/en/plugin-evals.md documents, plus an unknown one.
+def _aggregate(**over):
+    doc = {"schemaVersion": 1, "costUsd": 0.42, "partial": False, "futureField": {"x": 1}}
+    doc.update(over)
+    return json.dumps(doc)
+
+
+def test_plugin_eval_cost_is_read_and_unknown_keys_are_ignored():
+    assert history.parse_plugin_eval(_aggregate()) == (0.42, "")
+
+
+def test_plugin_eval_partial_reason_is_one_of_the_documented_strings():
+    assert history.parse_plugin_eval(_aggregate(partial=True, partialReason="cost_ceiling")) == (0.42, "cost_ceiling")
+    assert history.parse_plugin_eval(_aggregate(partialReason="auth_failed"))[1] == "auth_failed"
+    assert history.parse_plugin_eval(_aggregate(partialReason="made_up"))[1] == ""
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "not json",
+        "[]",
+        "null",
+        _aggregate(schemaVersion=2),
+        json.dumps({"costUsd": 1.0}),
+        _aggregate(costUsd="1.0"),
+        _aggregate(costUsd=True),
+        _aggregate(costUsd=None),
+    ],
+)
+def test_plugin_eval_anything_unrecognized_is_none(text):
+    assert history.parse_plugin_eval(text)[0] is None

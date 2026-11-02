@@ -763,3 +763,77 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"registry-key"*"repositories"*"OK"* ]] || false
 }
+
+# ─── the weekly eval sweep row: never FAIL, WARN when loud ────────────────────
+
+_sweep_row() { printf '%s\n' "$output" | grep -E '^ eval-sweep' || true; }
+
+_sweep_installed() {
+    SWEEP_LABEL=$(_label eval-sweep)
+    _write_plist "$SWEEP_LABEL" ""
+    _write_launchctl_list "\
+- 0 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL
+- ${1:-0} $SWEEP_LABEL"
+}
+
+_sweep_json() {
+    mkdir -p "$XDG_STATE_HOME/borg/evals"
+    printf '{"schema":1,"ts":"%s","needs_attention":false,"cases":[]}\n' "$1" > "$XDG_STATE_HOME/borg/evals/sweep-last.json"
+}
+
+@test "eval-sweep: not installed is an OK row that says it is opt-in, and doctor still exits 0" {
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$(_sweep_row)" == *"OK"* ]] || false
+    [[ "$output" == *"BORG_EVAL_SWEEP=1 ./install.sh"* ]] || false
+}
+
+@test "eval-sweep: loaded with a fresh summary shows its age in days and is OK" {
+    _sweep_installed
+    _sweep_json "$(date -u -v-2d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$(_sweep_row)" == *"yes"*"2d"*"OK"* ]] || false
+}
+
+@test "eval-sweep: a summary older than 8 days WARNs and doctor still exits 0" {
+    _sweep_installed
+    _sweep_json "$(date -u -v-10d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '10 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$(_sweep_row)" == *"10d"*"WARN"* ]] || false
+    [[ "$output" == *"weekly job is not running"* ]] || false
+}
+
+@test "eval-sweep: an installed plist that is not loaded WARNs, never FAILs" {
+    _sweep_installed
+    _write_launchctl_list "\
+- 0 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$(_sweep_row)" == *"MISSING"*"WARN"* ]] || false
+}
+
+@test "eval-sweep: exit 1 from the last run (a case needs attention) WARNs, and a fresh install awaits its first run" {
+    _sweep_installed 1
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$(_sweep_row)" == *"never"*"WARN"* ]] || false
+    [[ "$output" == *"1 = a case needs attention"* ]] || false
+}
+
+@test "eval-sweep: an unreadable summary WARNs instead of reading as fresh" {
+    _sweep_installed
+    mkdir -p "$XDG_STATE_HOME/borg/evals"
+    echo '{' > "$XDG_STATE_HOME/borg/evals/sweep-last.json"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$(_sweep_row)" == *"WARN"* ]] || false
+    [[ "$output" == *"unreadable"* ]] || false
+}

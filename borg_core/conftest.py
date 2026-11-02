@@ -81,3 +81,10 @@ def _state_root_sandbox(monkeypatch, tmp_path_factory):
     needs its own state root sets `XDG_STATE_HOME` itself, after this runs.
     """
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("state")))
+
+
+@pytest.fixture(autouse=True)
+def _launch_agents_sandbox(monkeypatch, tmp_path_factory):
+    """Point the LaunchAgents directory at an empty scratch one: `borg next` asks whether the eval sweep agent is
+    installed, and a developer's real plist must not make a test see an installed agent."""
+    monkeypatch.setenv("BORG_LAUNCH_AGENTS_DIR", str(tmp_path_factory.mktemp("launch-agents")))

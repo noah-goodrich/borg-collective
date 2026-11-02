@@ -4,7 +4,7 @@ Rules moved verbatim from the top-level CLAUDE.md. They live here rather than in
 
 - **launchd labels are resolved, never spelled out**: `lib/launchd-label.zsh` is the one resolver.
   `_borg_launchd_label <agent>` returns `<prefix>.borg.<agent>` when a prefix resolves, else
-  `borg.<agent>` (agents: notifyd, cortex-wake, usage-watch, reap, pr-watch, memory-gate). The
+  `borg.<agent>` (agents: notifyd, cortex-wake, usage-watch, reap, pr-watch, memory-gate, resume-watch, eval-sweep). The
   prefix is `$LAUNCHD_LABEL_PREFIX` when set and non-blank, else the first non-blank line of
   `${XDG_CONFIG_HOME:-~/.config}/launchd-prefix` (whitespace trimmed), else none — the same
   contract the dotfiles repo uses for its own agents, so one file brands every LaunchAgent on the
@@ -25,3 +25,4 @@ Rules moved verbatim from the top-level CLAUDE.md. They live here rather than in
     Absent/empty dir = one info line; a render that fails `plutil -lint` is skipped with a warn and
     never bootstrapped, and does not stop the others. `borg doctor` lists them, registration only.
     No legacy migration for extension labels — the operator retires pre-borg labels by hand, once.
+- **`eval-sweep` is opt-in and paid**: `BORG_EVAL_SWEEP=1 ./install.sh` installs it (Sunday 04:00 local, `RunAtLoad` false, never kickstarted by the installer), `BORG_EVAL_SWEEP=0` boots it out and removes the plist, unset leaves it alone. It runs `python3 -m borg_core.evals.sweep.cli` (at most $10 a run; summary in `<state root>/evals/sweep-last.json`, contract in `borg_core/evals/sweep/core.py` and `docs/agents/files.md`). `borg doctor` shows it as a WARN-only row (never FAIL), and `borg next` raises a waits-on-you row (`borg_core/nextpick/sweeprow.py`) when the last sweep has a skip, error or fail, or is more than 8 days old while the agent is installed.

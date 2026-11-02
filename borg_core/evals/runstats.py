@@ -68,6 +68,30 @@ def parse_result(text: str) -> dict[str, Any]:
     return derived
 
 
+PLUGIN_EVAL_SCHEMA = 1
+
+
+def parse_plugin_eval(text: str) -> tuple[float | None, str]:
+    """`(cost_usd, partial_reason)` from a `claude plugin eval` aggregate-result.json. FAIL-SAFE: anything not
+    understood is `(None, "")`.
+
+    Documented fields only (code.claude.com/docs/en/plugin-evals.md): `schemaVersion` 1, `costUsd` (one estimate for
+    the whole invocation, judge calls included, so nothing is summed) and `partialReason` (`cost_ceiling`,
+    `interrupted` or `auth_failed`). Unknown keys are ignored; an unknown schema, a non-object, a non-number or a
+    bool cost is None. `partial_reason` is only ever one of the documented strings.
+    """
+    try:
+        doc = json.loads(text)
+    except (ValueError, TypeError):
+        return None, ""
+    if not isinstance(doc, dict) or doc.get("schemaVersion") != PLUGIN_EVAL_SCHEMA:
+        return None, ""
+    cost = doc.get("costUsd")
+    value = float(cost) if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None
+    reason = doc.get("partialReason")
+    return value, reason if reason in ("cost_ceiling", "interrupted", "auth_failed") else ""
+
+
 # JUSTIFICATION: the independent facts of one record; a wrapper object would only rename them
 def make_record(  # pylint: disable=too-many-arguments
     harness: str,

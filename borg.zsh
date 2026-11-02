@@ -3418,6 +3418,64 @@ cmd_doctor() {
         printf " %-14s %-10s %-8s %-10s ${color}%s${NC}\n" "$name" "$reg" "$exit_status" "$fresh" "$status_word"
         [[ -n "$hint" ]] && echo -e "   ${DIM}→ $hint${NC}"
     done
+
+    # The weekly eval sweep (opt-in: BORG_EVAL_SWEEP=1 ./install.sh). It is not in the list above because an agent
+    # nobody opted into is not MISSING. Never FAIL: it is an optional paid job, and a dead one loses a signal rather
+    # than breaking borg, so doctor's exit code (which a FAIL turns nonzero) must not hang on it. WARN is the loud
+    # word. The FRESH column is the age in days of sweep-last.json's own `ts` (a weekly job: older than 8 is stale).
+    local sw_label sw_plist sw_json sw_reg="no" sw_exit="-" sw_fresh="n/a" sw_warn=0 sw_hint="" sw_line sw_pid sw_ts sw_ep sw_age
+    sw_label=$(_borg_launchd_label eval-sweep)
+    sw_plist="$la_dir/$sw_label.plist"
+    sw_json="$state_dir/evals/sweep-last.json"
+    if [[ ! -f "$sw_plist" ]]; then
+        sw_hint="not installed (opt-in, it spends money: BORG_EVAL_SWEEP=1 ./install.sh)"
+    else
+        sw_line=$(echo "$list_output" | awk -v l="$sw_label" '$3 == l { print; exit }') || sw_line=""
+        if [[ -z "$sw_line" ]]; then
+            sw_reg="MISSING"; sw_warn=1
+            sw_hint="plist installed but not loaded — re-run BORG_EVAL_SWEEP=1 ./install.sh"
+        else
+            sw_reg="yes"
+            sw_pid=$(echo "$sw_line" | awk '{print $1}')
+            sw_exit=$(echo "$sw_line" | awk '{print $2}')
+            [[ "$sw_pid" == <-> ]] && sw_exit="run"
+            if [[ "$sw_exit" != "0" && "$sw_exit" != "-" && "$sw_exit" != "run" ]]; then
+                # The sweep exits 1 when any case skipped, errored or failed: expected, and `borg next` carries the row.
+                sw_warn=1
+                sw_hint="last run exited $sw_exit (1 = a case needs attention; see borg next) — log: $data_dir/eval-sweep.stderr.log"
+            fi
+        fi
+        sw_ts=""
+        [[ -f "$sw_json" ]] && sw_ts=$(jq -r '.ts // empty' "$sw_json" 2>/dev/null) || sw_ts=""
+        sw_ep=""
+        [[ -n "$sw_ts" ]] && sw_ep=$(_borg_iso_to_epoch "$sw_ts") || sw_ep=""
+        if [[ -n "$sw_ep" ]]; then
+            sw_age=$(( ($(date +%s) - sw_ep) / 86400 ))
+            sw_fresh="${sw_age}d"
+            if (( sw_age > 8 )); then
+                sw_warn=1
+                [[ -z "$sw_hint" ]] && sw_hint="last sweep $sw_age days ago — the weekly job is not running; log: $data_dir/eval-sweep.stderr.log"
+            fi
+        elif [[ -f "$sw_json" ]]; then
+            sw_fresh="WARN"; sw_warn=1
+            [[ -z "$sw_hint" ]] && sw_hint="$sw_json is unreadable (no valid ts)"
+        else
+            sw_fresh="never"
+            sw_age=$(( ($(date +%s) - $(_borg_file_mtime "$sw_plist" || date +%s)) / 86400 ))
+            if (( sw_age > 8 )); then
+                sw_warn=1
+                [[ -z "$sw_hint" ]] && sw_hint="installed $sw_age days ago and never run — log: $data_dir/eval-sweep.stderr.log"
+            else
+                [[ -z "$sw_hint" ]] && sw_hint="awaiting its first run (launchctl kickstart -k gui/$UID/$sw_label)"
+            fi
+        fi
+    fi
+    if (( sw_warn )); then
+        printf " %-14s %-10s %-8s %-10s ${YELLOW}%s${NC}\n" "eval-sweep" "$sw_reg" "$sw_exit" "$sw_fresh" "WARN"
+    else
+        printf " %-14s %-10s %-8s %-10s ${GREEN}%s${NC}\n" "eval-sweep" "$sw_reg" "$sw_exit" "$sw_fresh" "OK"
+    fi
+    [[ -n "$sw_hint" ]] && echo -e "   ${DIM}→ $sw_hint${NC}"
     echo
 
     # Headless `claude -p` reachability — the narrative half of `borg link --brief`. This is what
