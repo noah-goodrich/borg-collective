@@ -79,6 +79,29 @@ _description_of() {
     [[ "$(_description_of "$ROOT/skills/borg-link-up/SKILL.md")" == *"Link up"*"ending a session"* ]]
 }
 
+# A skill with `disable-model-invocation: true` is hidden from the model's listing, so it must be a deliberate,
+# recorded choice. docs/evidence/2026-11-skill-invocation-triage.md holds the evidence; a new flag needs an entry there
+# and a name here.
+@test "skills: only the triaged skills carry disable-model-invocation" {
+    local f name flagged=""
+    for f in "$ROOT"/skills/*/SKILL.md; do
+        if sed -n '2,/^---$/p' "$f" | grep -q '^disable-model-invocation: true$'; then
+            name="${f%/SKILL.md}"
+            flagged="$flagged ${name##*/}"
+        fi
+    done
+    [ "$flagged" = " break-glass no-unnecessary-read-perms" ] || { echo "flagged:$flagged"; false; }
+}
+
+@test "skills: the triage doc names every skill" {
+    local f name
+    for f in "$ROOT"/skills/*/SKILL.md; do
+        name="${f%/SKILL.md}"
+        name="${name##*/}"
+        grep -q "^| ${name} |" "$ROOT/docs/evidence/2026-11-skill-invocation-triage.md" || { echo "no row for $name"; false; }
+    done
+}
+
 @test "skills: no borg skill reuses the name of a built-in skill" {
     # `borg-collective:simplify` duplicated the built-in `simplify`, so both loaded and both matched one request.
     [ ! -e "$ROOT/skills/simplify" ]
