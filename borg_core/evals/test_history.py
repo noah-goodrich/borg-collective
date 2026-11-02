@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 
@@ -197,5 +197,5 @@ def test_record_requires_harness_case_and_verdict(tmp_path):
 
 
 def test_make_record_stamps_a_utc_second_resolution_ts():
-    now = datetime.datetime(2026, 11, 2, 3, 4, 5, 678, tzinfo=datetime.timezone.utc)
+    now = datetime(2026, 11, 2, 3, 4, 5, 678, tzinfo=timezone.utc)
     assert history.make_record("h", "c", "pass", now=now)["ts"] == "2026-11-02T03:04:05Z"

@@ -31,7 +31,17 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
-command -v claude >/dev/null 2>&1 || { echo "claude CLI not found on PATH; the live run cannot start" >&2; exit 2; }
+
+# THE RUN HISTORY (borg_core/evals/history.py; BORG_EVAL_HISTORY overrides the file): one record per case, and one
+# `error` record for an environmental abort. `claude plugin eval` reports no cost, turns or model id in a shape the
+# core reads, so those fields stay null here rather than estimated; the verdict is the runner's exit code.
+_rec() {
+    command -v python3 >/dev/null 2>&1 || return 0
+    PYTHONPATH="$REPO" python3 -m borg_core.evals.history --record --harness link-next --case "$1" \
+        --verdict "$2" --reason "$3" --repo "$REPO" \
+        || echo "warning: could not append to the eval history" >&2
+}
+command -v claude >/dev/null 2>&1 || { _rec preflight error "claude CLI not found on PATH"; echo "claude CLI not found on PATH; the live run cannot start" >&2; exit 2; }
 
 OUT="$HERE/out/live"
 rm -rf "$OUT"
@@ -42,7 +52,7 @@ rc=0
 for casedir in "$HERE"/cases/*/; do
     c="${casedir%/}"; c="${c##*/}"
     [ -z "$ONLY" ] || [ "$ONLY" = "$c" ] || continue
-    bash "$HERE/sandbox.sh" "$c" "$OUT/$c/plugin" || { echo "sandbox failed: $c" >&2; rc=1; continue; }
+    bash "$HERE/sandbox.sh" "$c" "$OUT/$c/plugin" || { _rec "$c" error "sandbox build failed"; echo "sandbox failed: $c" >&2; rc=1; continue; }
     allow="$(sed -n 's/^allow_tools=//p' "$casedir/sandbox.conf")"
     allow="${allow//@STUB@/$OUT/$c/plugin/bin/borg}"
     ANTHROPIC_API_KEY= claude plugin eval "$OUT/$c/plugin" ${allow:+--allow-tools "$allow"} \
@@ -52,6 +62,6 @@ for casedir in "$HERE"/cases/*/; do
     case_rc=$?
     echo "== $c (runner exit $case_rc)"
     tail -n 6 "$OUT/$c/stdout.txt"
-    [ "$case_rc" -eq 0 ] || rc=1
+    if [ "$case_rc" -eq 0 ]; then _rec "$c" pass ""; else _rec "$c" fail "runner exit $case_rc"; rc=1; fi
 done
 exit "$rc"

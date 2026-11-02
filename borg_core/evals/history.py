@@ -42,12 +42,12 @@ CLI::
 from __future__ import annotations
 
 import argparse
-import datetime
 import json
 import math
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -109,8 +109,10 @@ def parse_result(text: str) -> dict[str, Any]:
     results = [e for e in events if e.get("type") == "result"]
     inits = [e for e in events if e.get("type") == "system" and e.get("subtype") == "init"]
     result = results[-1] if results else {}
-    usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
-    model_usage = result.get("modelUsage") if isinstance(result.get("modelUsage"), dict) else {}
+    usage: dict[str, Any] = result.get("usage") or {}
+    model_usage: dict[str, Any] = result.get("modelUsage") or {}
+    if not isinstance(usage, dict) or not isinstance(model_usage, dict):
+        usage, model_usage = {}, {}
     derived: dict[str, Any] = {
         "cost_usd": result.get("total_cost_usd"),
         "turns": result.get("num_turns"),
@@ -125,7 +127,8 @@ def parse_result(text: str) -> dict[str, Any]:
     return derived
 
 
-def make_record(
+# JUSTIFICATION: the independent facts of one record; a wrapper object would only rename them
+def make_record(  # pylint: disable=too-many-arguments
     harness: str,
     case: str,
     verdict: str,
@@ -133,10 +136,10 @@ def make_record(
     reason: str = "",
     git_sha: str | None = None,
     result_text: str = "",
-    now: datetime.datetime | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """Build one record. `result_text` is the captured result/stream (empty for a skip: the run never started)."""
-    stamp = (now or datetime.datetime.now(datetime.timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
     record: dict[str, Any] = {"ts": stamp, "harness": harness, "case": case, "git_sha": git_sha}
     record.update(parse_result(result_text))
     record.update({"verdict": verdict, "reason": reason})
@@ -225,7 +228,8 @@ def _git_sha(repo: str | None) -> str | None:
 
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="borg_core.evals.history", description=__doc__.splitlines()[0])
-    mode = p.add_mutually_exclusive_group(required=True)
+    # JUSTIFICATION: argparse's builder API is a chain by design
+    mode = p.add_mutually_exclusive_group(required=True)  # pylint: disable=clean-arch-demeter
     mode.add_argument("--record", action="store_true", help="append one record")
     mode.add_argument("--report", action="store_true", help="print intervals and per-SHA trends")
     p.add_argument("--harness")
