@@ -14,6 +14,13 @@
       "ref": "noah-goodrich/borg-collective#418",
       "status": "open",
       "why": "S2: session discovery reads the conversations directory Cortex writes"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#517",
+      "status": "open",
+      "why": "S0: live Cortex hook probe, evidence and fixtures (#516)"
     }
   ]
 }
