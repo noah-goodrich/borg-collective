@@ -16,6 +16,7 @@ setup() {
     export BORG_USAGE_SAMPLES="$BATS_TEST_TMPDIR/no-samples.jsonl"
     export STUB_LOG="$BATS_TEST_TMPDIR/claude.log"
     export STUB_COST=0.2
+    export BORG_EVAL_SWEEP_TODAY=2026-11-10
     SANDBOX="$BATS_TEST_TMPDIR/checkout"
     mkdir -p "$SANDBOX" "$BATS_TEST_TMPDIR/stubbin"
     rsync -a --exclude=.git --exclude=.venv --exclude=node_modules --exclude='evals/*/out' "$BORG_HOME/" "$SANDBOX/"
@@ -44,7 +45,7 @@ sweep() {
     [ -f "$SUMMARY" ]
     [ "$(jq -r .schema "$SUMMARY")" = 1 ]
     [ "$(jq -r .model "$SUMMARY")" = claude-opus-5-5 ]
-    [ "$(jq -r '.cases | length' "$SUMMARY")" = 10 ]
+    [ "$(jq -r '.cases | length' "$SUMMARY")" = 29 ]
     [ "$(jq -r '[.cases[] | select(.harness=="link-next" and .verdict=="pass")] | length' "$SUMMARY")" = 4 ]
     grep -q -- '--model claude-opus-5-5' "$STUB_LOG"
     grep -q -- '--max-budget-usd 1.50' "$STUB_LOG"
@@ -53,6 +54,17 @@ sweep() {
     [ "$(wc -l < "$BORG_EVAL_HISTORY")" -ge 10 ]
     grep -q '"harness":"lifecycle-manifests"' "$BORG_EVAL_HISTORY"
     grep -q '"cost_usd":0.2' "$BORG_EVAL_HISTORY"
+}
+
+@test "sweep: agent-gates runs with NO --model (its agents' pins are under test), every other harness keeps it" {
+    sweep
+    jq -e '.cap_usd == 15' "$SUMMARY"
+    [ "$(jq -r '[.cases[] | select(.harness=="agent-gates")] | length' "$SUMMARY")" = 8 ]
+    [ "$(jq -r '[.cases[] | select(.harness=="agent-gates" and .model!="agent-frontmatter")] | length' "$SUMMARY")" = 0 ]
+    grep -q -- '--agent borg-collective:borg-nanoprobe' "$STUB_LOG"
+    ! grep -- '--agent' "$STUB_LOG" | grep -q -- '--model '
+    grep -- '--agent' "$STUB_LOG" | grep -q -- '--settings {"model":"haiku"}'
+    grep -q -- '--model claude-opus-5-5 --effort xhigh' "$STUB_LOG"
 }
 
 @test "sweep: the plugin under test is a throwaway build, not the installed plugin and not the checkout" {
@@ -66,7 +78,7 @@ sweep() {
 }
 
 @test "sweep: a spent cap skips the remaining link-next cases, records each skip, and exits 1" {
-    STUB_COST=1.5 sweep
+    BORG_EVAL_SWEEP_TODAY=2027-01-01 STUB_COST=1.5 sweep
     [ "$status" -eq 1 ]
     [ "$(jq -r '[.cases[] | select(.harness=="link-next" and .verdict=="skip")] | length' "$SUMMARY")" = 4 ]
     jq -e '.spend_usd == 9' "$SUMMARY"
@@ -81,7 +93,7 @@ sweep() {
     [ "$status" -eq 1 ]
     [ ! -s "$STUB_LOG" ]
     [ "$(jq -r '.halted' "$SUMMARY")" != "" ]
-    [ "$(jq -r .counts.skip "$SUMMARY")" = 10 ]
+    [ "$(jq -r .counts.skip "$SUMMARY")" = 29 ]
 }
 
 @test "sweep: no claude is an error for every case, not a silent pass" {
@@ -89,7 +101,7 @@ sweep() {
     export BORG_CLAUDE_SEARCH_DIRS="$BATS_TEST_TMPDIR/empty"
     run env PATH="/usr/bin:/bin" PYTHONPATH="$BORG_HOME" python3 -m borg_core.evals.sweep.cli --repo "$SANDBOX"
     [ "$status" -eq 1 ]
-    [ "$(jq -r .counts.error "$SUMMARY")" = 10 ]
+    [ "$(jq -r .counts.error "$SUMMARY")" = 29 ]
 }
 
 @test "run.sh: still defaults to opus and xhigh, and EVAL_MODEL overrides the model" {

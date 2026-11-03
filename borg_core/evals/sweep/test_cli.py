@@ -13,6 +13,12 @@ from borg_core.evals import history, runstats
 from borg_core.evals.sweep import cli, core, shell
 
 
+IN_WINDOW = "2026-11-10"
+AFTER_WINDOW = "2026-12-06"
+GROUPS = ["lifecycle-manifests"] + ["link-next"] * 4 + ["orchestrator-skills", "agent-gates"] + ["orchestrator-skills"] * 2
+N_CASES = 6 + 4 + 4 + 8 + 4 + 3
+
+
 @pytest.fixture(name="sandbox")
 def fixture_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
@@ -24,6 +30,7 @@ def fixture_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name in ("alpha", "beta", "gamma", "delta"):
         (repo / "evals" / "link-next" / "cases" / name).mkdir(parents=True)
     monkeypatch.setattr(shell, "git_sha", lambda _r: "deadbeef")
+    monkeypatch.setattr(shell, "today_utc", lambda: IN_WINDOW)  # the cap depends on the date: freeze it
     monkeypatch.setattr(shell, "resolve_claude", lambda: "/stub/bin/claude")
 
     def build(_repo, dest):
@@ -64,30 +71,61 @@ def summary() -> dict:
 def test_full_sweep_runs_every_group_and_writes_the_summary(sandbox, monkeypatch):
     calls = fake_harness(monkeypatch, 0.5)
     assert cli.main(["--repo", str(sandbox)]) == 0
-    assert [c[0] for c in calls] == ["lifecycle-manifests"] + ["link-next"] * 4
+    assert [c[0] for c in calls] == GROUPS
     doc = summary()
     assert tuple(doc) == tuple(sorted(core.SUMMARY_KEYS))  # sort_keys on disk
     assert doc["model"] == "claude-opus-5-5" and doc["git_sha"] == "deadbeef"
-    assert doc["spend_usd"] == pytest.approx(10 * 0.5)
-    assert doc["counts"]["pass"] == 10 and doc["needs_attention"] is False
+    assert doc["cap_usd"] == 15.0
+    # 28 runs at 0.5: RV3 shares RV1's run, so its (duplicate) recorded cost must not be counted a second time
+    assert doc["spend_usd"] == pytest.approx(28 * 0.5)
+    assert doc["counts"]["pass"] == N_CASES and doc["needs_attention"] is False
+
+
+def test_each_row_names_its_model_and_agent_gates_reports_the_agents_own_pin(sandbox, monkeypatch):
+    fake_harness(monkeypatch, 0.5)
+    cli.main(["--repo", str(sandbox)])
+    by = {(c["harness"], c["case"]): c for c in summary()["cases"]}
+    assert by[("agent-gates", "V1")]["model"] == "agent-frontmatter"
+    assert by[("lifecycle-manifests", "P1")]["model"] == "claude-opus-5-5"
+    assert by[("orchestrator-skills", "RS1")]["model"] == "claude-opus-5-5"
+    assert by[("orchestrator-skills", "RV3")]["cost_usd"] is None  # graded on RV1's run: no cost of its own
+    assert by[("orchestrator-skills", "RV1")]["cost_usd"] == 0.5
+
+
+def test_the_raise_has_expired_after_the_window_and_the_sweep_runs_on_the_old_cap(sandbox, monkeypatch):
+    fake_harness(monkeypatch, 0.5)
+    monkeypatch.setattr(shell, "today_utc", lambda: AFTER_WINDOW)
+    assert cli.main(["--repo", str(sandbox)]) == 1
+    doc = summary()
+    assert doc["cap_usd"] == 10.0 and doc["counts"]["skip"] > 0 and doc["spend_usd"] <= 10.0
+
+
+def test_dry_run_prints_the_plan_runs_nothing_and_writes_no_summary(sandbox, monkeypatch, capsys):
+    calls = fake_harness(monkeypatch, 0.5)
+    assert cli.main(["--repo", str(sandbox), "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert calls == [] and not shell.summary_path().exists()
+    assert "cap $15.00" in out and "--case review" in out and "--case break-glass" in out
 
 
 def test_null_cost_link_next_cases_exhaust_the_cap_and_the_rest_are_skipped_and_recorded(sandbox, monkeypatch):
     calls = fake_harness(monkeypatch, None)
+    monkeypatch.setattr(shell, "today_utc", lambda: AFTER_WINDOW)
     assert cli.main(["--repo", str(sandbox)]) == 1
-    # lifecycle null-cost counts 9.0; 9.0 + 1.5 > 10 so every link-next case skips.
+    # lifecycle null-cost counts 9.0; 9.0 + 1.5 > 10 so every link-next case skips; the step-3a groups skip too.
     assert len(calls) == 1
     doc = summary()
-    assert doc["counts"]["skip"] == 4 and doc["spend_usd"] == pytest.approx(9.0)
+    assert doc["counts"]["skip"] == N_CASES - 6 and doc["spend_usd"] == pytest.approx(9.0)
     assert all("sweep cap" in c["reason"] for c in doc["cases"] if c["verdict"] == "skip")
     skips = [r for r in history.read_records()[0] if r["verdict"] == "skip"]
-    assert sorted(r["case"] for r in skips) == ["alpha", "beta", "delta", "gamma"]
+    assert sorted(r["case"] for r in skips if r["harness"] == "link-next") == ["alpha", "beta", "delta", "gamma"]
+    assert len(skips) == N_CASES - 6
 
 
 def test_a_failed_case_is_reported_and_the_exit_is_nonzero(sandbox, monkeypatch):
     fake_harness(monkeypatch, 0.2, verdict="fail")
     assert cli.main(["--repo", str(sandbox)]) == 1
-    assert summary()["counts"]["fail"] == 10
+    assert summary()["counts"]["fail"] == N_CASES
 
 
 def test_a_halted_guardian_skips_the_whole_sweep_without_running_anything(sandbox, monkeypatch, tmp_path):
@@ -97,9 +135,9 @@ def test_a_halted_guardian_skips_the_whole_sweep_without_running_anything(sandbo
     (tmp_path / "samples.jsonl").write_text(json.dumps(sample) + "\n")
     assert cli.main(["--repo", str(sandbox)]) == 1
     doc = summary()
-    assert calls == [] and "usage guardian" in doc["halted"] and doc["counts"]["skip"] == 10
+    assert calls == [] and "usage guardian" in doc["halted"] and doc["counts"]["skip"] == N_CASES
     assert doc["spend_usd"] == 0
-    assert len(history.read_records()[0]) == 10
+    assert len(history.read_records()[0]) == N_CASES
 
 
 def test_a_stale_or_malformed_guardian_sample_is_fail_open(sandbox, tmp_path):
@@ -125,7 +163,7 @@ def test_no_claude_is_an_error_for_every_case(sandbox, monkeypatch):
     calls = fake_harness(monkeypatch, 0.5)
     monkeypatch.setattr(shell, "resolve_claude", lambda: None)
     assert cli.main(["--repo", str(sandbox)]) == 1
-    assert calls == [] and summary()["counts"]["error"] == 10
+    assert calls == [] and summary()["counts"]["error"] == N_CASES
 
 
 def test_a_failed_plugin_build_is_an_error_for_every_case(sandbox, monkeypatch):
@@ -133,7 +171,7 @@ def test_a_failed_plugin_build_is_an_error_for_every_case(sandbox, monkeypatch):
     monkeypatch.setattr(shell, "build_plugin", lambda _r, _d: "plugin build exited 1: boom")
     assert cli.main(["--repo", str(sandbox)]) == 1
     doc = summary()
-    assert calls == [] and doc["counts"]["error"] == 10 and "boom" in doc["cases"][0]["reason"]
+    assert calls == [] and doc["counts"]["error"] == N_CASES and "boom" in doc["cases"][0]["reason"]
 
 
 def test_a_harness_that_records_nothing_leaves_error_rows_not_a_green_sweep(sandbox, monkeypatch):
@@ -147,6 +185,33 @@ def test_harness_command_pins_model_cap_one_run_and_one_case():
     assert argv[2:] == ["--runs", "1", "--model", "m-1", "--max-cost-usd", "1.50", "--case", "c1"] and env == {}
     argv, env, _t = shell.harness_command(core.Group("lifecycle-manifests", core.LIFECYCLE_CASES), Path("/r"), "m-1")
     assert env == {"EVAL_MODEL": "m-1", "EVAL_MAX_BUDGET_USD": "1.50"}
+
+
+def _plan(link_next=("a",)):
+    return {(g.harness, g.selector or g.cases[0]): g for g in core.plan_groups(list(link_next))}
+
+
+def test_agent_gates_command_passes_no_model_every_case_and_its_own_ceiling():
+    group = _plan()[("agent-gates", "NP1")]
+    argv, env, _t = shell.harness_command(group, Path("/r"), "m-1")
+    assert "--model" not in argv and "m-1" not in argv and "EVAL_MODEL" not in env
+    assert argv[2:] == ["--max-budget-usd", "0.50"] + [x for c in core.AGENT_GATES_CASES for x in ("--case", c)]
+
+
+@pytest.mark.parametrize("selector", ["review", "resume", "break-glass"])
+def test_orchestrator_skills_command_selects_one_skill_group_on_the_pinned_model(selector):
+    group = _plan()[("orchestrator-skills", selector)]
+    argv, env, _t = shell.harness_command(group, Path("/r"), "m-1")
+    assert argv[1:] == ["/r/evals/orchestrator-skills/live.sh", "--case", selector]
+    assert env == {"EVAL_MODEL": "m-1", "EVAL_MAX_BUDGET_USD": "0.75"}
+
+
+def test_today_utc_is_the_date_part_of_utc_now_unless_pinned(monkeypatch):
+    monkeypatch.setattr(shell, "utc_now", lambda: "2026-11-03T23:59:59Z")
+    monkeypatch.delenv("BORG_EVAL_SWEEP_TODAY", raising=False)
+    assert shell.today_utc() == "2026-11-03"
+    monkeypatch.setenv("BORG_EVAL_SWEEP_TODAY", "2027-01-01")
+    assert shell.today_utc() == "2027-01-01"
 
 
 def test_resolve_claude_prefers_an_absolute_override_then_the_search_dirs(tmp_path, monkeypatch):

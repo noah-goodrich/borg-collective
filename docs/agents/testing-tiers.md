@@ -62,11 +62,22 @@ Audited 2026-10-30. Tier 1 is the offline face; Tier 2 and 3 are the live face.
 | link-next | transcripts | 2 | none |
 | cortex-agents | replay, 6 bad | 2 | none |
 | session-load | checker | 2 | none |
-| s4-k3 | all cases | none | none |
+| s4-k3 | E2a only [1] | none | none |
+| agent-gates | recordings | 2 | none |
+| orchestrator-skills | recordings | 2 | none |
 | plugin-eval/linkup-writes | none | 2 + 3 | 1 grader |
 
+[1] s4-k3's other cases read the network: E2 resolves each
+declared ref with `gh pr view`, so it needs an authenticated
+`gh` and a live GitHub. `make eval` passes `--skip-model
+--skip-network`, which leaves E2a alone, deterministic on
+every machine. E3 is kept under `--skip-network` too. Asking
+for the network sweep (dropping the flag) with no `gh` is a
+failure, never a pass. See the header of `evals/s4-k3/run.sh`.
+
 - Only `evals/plugin-eval/linkup-writes` uses a judge (`graders/criteria.md`, type `llm`), and it has no Tier 1 shadow: nothing proves that grader can fail. Its second claim (the summary names the retry-loop fix and the open items) is a candidate for a Tier 2 regex.
-- No harness records the model id or tokens of a live run, and no harness stores results, so a trend cannot be read.
+- Live results are stored: every Tier 2 harness appends one record per case (verdict, model id, cost, turns, tokens) to the run-history JSONL (`borg_core/evals/history.py`, `BORG_EVAL_HISTORY`), and `python3 -m borg_core.evals.history --report` reads k/n, a Wilson interval and a per-commit trend. The weekly sweep (`borg_core/evals/sweep`) feeds it. The history holds a few samples per case, so a trend is a hint, not a measurement.
+- The sweep runs `agent-gates` with NO `--model`: `--model` overrides an agent's frontmatter pin, which those cases test. Each sweep summary row carries a `model` field (`agent-frontmatter` for that harness).
 - The ledger names harnesses, what they cover and their `tiers`. `plugin-eval/linkup-writes` has no ledger entry: it lives under `evals/plugin-eval/` with no `run.sh` of its own, and the ledger check requires `evals/<name>/run.sh` for every entry.
 - The lifecycle-manifests live sweep is only trustworthy against the build under review when `EVAL_PLUGIN_DIR` is set. On 2026-10-30 all three of its positive cases failed against both the trimmed skills and the previous release's, because the sandbox PATH had no `borg`; rule 7 now has a floor case for it.
 

@@ -50,7 +50,7 @@ def test_the_newest_record_per_case_wins_and_other_harnesses_are_ignored():
 def test_link_next_with_null_cost_fits_by_arithmetic_after_a_typical_lifecycle():
     spent = 6 * 0.7
     ran = 0
-    for group in core.plan_groups(["a", "b", "c", "d"])[1:]:
+    for group in core.plan_groups(["a", "b", "c", "d"])[1:5]:
         run, _ = core.decide(group, spent)
         if run:
             spent += group.reserve_usd
@@ -60,7 +60,73 @@ def test_link_next_with_null_cost_fits_by_arithmetic_after_a_typical_lifecycle()
 
 def test_plan_puts_lifecycle_first_then_link_next_one_case_each_sorted():
     groups = core.plan_groups(["b", "a"])
-    assert [g.cases for g in groups] == [core.LIFECYCLE_CASES, ("a",), ("b",)]
+    assert [g.cases for g in groups[:3]] == [core.LIFECYCLE_CASES, ("a",), ("b",)]
+
+
+def test_plan_orders_known_cost_before_null_cost_after_the_existing_groups():
+    groups = core.plan_groups(["a"])
+    assert [(g.harness, g.selector) for g in groups[2:]] == [
+        ("orchestrator-skills", "review"),
+        ("agent-gates", ""),
+        ("orchestrator-skills", "resume"),
+        ("orchestrator-skills", "break-glass"),
+    ]
+
+
+def test_step_3a_groups_cover_every_case_with_realistic_ceilings():
+    plan = {(g.harness, g.selector): g for g in core.plan_groups([])}
+    gates = plan[("agent-gates", "")]
+    assert gates.cases == core.AGENT_GATES_CASES and len(gates.cases) == 8 and gates.agent_pinned
+    assert gates.reserve_usd == pytest.approx(4.0)  # at the 1.50 default 8 cases reserve 12 and never ran
+    assert plan[("orchestrator-skills", "resume")].cases == ("RS1", "RS2", "RS3", "RS4")
+    assert plan[("orchestrator-skills", "break-glass")].cases == ("BG1", "BG2", "BG3")
+    assert plan[("orchestrator-skills", "review")].cases == ("RV1", "RV2", "RV3", "RV4")
+    assert not any(g.agent_pinned for g in plan.values() if g.harness != "agent-gates")
+
+
+def test_every_group_fits_the_cap_alone_even_after_a_full_lifecycle_and_link_next():
+    spent = 6 * 0.7 + 4 * 0.3
+    for group in core.plan_groups(["a", "b", "c", "d"])[5:]:
+        assert core.decide(group, spent, core.RAISED_CAP_USD)[0] is True, group
+
+
+def test_rv3_shares_rv1s_run_so_it_reserves_and_spends_nothing_extra():
+    review = next(g for g in core.plan_groups([]) if g.selector == "review")
+    assert review.runs == ("RV1", "RV2", "RV4") and review.reserve_usd == pytest.approx(3 * 0.75)
+    records = [rec(c, 0.3, harness="orchestrator-skills") for c in ("RV1", "RV2", "RV3", "RV4")]
+    assert core.group_spend(review, records) == pytest.approx(0.9)  # RV1's cost is on RV3's record too
+    rows = {r["case"]: r for r in core.case_results(review, records)}
+    assert rows["RV3"]["verdict"] == "pass" and rows["RV3"]["cost_usd"] is None
+    assert rows["RV1"]["cost_usd"] == 0.3
+
+
+def test_an_unrecorded_shared_case_still_reads_as_an_error_but_adds_no_spend():
+    review = next(g for g in core.plan_groups([]) if g.selector == "review")
+    assert core.group_spend(review, []) == pytest.approx(3 * 0.75)
+    assert {r["case"]: r["verdict"] for r in core.case_results(review, [])}["RV3"] == "error"
+
+
+def test_rows_carry_the_model_and_agent_gates_reports_the_agents_pin():
+    gates = next(g for g in core.plan_groups([]) if g.agent_pinned)
+    assert {r["model"] for r in core.skipped_rows(gates, "why", "m-1")} == {core.AGENT_PIN_MODEL}
+    assert {r["model"] for r in core.skipped_rows(LIFECYCLE, "why", "m-1")} == {"m-1"}
+
+
+@pytest.mark.parametrize(
+    "today,cap",
+    [
+        ("2026-11-02", 10.0),
+        ("2026-11-03", 15.0),
+        ("2026-11-08", 15.0),
+        ("2026-12-02", 15.0),
+        ("2026-12-03", 10.0),
+        ("2026-12-06", 10.0),
+        ("2027-06-01", 10.0),
+        ("2026-12-02T23:59:59Z", 15.0),
+    ],
+)
+def test_the_raised_cap_starts_2026_11_03_and_expires_on_its_own_2026_12_03(today, cap):
+    assert core.sweep_cap_usd(today) == cap
 
 
 def test_case_results_report_a_missing_record_as_an_error():
@@ -73,7 +139,14 @@ def test_case_results_report_a_missing_record_as_an_error():
 def test_skipped_rows_carry_the_reason_and_no_cost():
     rows = core.skipped_rows(ONE, "why")
     assert rows == [
-        {"harness": "link-next", "case": "next-rows-chooser", "verdict": "skip", "reason": "why", "cost_usd": None}
+        {
+            "harness": "link-next",
+            "case": "next-rows-chooser",
+            "verdict": "skip",
+            "reason": "why",
+            "cost_usd": None,
+            "model": core.DEFAULT_MODEL,
+        }
     ]
 
 
@@ -127,7 +200,7 @@ def test_summary_keys_are_pinned_because_borg_next_and_doctor_read_them():
         "needs_attention",
     }
     assert doc["schema"] == 1
-    assert set(doc["cases"][0]) == {"harness", "case", "verdict", "reason", "cost_usd"}
+    assert set(doc["cases"][0]) >= {"harness", "case", "verdict", "reason", "cost_usd"}  # expand-only: "model" is extra
     assert doc["spend_usd"] == 3.1235 and doc["cap_usd"] == 10.0 and doc["case_cap_usd"] == 1.5
 
 
@@ -160,7 +233,7 @@ def test_a_recorded_link_next_cost_is_charged_instead_of_the_ceiling():
 
 def test_with_recorded_costs_all_four_link_next_cases_fit_after_a_typical_lifecycle():
     spent = 6 * 0.7
-    for group in core.plan_groups(["a", "b", "c", "d"])[1:]:
+    for group in core.plan_groups(["a", "b", "c", "d"])[1:5]:
         run, _ = core.decide(group, spent)
         assert run  # decide() reserves the ceiling before the run; the recorded 0.4 is what is then charged
         spent += core.group_spend(group, [rec(group.cases[0], 0.4, harness=core.LINK_NEXT_HARNESS)])

@@ -22,7 +22,15 @@ from borg_core.paths import state_root
 
 LIFECYCLE_TIMEOUT_SEC = 2 * 60 * 60
 LINK_NEXT_TIMEOUT_SEC = 30 * 60
+AGENT_GATES_TIMEOUT_SEC = 60 * 60
+ORCH_SKILLS_TIMEOUT_SEC = 60 * 60
 BUILD_TIMEOUT_SEC = 300
+
+
+def today_utc() -> str:
+    """The UTC date, YYYY-MM-DD: what the pure core's dated cap is given (core has no clock). BORG_EVAL_SWEEP_TODAY
+    pins it for the bats suite, so a test about the cap cannot start failing when the raised window ends."""
+    return os.environ.get("BORG_EVAL_SWEEP_TODAY") or utc_now()[:10]
 
 
 def utc_now() -> str:
@@ -124,12 +132,23 @@ def build_plugin(repo: Path, dest: Path) -> str:
 
 def harness_command(group: core.Group, repo: Path, model: str) -> tuple[list[str], dict[str, str], int]:
     """(argv, extra env, timeout) for one invocation. Lifecycle takes its model and cap from the environment,
-    link-next from flags, and link-next runs ONE run per case: the history accumulates samples across weeks."""
+    link-next from flags and runs ONE run per case (the history accumulates samples across weeks), orchestrator-skills
+    from the environment plus a skill-group selector. agent-gates gets NO model at all: `--model` overrides each
+    agent's frontmatter pin, which is the thing those cases test."""
     cap = f"{group.ceiling_usd:.2f}"
+    harness = repo / "evals" / group.harness
     if group.harness == core.LIFECYCLE_HARNESS:
         env = {"EVAL_MODEL": model, "EVAL_MAX_BUDGET_USD": cap}
-        return ["bash", str(repo / "evals" / "lifecycle-manifests" / "run.sh")], env, LIFECYCLE_TIMEOUT_SEC
-    argv = ["bash", str(repo / "evals" / "link-next" / "live.sh"), "--runs", "1", "--model", model]
+        return ["bash", str(harness / "run.sh")], env, LIFECYCLE_TIMEOUT_SEC
+    if group.harness == core.AGENT_GATES_HARNESS:
+        argv = ["bash", str(harness / "live.sh"), "--max-budget-usd", cap]
+        for case in group.cases:
+            argv += ["--case", case]
+        return argv, {}, AGENT_GATES_TIMEOUT_SEC
+    if group.harness == core.ORCH_SKILLS_HARNESS:
+        argv = ["bash", str(harness / "live.sh"), "--case", group.selector]
+        return argv, {"EVAL_MODEL": model, "EVAL_MAX_BUDGET_USD": cap}, ORCH_SKILLS_TIMEOUT_SEC
+    argv = ["bash", str(harness / "live.sh"), "--runs", "1", "--model", model]
     argv += ["--max-cost-usd", cap, "--case", group.cases[0]]
     return argv, {}, LINK_NEXT_TIMEOUT_SEC
 
