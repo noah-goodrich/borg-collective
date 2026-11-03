@@ -2221,6 +2221,38 @@ _borg_cortex_skill_summary() {
     _BORG_CORTEX_SKILL_FAILED=()
 }
 
+# Skills borg once shipped under skills/ and has retired. A registration under borg's own skills/ dir with one of these
+# names is dropped even if the directory still exists. Add a name here when a skill is retired.
+typeset -ga _BORG_CORTEX_RETIRED_SKILLS=(borg-search borg-recon fable-reviewer no-unnecessary-read-perms simplify)
+
+# Drop borg's dead registrations from Cortex's skills.json. `cortex skill add <dir>` only records the directory in
+# `{"paths": [...]}` (nothing is copied into <cortex_dir>/skills/), pointing at borg's source dir, so a skill borg
+# removes or renames leaves a path to nothing, and re-running `skill add` never clears it. Run on every borg setup.
+# An entry goes only when it is under <skills_dir>/ and (the directory is gone, or its name is in
+# _BORG_CORTEX_RETIRED_SKILLS). Every other entry and every other key is kept as written; the file is rewritten (to a
+# temp file, then moved) only when something goes. Never calls cortex.
+# Usage: _borg_cortex_prune_skills <cortex_dir> <skills_dir>
+_borg_cortex_prune_skills() {
+    local file="$1/skills.json" prefix="${2%/}/" entry name tmp
+    local -a keep=() dropped=()
+    [[ -f "$file" ]] || return 0
+    jq -e '.paths | type == "array"' "$file" &>/dev/null || return 0
+    for entry in "${(@f)$(jq -r '.paths[] | strings' "$file")}"; do
+        [[ -n "$entry" ]] || continue
+        name="${entry:t}"
+        if [[ "$entry" == "$prefix"* ]] && { [[ ! -d "$entry" ]] || (( ${_BORG_CORTEX_RETIRED_SKILLS[(Ie)$name]} )); }; then
+            dropped+=("$name")
+        else
+            keep+=("$entry")
+        fi
+    done
+    (( ${#dropped} )) || return 0
+    tmp="$file.tmp.$$"
+    jq '.paths |= map(select(. as $p | $ARGS.positional | index($p)))' "$file" --args "${keep[@]}" > "$tmp" \
+        && mv "$tmp" "$file" || { rm -f "$tmp"; warn "  could not prune $file"; return 1; }
+    info "  dropped ${#dropped} dead skill registration(s) from Cortex: ${(j:, :)dropped}"
+}
+
 _borg_install_cortex_agents() {
     local src_dir="$BORG_HOME/agents" dst_dir="$1/agents" agent_file name tmp
     [[ -d "$src_dir" ]] || return 0
@@ -2641,6 +2673,7 @@ CONF
             _borg_cortex_skill_add "$skill_dir" && info "  $name (cortex)"
         done
         _borg_cortex_skill_summary
+        _borg_cortex_prune_skills "$COCO_DIR" "$BORG_HOME/skills"
 
         local _coco_base="$BORG_HOME/config/cortex/settings.base.json"
         if [[ -f "$_coco_base" ]]; then
