@@ -127,6 +127,13 @@
       "ref": "noah-goodrich/borg-collective#514",
       "status": "merged",
       "why": "build-plugin.sh --help prints usage"
+    },
+    {
+      "lane": "_default",
+      "order": "19",
+      "ref": "noah-goodrich/borg-collective#515",
+      "status": "open",
+      "why": "VERSION 0.9.14, release notes, then tag"
     }
   ]
 }
