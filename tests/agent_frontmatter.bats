@@ -40,3 +40,8 @@ fm() { awk '/^---$/{n++; next} n==1' "$1"; }
         fm "$f" | grep -Eqx 'model: claude-[a-z]+-[0-9]+(-[0-9]+)*' || { echo "$f: model is not a full id"; return 1; }
     done
 }
+
+@test "agents: borg-researcher pins Haiku at medium effort (#496)" {
+    fm "$AGENTS/borg-researcher.md" | grep -Eqx 'model: claude-haiku-5-5'
+    fm "$AGENTS/borg-researcher.md" | grep -Eqx 'effort: medium'
+}

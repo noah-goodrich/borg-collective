@@ -40,7 +40,7 @@ Queen receives a task
   │     └─ mechanical change       → borg-grunt      (Haiku/low,   ≤300 chars back)
   │
   ├─ needs judgment, single concern?
-  │     ├─ from-zero web research   → borg-researcher (Sonnet/med,  writes to a file, ≤500 back)
+  │     ├─ from-zero web research   → borg-researcher (Haiku/med,   writes to a file, ≤500 back)
   │     ├─ blind adversarial review → borg-reviewer   (Sonnet/high, cold, ≤800 words)
   │     └─ implement / fix / test   → borg-nanoprobe  (Sonnet/med,  own worktree → PR, ≤500 back)
   │
@@ -55,7 +55,7 @@ output returns to the Queen, which spawns the next.
 
 1. **Orchestrator-worker only; no inter-agent messaging.** Workers report to the Queen; they never message
    each other. Agent Teams stay off.
-2. **Cost-ordered routing with explicit model tiers.** scout/grunt → Haiku; nanoprobe/researcher → Sonnet/med;
+2. **Cost-ordered routing with explicit model tiers.** scout/grunt → Haiku; researcher → Haiku/med; nanoprobe → Sonnet/med;
    reviewer → Sonnet/high. `general-purpose` and untyped spawns are denied: use an allowlisted agentType, or
    an explicit `model` + `effort`. Gate conditions are fully specified in `docs/agent-routing.md`.
 3. **Session-model rule (post-2026-07-07).** Queen and drone sessions launch on Opus at `xhigh`; every

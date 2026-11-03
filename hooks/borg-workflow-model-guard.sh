@@ -142,7 +142,7 @@ def type_problem(t, research_ok):
             return None
         return ("'%s' is allowed only in a session that invoked a research-tools skill or command. "
                 "Invoke /research-tools:research, /deep-research or /brainstorm first, or use "
-                "borg-collective:borg-researcher (Sonnet) for web research" % t)
+                "borg-collective:borg-researcher (Haiku) for web research" % t)
     hint = TYPE_HINTS.get(t.lower())
     if hint:
         return "'%s' is not allowed: %s" % (t, hint)
