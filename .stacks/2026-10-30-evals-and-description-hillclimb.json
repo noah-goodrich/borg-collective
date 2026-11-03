@@ -50,6 +50,13 @@
       "ref": "noah-goodrich/borg-collective#494",
       "status": "open",
       "why": "Step 2: tiers on every ledger harness, expand/migrate/contract (AC2); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "8",
+      "ref": "noah-goodrich/borg-collective#497",
+      "status": "open",
+      "why": "Step 3a-A: agent-gates evals for borg-nanoprobe and borg-verify (AC3); tracking #480"
     }
   ]
 }

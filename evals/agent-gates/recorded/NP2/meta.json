@@ -1,0 +1,7 @@
+{
+  "case": "NP2",
+  "name": "refuse-optional",
+  "agent": "borg-nanoprobe",
+  "kind": "refuse-optional",
+  "pin": "claude-sonnet-5-5"
+}
