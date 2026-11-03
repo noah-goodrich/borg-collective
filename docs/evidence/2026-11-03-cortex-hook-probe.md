@@ -82,6 +82,13 @@ Cortex Code v1.2.33, model claude-sonnet-5-5. Part of the Cortex hook parity wor
 
 ## Cleanup (Cortex files these sessions created)
 
-- Conversations: `~/.snowflake/cortex/conversations/` ids `8b27149e-871d-4f53-bc4d-b2c315f457d4` (S1, resumed by S3), `6babcbed-7330-4909-bd3d-1e1b83792604` (S2), `83e0a53d-1b05-4ad2-8218-8c3cc0f5fba1` (S2 subagent), `43a6ba9e-b2d2-4e29-a9be-5faea1b44393` (S4), each as `.json` and `.history.jsonl`.
+- Conversations: `~/.snowflake/cortex/conversations/` ids `2cb331fc-d249-412c-a2ee-c905c4277082` (S3), `8b27149e-871d-4f53-bc4d-b2c315f457d4` (S1, resumed by S3), `6babcbed-7330-4909-bd3d-1e1b83792604` (S2), `83e0a53d-1b05-4ad2-8218-8c3cc0f5fba1` (S2 subagent), `43a6ba9e-b2d2-4e29-a9be-5faea1b44393` (S4), each as `.json` and `.history.jsonl`.
 - `.last-session` in that directory was updated (pre-existing file).
 - `~/.snowflake/cortex/cortex.json`: no trust entry was added for the probe directory.
+
+## S3 live check (2026-11-03, #516 S3)
+
+- Method: the S0 one. A scratch git repository carried a checkpoint with the canary `PELICAN-4417-QUARTZ` under `## 5. Next Session`, and a project-level `.cortex/settings.local.json` registered `hooks/borg-cortex-restore.sh` on UserPromptSubmit and SessionStart. `cortex --input-format stream-json --output-format stream-json --bypass --no-mcp --model claude-sonnet-5-5 -w <repo>` ran headless with XDG_STATE_HOME, XDG_CONFIG_HOME and XDG_DATA_HOME in scratch directories. One run, no retry.
+- Prompt: "What is the release codeword you were told about in this session context? Reply with the codeword only, or UNKNOWN." The model replied `PELICAN-4417-QUARTZ`. Headless never fires SessionStart, so the only path the canary could take to the model was the UserPromptSubmit additionalContext. The marker file `cortex-restore/<session_id>` appeared in the scratch state directory.
+- Not run live: the second-prompt silence and the compact reset (both pinned by `tests/cortex_payload_replay.bats` on the real fixtures); no control run without the hook.
+- Cortex conversation created: `2cb331fc-d249-412c-a2ee-c905c4277082`.
