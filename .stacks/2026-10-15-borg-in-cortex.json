@@ -21,6 +21,13 @@
       "ref": "noah-goodrich/borg-collective#517",
       "status": "open",
       "why": "S0: live Cortex hook probe, evidence and fixtures (#516)"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#518",
+      "status": "open",
+      "why": "S1 of #516: register parity hooks, hook-list parity test"
     }
   ]
 }
