@@ -2239,12 +2239,16 @@ _borg_install_cortex_agents() {
 }
 
 # Print agent file $1 with the first frontmatter `name: <n>` line rewritten to `name: "borg-collective:<n>"`; every
-# other byte is unchanged. A file with no frontmatter, or a name that already carries a namespace, prints as is.
+# other byte is unchanged EXCEPT the scout's `tools:` line, which loses `Bash`: the scout's Bash is read-only only
+# because scout-readonly-guard.sh gates it on `agent_type`, and borg does not register that guard for Cortex (its hook
+# payload may not carry agent_type), so the Cortex copy keeps Bash out rather than ship an unguarded shell. A file with no frontmatter, or a name that already carries a
+# namespace, prints as is.
 # Usage: _borg_cortex_agent_copy <agent_file>
 _borg_cortex_agent_copy() {
     awk 'NR == 1 && $0 == "---" { fm = 1; print; next }
          fm && $0 == "---" { fm = 0 }
-         fm && !done && /^name: [A-Za-z0-9_-]+$/ { sub(/^name: /, "name: \"borg-collective:"); $0 = $0 "\""; done = 1 }
+         fm && !done && /^name: [A-Za-z0-9_-]+$/ { nm = substr($0, 7); sub(/^name: /, "name: \"borg-collective:"); $0 = $0 "\""; done = 1 }
+         fm && nm == "borg-scout" && /^tools: / { gsub(/, *Bash/, "") }
          { print }' "$1"
 }
 
