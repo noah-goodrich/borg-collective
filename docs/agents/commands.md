@@ -80,6 +80,7 @@ borg store-secret        Patch a repository's secrets.zsh with a new keychain ex
 borg down                Tear down everything: windows, containers, shared stacks (`sever` retired)
 borg tidy                Housekeeping pass over registry/checkpoints; `--cairn-leftovers [--dry-run]`
                            backs up then deletes cairn's machine-local files
+borg handoff write|check  The Queen's one-PR-thread handoff: `write` renders, lints and writes `<repository>/.borg/checkpoints/<stamp>-queen.md`; `check <file>` lints one
 borg color / image       Cosmetic repository registry fields (tmux color, session image)
 borg version             Print BORG_VERSION
 borg help                Full command reference

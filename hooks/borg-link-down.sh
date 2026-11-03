@@ -189,6 +189,8 @@ if [[ "$MODE" == "orchestrator" ]]; then
         OVERVIEW="You are the QUEEN — registry not initialized. Run 'borg setup'."
     fi
     OVERVIEW+=$'\n\n'"$ROUTING_CARD"
+    # One PR thread per worker session (#504). The verb is the writer AND the lint; a goal naming two PRs is refused.
+    OVERVIEW+=$'\n\n'"HANDOFFS: a worker session gets ONE PR thread and a stop condition. Write it with: borg handoff write --repository <path> --goal \"<owner/repo#N: what>\" --done-when \"<X>\" --next \"<next thread|none>\". It refuses a goal that names two PRs (split it into one handoff each). Check a hand-written one with: borg handoff check <file>."
 
     jq -n --arg ctx "$OVERVIEW" '{
         "hookSpecificOutput": {

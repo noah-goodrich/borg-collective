@@ -3828,6 +3828,7 @@ cmd_help() {
     setup               Register Claude Code hooks, skills, and config
     checkpoint-name     Print the collision-proof filename stem for a new checkpoint
     checkpoint-prepare  Print every input /borg-link-up needs in one call (read-only, always exit 0)
+    handoff <verb>      Queen handoffs, one PR thread each: write --repository <p> --goal <g> --done-when <x> --next <n> | check <file>
     version             Print the installed borg version (alias: --version, -V)
     store-secret <name> Store a secret in macOS Keychain and wire to secrets.zsh
     cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
@@ -4513,6 +4514,10 @@ case "${1:-help}" in
         # ALWAYS and writes nothing, because the skill loads it through dynamic context injection, where a
         # non-zero exit aborts the skill. Contract: docs/plans/directives/2026-10-14-link-up-prepare.md.
         _borg_py borg_core.checkpoint.prepare_cli "${@:2}" ;;
+    handoff)
+        # One PR thread per worker session (#504): `write` renders, lints and writes the Queen's handoff checkpoint,
+        # `check` lints a hand-written one. A verb, not a documented python3 line, for the reason checkpoint-name is.
+        _borg_py borg_core.handoff.cli "${@:2}" ;;
     version|--version|-V) cmd_version ;;
     help|--help|-h) cmd_help ;;
     # Removed 2026-08-10: ls/status/hail/brief/briefing/refresh were aliases for `link`. Six names
