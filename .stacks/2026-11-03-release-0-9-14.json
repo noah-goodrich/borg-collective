@@ -1,0 +1,132 @@
+{
+  "desc": "borg 0.9.14: skills trimmed, nudges, nanoprobe skill grants, opt-in eval sweep",
+  "program": "2026-11-03-release-0-9-14",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#481",
+      "status": "merged",
+      "why": "break-glass is slash-only"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#482",
+      "status": "merged",
+      "why": "skill triage: three skills retired, build prunes removed dirs"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#483",
+      "status": "merged",
+      "why": "one-line quoted skill descriptions, setup reports cortex skill add errors"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#484",
+      "status": "merged",
+      "why": "JSONL eval run history and report"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#492",
+      "status": "merged",
+      "why": "weekly live eval sweep driver"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#493",
+      "status": "merged",
+      "why": "eval-sweep launchd agent, doctor row, next row (opt-in)"
+    },
+    {
+      "lane": "_default",
+      "order": "7",
+      "ref": "noah-goodrich/borg-collective#494",
+      "status": "merged",
+      "why": "tiers in the eval ledger"
+    },
+    {
+      "lane": "_default",
+      "order": "8",
+      "ref": "noah-goodrich/borg-collective#495",
+      "status": "merged",
+      "why": "setup asks git check-ignore before editing .gitignore"
+    },
+    {
+      "lane": "_default",
+      "order": "9",
+      "ref": "noah-goodrich/borg-collective#497",
+      "status": "merged",
+      "why": "evals/agent-gates"
+    },
+    {
+      "lane": "_default",
+      "order": "10",
+      "ref": "noah-goodrich/borg-collective#499",
+      "status": "merged",
+      "why": "evals/orchestrator-skills"
+    },
+    {
+      "lane": "_default",
+      "order": "11",
+      "ref": "noah-goodrich/borg-collective#505",
+      "status": "merged",
+      "why": "borg-researcher on Haiku"
+    },
+    {
+      "lane": "_default",
+      "order": "12",
+      "ref": "noah-goodrich/borg-collective#506",
+      "status": "merged",
+      "why": "borg handoff write and check"
+    },
+    {
+      "lane": "_default",
+      "order": "13",
+      "ref": "noah-goodrich/borg-collective#507",
+      "status": "merged",
+      "why": "nudge on oversized tool results, narrow-read rules"
+    },
+    {
+      "lane": "_default",
+      "order": "14",
+      "ref": "noah-goodrich/borg-collective#508",
+      "status": "merged",
+      "why": "borg-scout read-only Bash behind a guard"
+    },
+    {
+      "lane": "_default",
+      "order": "15",
+      "ref": "noah-goodrich/borg-collective#509",
+      "status": "merged",
+      "why": "context-size nudge, PreCompact checkpoint"
+    },
+    {
+      "lane": "_default",
+      "order": "16",
+      "ref": "noah-goodrich/borg-collective#511",
+      "status": "merged",
+      "why": "nanoprobe skill grants"
+    },
+    {
+      "lane": "_default",
+      "order": "17",
+      "ref": "noah-goodrich/borg-collective#513",
+      "status": "merged",
+      "why": "setup prunes dead Cortex skills, SessionStart trim"
+    },
+    {
+      "lane": "_default",
+      "order": "18",
+      "ref": "noah-goodrich/borg-collective#514",
+      "status": "merged",
+      "why": "build-plugin.sh --help prints usage"
+    }
+  ]
+}
