@@ -64,6 +64,13 @@
       "ref": "noah-goodrich/borg-collective#499",
       "status": "open",
       "why": "Step 3a-B: orchestrator-skills evals for borg-resume, borg-review, break-glass (AC3); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "10",
+      "ref": "noah-goodrich/borg-collective#523",
+      "status": "open",
+      "why": "Step 3a-C: sweep agent-gates and orchestrator-skills, $15 cap to 2026-12-03"
     }
   ]
 }
