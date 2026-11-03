@@ -1,0 +1,12 @@
+{
+  "cwd": "__CWD__",
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "tool_input": {
+    "command": "probe-skill"
+  },
+  "tool_name": "skill",
+  "tool_use_id": "toolu_synthetic01",
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json"
+}

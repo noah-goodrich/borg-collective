@@ -1,0 +1,13 @@
+{
+  "cwd": "__CWD__",
+  "hook_event_name": "PermissionRequest",
+  "permission_mode": "default",
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "tool_input": {
+    "action": "execute_command",
+    "resource": "touch /work/probe/perm-test.txt",
+    "toolType": "bash"
+  },
+  "tool_name": "Bash",
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json"
+}

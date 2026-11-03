@@ -1,0 +1,31 @@
+{
+  "cwd": "__CWD__",
+  "hook_event_name": "PostToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "tool_input": {
+    "command": "echo probe-bash",
+    "description": "Echo probe string"
+  },
+  "tool_name": "Bash",
+  "tool_response": {
+    "content": [
+      {
+        "text": "Bash command `echo probe-bash` with description `Echo probe string` returned output: probe-bash",
+        "type": "text"
+      }
+    ],
+    "metrics": {
+      "bash": {
+        "exit_code": 0,
+        "result_size_bytes": 10
+      },
+      "duration_ms": 10
+    },
+    "name": "bash",
+    "status": "success",
+    "tool_use_id": "toolu_synthetic01"
+  },
+  "tool_use_id": "toolu_synthetic01",
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json"
+}

@@ -1,0 +1,8 @@
+{
+  "cwd": "__CWD__",
+  "hook_event_name": "PreCompact",
+  "permission_mode": "default",
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json",
+  "trigger": "manual"
+}
