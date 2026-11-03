@@ -447,7 +447,11 @@ case "${BORG_EVAL_SWEEP:-}" in
         rm -f "$EVAL_SWEEP_PLIST_DEST"
         ;;
     *)
-        info "Weekly eval sweep NOT installed (it spends money, so it is opt-in: BORG_EVAL_SWEEP=1 ./install.sh)."
+        if [[ -f "$EVAL_SWEEP_PLIST_DEST" ]]; then
+            info "Weekly eval sweep already installed, left alone (BORG_EVAL_SWEEP=1 re-renders it, =0 removes it)."
+        else
+            info "Weekly eval sweep NOT installed (it spends money, so it is opt-in: BORG_EVAL_SWEEP=1 ./install.sh)."
+        fi
         ;;
 esac
 

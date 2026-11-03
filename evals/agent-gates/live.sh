@@ -106,6 +106,9 @@ _attempt() {
     elif grep -q '^CHECK skip ' "$d/grade.txt"; then VERDICT=skip
     else VERDICT=pass; fi
     REASON="$(grep -m1 '^CHECK fail \|^CHECK skip ' "$d/grade.txt" | cut -d' ' -f3- | head -c 300)"
+    # The sandbox is throwaway: remove it on a pass, keep it on a fail or skip for debugging (every other path above
+    # returns early with it kept). The evidence a pass leaves is in $d, not here.
+    if [ "$VERDICT" = pass ]; then rm -rf "${root:?}"; fi
 }
 
 echo "live run: agent-gates cases=${WANT[*]} ceiling=\$$BUDGET per attempt, $(date -u +%Y-%m-%dT%H:%MZ)"
