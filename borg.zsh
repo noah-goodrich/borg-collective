@@ -2122,6 +2122,17 @@ typeset -ga _BORG_CORTEX_HOOKS=(
     "PreToolUse|borg-supabase-guard.sh|Bash"
     "PostToolUse|tool-count-nudge.sh"
     "PostToolUse|borg-prefer-tool-log.sh|Bash"
+    # #516 S2. PreCompact fires on /compact (trigger "manual"). The hook reads <id>.history.jsonl beside the
+    # transcript_path <id>.json, which in Cortex is conversation metadata with no messages.
+    "PreCompact|borg-precompact-checkpoint.sh"
+    # The two subagent guards gate on agent_type. Cortex reports the plugin form for borg's installed agents
+    # ("borg-collective:borg-scout" in tests/fixtures/cortex/pretooluse-in-subagent.json), which both already list.
+    "PreToolUse|borg-verifier-guard.sh|Bash"
+    "PreToolUse|scout-readonly-guard.sh|Bash"
+    # large-output-nudge.sh sums the text parts of Cortex's tool_response.content[] as well as Claude's shapes.
+    "PostToolUse|large-output-nudge.sh|Bash|Read"
+    # Claude's matcher plus Cortex's lowercase skill tool (the skill name rides in tool_input.command there).
+    "PreToolUse|borg-nanoprobe-guard.sh|Skill|Write|Edit|MultiEdit|NotebookEdit|Bash|skill"
 )
 
 # Plugin hooks that stay out of Cortex on purpose, as "<script>|<reason>" entries. Together with _BORG_CORTEX_HOOKS and
@@ -2136,13 +2147,7 @@ typeset -ga _BORG_CORTEX_CLAUDE_ONLY=(
 
 # Plugin hooks not yet registered for Cortex, as "<script>|<reason>" entries naming the #516 slice (S2 or S3) that
 # adapts them. An entry leaves this array when the hook moves to _BORG_CORTEX_HOOKS.
-typeset -ga _BORG_CORTEX_PENDING=(
-    "borg-precompact-checkpoint.sh|#516 S2: reads a JSON transcript in Cortex and needs a PreCompact registration"
-    "borg-verifier-guard.sh|#516 S3: agent_type is present in Cortex's payload; adapt the guard"
-    "scout-readonly-guard.sh|#516 S3: agent_type is present in Cortex's payload; adapt the guard"
-    "large-output-nudge.sh|#516 S2: Cortex's tool_response is {name, content[], status, metrics}, not Claude's shape"
-    "borg-nanoprobe-guard.sh|#516 S3: Cortex's skill tool is lowercase skill; adapt the grant check"
-)
+typeset -ga _BORG_CORTEX_PENDING=()
 
 # Hooks an older borg registered under names it has since dropped (borg-start.sh/borg-stop.sh became
 # borg-link-down.sh/borg-link-up.sh). They are scrubbed from settings.json along with the entries above.

@@ -28,6 +28,13 @@
       "ref": "noah-goodrich/borg-collective#518",
       "status": "open",
       "why": "S1 of #516: register parity hooks, hook-list parity test"
+    },
+    {
+      "lane": "_default",
+      "order": "5",
+      "ref": "noah-goodrich/borg-collective#519",
+      "status": "open",
+      "why": "S2 of #516: register precompact, subagent guards, large-output nudge, nanoprobe skill gate"
     }
   ]
 }
