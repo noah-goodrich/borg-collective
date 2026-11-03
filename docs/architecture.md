@@ -114,7 +114,7 @@ writing: **17 hooks**, **~14 lib files**, **13 skills**, **6 agents** (+ `docs/a
         borg-grunt.md            Haiku — fully-specified mechanical execution
         borg-scout.md            Haiku — read-only locate/search
         borg-nanoprobe.md        Sonnet — single-task judgment work (implement/fix/refactor)
-        borg-researcher.md       Sonnet — from-zero web research, one track
+        borg-researcher.md       Haiku/medium — from-zero web research, one track
         borg-reviewer.md         Sonnet/high — blind adversarial review
     bin/
         borg-usage-watch         Usage Guardian poller (see below)
@@ -433,7 +433,7 @@ tier per `docs/agent-routing.md`:
 | borg-grunt | Haiku | Fully-specified mechanical execution: apply an edit, run tests, rote refactor |
 | borg-scout | Haiku | Read-only locate/search — never writes |
 | borg-nanoprobe | Sonnet | Single discrete task requiring judgment — implement, fix, refactor |
-| borg-researcher | Sonnet | From-zero web research on one track, structured findings |
+| borg-researcher | Haiku (medium effort) | From-zero web research on one track, structured findings |
 | borg-reviewer | Sonnet (high effort) | Blind adversarial review, arrives cold with no author context |
 
 Nanoprobes (and any subagent doing multi-file work) manage their own git worktrees rather than
