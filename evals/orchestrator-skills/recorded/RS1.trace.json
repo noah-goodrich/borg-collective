@@ -1,0 +1,75 @@
+{
+  "after": {
+    "files": {
+      ".claude/workflows/scripts/migrate-wf_7c2e91.js": "8fff0104e94bacd77f419295482bbc615a04b5ab8c5377612b00434d49b2dce6",
+      "README.md": "faa5b4816800b8cbe1595e5533fe36c53f396c0c26a3a876dd3e4085232348a1"
+    },
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null
+  },
+  "before": {
+    "files": {
+      ".claude/workflows/scripts/migrate-wf_7c2e91.js": "8fff0104e94bacd77f419295482bbc615a04b5ab8c5377612b00434d49b2dce6",
+      "README.md": "faa5b4816800b8cbe1595e5533fe36c53f396c0c26a3a876dd3e4085232348a1"
+    },
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null
+  },
+  "case": "RS1",
+  "expect": {
+    "resume_at": 1791810720,
+    "rid": "r_cf2120",
+    "runId": "wf_7c2e91",
+    "scope": "workflow:wf_7c2e91",
+    "scriptPath": "/sandbox/repo/.claude/workflows/scripts/migrate-wf_7c2e91.js",
+    "state": "scheduled"
+  },
+  "final": "You don't need to do anything tonight. The resume watcher already has this workflow queued, so I didn't schedule a second resume.\n\n- **Record:** `r_cf2120`, scope `workflow:wf_7c2e91`, state `scheduled`, cause `rate_limit`.\n- **Switches:** injection is on. `paused` and `disabled_env` are both false.\n- **What happens next:** once it's due, the watcher checks that the limit has reset and the pane is idle. If the session hasn't already resumed on its own, it resumes the run with `resumeFromRunId`. Steps that already finished come back from cache, so only the unfinished work runs again.\n\n**The resume time doesn't match your reset.** The record's `resume_at` is Mon Oct 12, 07:12 MDT. The watcher's own \"now\" is Oct 12, 06:00, which is where its \"due in 72 minutes\" comes from. But the system clock says Mon Nov 2, 20:53 MST, and your error says the limit resets at 11:40pm tonight. By the real clock that `resume_at` is three weeks in the past. My guess is the watcher's clock is pinned or is reading the wrong time, but I couldn't confirm which. The worst case is that it tries to resume before 11:40pm. Its pre-flight check should hold the resume until the limit has actually reset, but I couldn't confirm that either.\n\nI left the record alone because the skill says not to override an active watcher record. If you'd rather have it pinned to your reset time, run `borg-resume defer r_cf2120 <time>` with a time a few minutes after 11:40pm. You can also check it tomorrow with `borg-resume status --all --json`.",
+  "result": {
+    "cost": 0.21549520000000003,
+    "denials": 0,
+    "is_error": false,
+    "models": [
+      "claude-opus-5-5"
+    ],
+    "subtype": "success",
+    "turns": 4
+  },
+  "steps": [
+    {
+      "error": false,
+      "input": {
+        "command": "borg-resume status --all --json; echo \"EXIT=$?\"",
+        "description": "Query the resume watcher for all records"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "output": "{\"paused\":false,\"disabled_env\":false,\"now\":1791806400,\"counts\":{\"scheduled\":1},\"records\":[{\"rid\":\"r_cf2120\",\"sid\":\"00000000-0000-4000-8000-0000000000a1\",\"scope\":\"workflow:wf_7c2e91\",\"project\":null,\"class\":\"usage_limit\",\"state\":\"scheduled\",\"cause\":\"rate_limit\",\"resume_at\":1791810720,\"due_in\":4320,\"last_reason\":null,\"last_t\":1791806400,\"first_seen\":1791806400}]}\nEXIT=0"
+    },
+    {
+      "error": false,
+      "input": {
+        "command": "TZ=America/Denver date -r 1791810720; TZ=America/Denver date -r 1791806400",
+        "description": "Convert resume and status timestamps to Denver time"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "output": "Mon Oct 12 07:12:00 MDT 2026\nMon Oct 12 06:00:00 MDT 2026"
+    },
+    {
+      "error": false,
+      "input": {
+        "command": "TZ=America/Denver date; date +%s",
+        "description": "Show current time in Denver and epoch"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "output": "Mon Nov  2 20:53:31 MST 2026\n1793678011"
+    },
+    {
+      "kind": "text",
+      "text": "You don't need to do anything tonight. The resume watcher already has this workflow queued, so I didn't schedule a second resume.\n\n- **Record:** `r_cf2120`, scope `workflow:wf_7c2e91`, state `scheduled`, cause `rate_limit`.\n- **Switches:** injection is on. `paused` and `disabled_env` are both false.\n- **What happens next:** once it's due, the watcher checks that the limit has reset and the pane is idle. If the session hasn't already resumed on its own, it resumes the run with `resumeFromRunId`. Steps that already finished come back from cache, so only the unfinished work runs again.\n\n**The resume time doesn't match your reset.** The record's `resume_at` is Mon Oct 12, 07:12 MDT. The watcher's own \"now\" is Oct 12, 06:00, which is where its \"due in 72 minutes\" comes from. But the system clock says Mon Nov 2, 20:53 MST, and your error says the limit resets at 11:40pm tonight. By the real clock that `resume_at` is three weeks in the past. My guess is the watcher's clock is pinned or is reading the wrong time, but I couldn't confirm which. The worst case is that it tries to resume before 11:40pm. Its pre-flight check should hold the resume until the limit has actually reset, but I couldn't confirm that either.\n\nI left the record alone because the skill says not to override an active watcher record. If you'd rather have it pinned to your reset time, run `borg-resume defer r_cf2120 <time>` with a time a few minutes after 11:40pm. You can also check it tomorrow with `borg-resume status --all --json`."
+    }
+  ],
+  "version": 1
+}
