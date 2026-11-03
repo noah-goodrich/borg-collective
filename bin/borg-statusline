@@ -4,12 +4,39 @@
 # Claude Code runs this on every update and sends session JSON on stdin. Line 1 is `borg next --line` (the cached
 # glance line: no network, no Python). Line 2 is the model and context use, from the same JSON, when jq is there.
 # Fail-quiet: a statusline that errors paints garbage on every prompt, so every failure prints a plain line.
+#
+# SIDE EFFECT (#503): the same jq pass also writes {session_id, total_input_tokens, used_percentage} to
+# ${XDG_CACHE_HOME:-$HOME/.cache}/borg/context/<session_id>.json, because hooks get no context-size field and
+# hooks/tool-count-nudge.sh needs one. No extra process: the jq call that builds line 2 emits the JSON too.
+# The write is atomic (temp file in the same directory, then mv) and skipped when the content is unchanged, so a
+# statusline that fires every few hundred milliseconds costs one `[[ ]]` compare in the steady state.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 input="$(</dev/stdin)"
 line="$(borg next --line 2>/dev/null)"
 printf '%s\n' "${line:-borg: not available}"
 if command -v jq >/dev/null 2>&1; then
-    printf '%s' "$input" | jq -r '
-        "[\(.model.display_name // "?")] ctx \(.context_window.used_percentage // 0 | floor)%"' 2>/dev/null
+    # Two output lines from ONE jq: the display line, then the compact context record.
+    parsed="$(printf '%s' "$input" | jq -r '
+        "[\(.model.display_name // "?")] ctx \(.context_window.used_percentage // 0 | floor)%",
+        ({session_id: (.session_id // ""),
+          total_input_tokens: (.context_window.total_input_tokens // 0),
+          used_percentage: (.context_window.used_percentage // 0)} | tojson)' 2>/dev/null)"
+    printf '%s\n' "${parsed%%$'\n'*}"
+    record="${parsed#*$'\n'}"
+    if [[ "$record" != "$parsed" && "$record" == '{"session_id":"'?* ]]; then
+        sid="${record#\{\"session_id\":\"}"
+        sid="${sid%%\"*}"
+        sid="${sid//[^A-Za-z0-9_-]/_}"
+        dir="${XDG_CACHE_HOME:-$HOME/.cache}/borg/context"
+        file="$dir/$sid.json"
+        current=""
+        [[ -f "$file" ]] && current="$(<"$file")"
+        if [[ -n "$sid" && "$current" != "$record" ]]; then
+            # Brace-grouped so a redirect-open error stays silent (hooks/CLAUDE.md); every failure is swallowed.
+            { [[ -d "$dir" ]] || mkdir -p "$dir"; } 2>/dev/null
+            tmp="$dir/.$sid.$$.tmp"
+            { printf '%s\n' "$record" > "$tmp" && mv -f "$tmp" "$file"; } 2>/dev/null || rm -f "$tmp" 2>/dev/null
+        fi
+    fi
 fi
 exit 0

@@ -133,3 +133,51 @@ setup() {
     [ -L "$SETTINGS" ]
     [ "$(jq -r 'has("statusLine")' "$HOME/dotfiles/settings.json")" = "false" ]
 }
+
+# #503: the installed statusline also writes the context record hooks/tool-count-nudge.sh reads.
+_run_installed_statusline() {
+    zsh "$BORG" setup --statusline
+    export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/cache"
+    mkdir -p "$BATS_TEST_TMPDIR/bin"
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$BATS_TEST_TMPDIR/bin/borg"
+    chmod +x "$BATS_TEST_TMPDIR/bin/borg"
+    run bash -c "printf '%s' '$1' | PATH='$BATS_TEST_TMPDIR/bin:$PATH' '$SCRIPT'"
+}
+
+@test "statusline: writes {session_id, total_input_tokens, used_percentage} atomically to the per-session cache file" {
+    _run_installed_statusline '{"session_id":"sess-9","model":{"display_name":"Opus"},"context_window":{"used_percentage":64.2,"total_input_tokens":128400}}'
+    [ "$status" -eq 0 ]
+    [ "${lines[1]}" = "[Opus] ctx 64%" ]
+    local file="$XDG_CACHE_HOME/borg/context/sess-9.json"
+    [ "$(jq -c '.' "$file")" = '{"session_id":"sess-9","total_input_tokens":128400,"used_percentage":64.2}' ]
+    [ -z "$(ls -A "$XDG_CACHE_HOME/borg/context" | grep -v '^sess-9.json$')" ]
+}
+
+@test "statusline: no session_id writes no file, and null fields become 0" {
+    _run_installed_statusline '{"model":{"display_name":"Opus"},"context_window":{}}'
+    [ "$status" -eq 0 ]
+    [ ! -d "$XDG_CACHE_HOME/borg/context" ]
+    _run_installed_statusline '{"session_id":"early","context_window":{"used_percentage":null,"total_input_tokens":null}}'
+    [ "$(jq -c '.' "$XDG_CACHE_HOME/borg/context/early.json")" = '{"session_id":"early","total_input_tokens":0,"used_percentage":0}' ]
+}
+
+@test "statusline: a session id with path characters cannot escape the context directory" {
+    _run_installed_statusline '{"session_id":"../../evil","context_window":{"total_input_tokens":5}}'
+    [ "$status" -eq 0 ]
+    [ -f "$XDG_CACHE_HOME/borg/context/______evil.json" ]
+    [ ! -e "$XDG_CACHE_HOME/evil.json" ]
+}
+
+@test "statusline: an unchanged record is not rewritten, and an unwritable cache dir stays silent" {
+    _run_installed_statusline '{"session_id":"same","context_window":{"total_input_tokens":5}}'
+    local file="$XDG_CACHE_HOME/borg/context/same.json"
+    touch -t 200001010000 "$file"
+    _run_installed_statusline '{"session_id":"same","context_window":{"total_input_tokens":5}}'
+    [ "$(stat -f %Sm -t %Y "$file" 2>/dev/null || stat -c %y "$file" | cut -c1-4)" = "2000" ]
+    rm -f "$file"
+    printf 'x' > "$BATS_TEST_TMPDIR/blocker"
+    export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/blocker"
+    run bash -c "printf '%s' '{\"session_id\":\"s\",\"context_window\":{}}' | PATH='$BATS_TEST_TMPDIR/bin:$PATH' '$SCRIPT'"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+}

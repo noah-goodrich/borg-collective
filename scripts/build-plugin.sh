@@ -393,6 +393,15 @@ if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-arrival-brief.sh" ]]; then
     chmod +x "$HOOKS_DST/borg-arrival-brief.sh"
 fi
 
+# borg-precompact-checkpoint.sh (PreCompact, #503) is a thin wrapper that finds borg_core and execs it, like the arrival
+# brief. Copied as-is and WITHOUT the "borg on PATH" guard (it resolves borg_core itself and is silent and fail-open on
+# any miss). It writes only where borg already lives (.borg/ or .borg-project, or the Queen's directory): a plugin hook
+# fires in every session on the machine. tests/precompact_checkpoint.bats.
+_copy_if_changed "$HOOKS_SRC/borg-precompact-checkpoint.sh" "$HOOKS_DST/borg-precompact-checkpoint.sh" "hooks/borg-precompact-checkpoint.sh"
+if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-precompact-checkpoint.sh" ]]; then
+    chmod +x "$HOOKS_DST/borg-precompact-checkpoint.sh"
+fi
+
 # ── Phase 3: Agent definition ─────────────────────────────────────────────────
 
 _info "Phase 3: Agents"
@@ -632,6 +641,18 @@ HOOKS_JSON='{
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" PreToolUse",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-precompact-checkpoint.sh",
+            "timeout": 10
           }
         ]
       }
