@@ -374,6 +374,13 @@ if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-resume-hook.sh" ]]; then
     chmod +x "$HOOKS_DST/borg-resume-hook.sh"
 fi
 
+# large-output-nudge.sh (PostToolUse Bash|Read) is self-contained (one jq, stdin JSON only). Copied as-is and WITHOUT
+# the "borg on PATH" guard: it needs no borg state, so a machine with the plugin but no borg still gets the nudge.
+_copy_if_changed "$HOOKS_SRC/large-output-nudge.sh" "$HOOKS_DST/large-output-nudge.sh" "hooks/large-output-nudge.sh"
+if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/large-output-nudge.sh" ]]; then
+    chmod +x "$HOOKS_DST/large-output-nudge.sh"
+fi
+
 # borg-arrival-brief.sh (SessionStart, matcher startup|resume) is a thin wrapper that finds borg_core and execs it. Copied
 # as-is and WITHOUT the "borg on PATH" guard the lifecycle hooks get: a missing borg must print one loud `unavailable`
 # line, and the guard would exit silently before the hook could say so. It never inlines the lib: session mode is
@@ -644,6 +651,16 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-prefer-tool-log.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/large-output-nudge.sh",
+            "timeout": 5
           }
         ]
       },

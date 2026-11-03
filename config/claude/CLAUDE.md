@@ -41,6 +41,10 @@ Avoid these shapes, which cannot be checked before they run (top-level prompt, f
   - `$(command)` in echo → break into separate tool calls or use a variable set earlier in
     the pipeline
   - If substitution is truly unavoidable, use separate plain calls; a `bash -c` loop only as a last resort.
+- **Narrow reads.** Tool output stays in context and is re-read on every later call.
+  - Pass `-q` to `git commit` and `git push`.
+  - Pipe `--stat` output through `tail -n`.
+  - Never `find` under `/private/tmp`: sealed eval directories print a permission error per entry.
 
 ## Subagent Rules
 When spawning subagents via the Agent tool, ALWAYS include these rules in the prompt:
