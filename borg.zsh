@@ -2133,6 +2133,12 @@ typeset -ga _BORG_CORTEX_HOOKS=(
     "PostToolUse|large-output-nudge.sh|Bash|Read"
     # Claude's matcher plus Cortex's lowercase skill tool (the skill name rides in tool_input.command there).
     "PreToolUse|borg-nanoprobe-guard.sh|Skill|Write|Edit|MultiEdit|NotebookEdit|Bash|skill"
+    # #516 S3, Cortex only (not in HOOKS_JSON). Cortex's SessionStart context never reaches its model, UserPromptSubmit's
+    # does, so this delivers borg-link-down.sh's checkpoint restore on the first prompt of a session (marker file keyed
+    # by session_id). The SessionStart entry resets that marker on source "compact" so the restore comes back after a
+    # compaction; SessionStart because it also fires on auto-compaction and says so in its payload.
+    "UserPromptSubmit|borg-cortex-restore.sh"
+    "SessionStart|borg-cortex-restore.sh"
 )
 
 # Plugin hooks that stay out of Cortex on purpose, as "<script>|<reason>" entries. Together with _BORG_CORTEX_HOOKS and
@@ -2145,8 +2151,9 @@ typeset -ga _BORG_CORTEX_CLAUDE_ONLY=(
     "borg-memory-read-log.sh|logs reads of Claude project-memory paths; Cortex has no such memory"
 )
 
-# Plugin hooks not yet registered for Cortex, as "<script>|<reason>" entries naming the #516 slice (S2 or S3) that
-# adapts them. An entry leaves this array when the hook moves to _BORG_CORTEX_HOOKS.
+# Plugin hooks not yet registered for Cortex, as "<script>|<reason>" entries naming the work that adapts them. Empty
+# since #516 S2: every plugin hook is now registered or Claude-only. An entry leaves this array when the hook moves to
+# _BORG_CORTEX_HOOKS.
 typeset -ga _BORG_CORTEX_PENDING=()
 
 # Hooks an older borg registered under names it has since dropped (borg-start.sh/borg-stop.sh became

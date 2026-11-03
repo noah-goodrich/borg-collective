@@ -57,9 +57,10 @@ _run_hook() {
         bash "${BATS_TEST_DIRNAME}/../hooks/$1" < "$2" 2>"${BATS_TEST_TMPDIR}/err") || RC=$?
 }
 
-@test "replay: the registered hook list is the eighteen borg hooks plus borg-cortex-plan.sh" {
-    [ "$(wc -l < "${BATS_TEST_TMPDIR}/hooks.txt" | tr -d ' ')" -eq 19 ]
+@test "replay: the registered hook list is the eighteen borg hooks plus the two Cortex-only ones" {
+    [ "$(wc -l < "${BATS_TEST_TMPDIR}/hooks.txt" | tr -d ' ')" -eq 20 ]
     grep -qx 'borg-cortex-plan.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
+    grep -qx 'borg-cortex-restore.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
     grep -qx 'bash-guard.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
     grep -qx 'borg-agent-model-guard.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
 }
@@ -318,4 +319,69 @@ _replay_jq() {
     [ "$RC" -eq 0 ]
     _replay_jq borg-nanoprobe-guard.sh pretooluse-skill '.agent_type = "borg-collective:borg-scout"'
     [ "$RC" -eq 0 ]
+}
+
+# --- the S3 hook: checkpoint restore through UserPromptSubmit -------------------------------------------------------
+
+# Seed a checkpoint in the sandbox repository that carries a canary the restore must quote.
+_seed_canary() {
+    mkdir -p "$REPO/.borg/checkpoints"
+    printf '## 4. Blockers\nnone\n\n## 5. Next Session\nresume the CANARY-7f3a task\n' > "$REPO/.borg/checkpoints/2026-11-03-000000-aaaaaa.md"
+}
+
+@test "replay: the restore hook answers the first prompt with the checkpoint under UserPromptSubmit" {
+    _seed_canary
+    _replay borg-cortex-restore.sh user-prompt-submit
+    [ "$RC" -eq 0 ]
+    [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.hookEventName')" = "UserPromptSubmit" ]
+    printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | contains("CANARY-7f3a")' >/dev/null
+}
+
+@test "replay: the restore hook stays silent on the second prompt of the same session" {
+    _seed_canary
+    _replay borg-cortex-restore.sh user-prompt-submit
+    [ -n "$OUT" ]
+    _replay borg-cortex-restore.sh user-prompt-submit
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+}
+
+@test "replay: a compact SessionStart resets the marker and the next prompt restores again" {
+    _seed_canary
+    _replay borg-cortex-restore.sh user-prompt-submit
+    [ -n "$OUT" ]
+    _replay borg-cortex-restore.sh session-start
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+    _replay borg-cortex-restore.sh user-prompt-submit
+    [ -z "$OUT" ]
+    _replay borg-cortex-restore.sh session-start-compact
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+    _replay borg-cortex-restore.sh user-prompt-submit
+    printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | contains("CANARY-7f3a")' >/dev/null
+}
+
+@test "replay: a different session id gets its own restore" {
+    _seed_canary
+    _replay borg-cortex-restore.sh user-prompt-submit
+    [ -n "$OUT" ]
+    local payload="${BATS_TEST_TMPDIR}/payload.json"
+    jq --arg cwd "$REPO" '.cwd = $cwd | .session_id = "00000000-0000-4000-8000-000000000002"' "$FIXTURES/user-prompt-submit.json" > "$payload"
+    _run_hook borg-cortex-restore.sh "$payload"
+    [ "$RC" -eq 0 ]
+    printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | contains("CANARY-7f3a")' >/dev/null
+    [ -e "$XDG_STATE_HOME/borg/cortex-restore/00000000-0000-4000-8000-000000000001" ]
+    [ -e "$XDG_STATE_HOME/borg/cortex-restore/00000000-0000-4000-8000-000000000002" ]
+}
+
+@test "replay: the restore hook exits 0 with no output on empty, malformed and id-less stdin" {
+    local input
+    for input in '' 'not json' '{}' '{"hook_event_name":"UserPromptSubmit","session_id":"../escape","cwd":"/"}'; do
+        printf '%s' "$input" > "${BATS_TEST_TMPDIR}/payload.json"
+        _run_hook borg-cortex-restore.sh "${BATS_TEST_TMPDIR}/payload.json"
+        [ "$RC" -eq 0 ] || { echo "exit $RC on: $input"; return 1; }
+        [ -z "$OUT" ] || { echo "output on: $input"; return 1; }
+    done
+    [ ! -e "$XDG_STATE_HOME/borg/cortex-restore" ] || [ -z "$(ls -A "$XDG_STATE_HOME/borg/cortex-restore")" ]
 }

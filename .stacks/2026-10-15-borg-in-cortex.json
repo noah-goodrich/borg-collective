@@ -35,6 +35,13 @@
       "ref": "noah-goodrich/borg-collective#519",
       "status": "open",
       "why": "S2 of #516: register precompact, subagent guards, large-output nudge, nanoprobe skill gate"
+    },
+    {
+      "lane": "_default",
+      "order": "6",
+      "ref": "noah-goodrich/borg-collective#522",
+      "status": "open",
+      "why": "S3 of #516: deliver the checkpoint restore to Cortex's model via UserPromptSubmit"
     }
   ]
 }
