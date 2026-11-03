@@ -588,7 +588,7 @@ _seed_state() {
     [ "$status" -eq 0 ]
     local ctx
     ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')
-    [[ "$ctx" == *"the orchestrator session is the QUEEN"* ]] || {
+    [[ "$ctx" == *"VOCABULARY: the QUEEN is the session whose cwd is exactly"* ]] || {
         echo "no Queen vocabulary in the injection"; false; }
 }
 
