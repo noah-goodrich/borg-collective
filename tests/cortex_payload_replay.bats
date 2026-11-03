@@ -57,8 +57,8 @@ _run_hook() {
         bash "${BATS_TEST_DIRNAME}/../hooks/$1" < "$2" 2>"${BATS_TEST_TMPDIR}/err") || RC=$?
 }
 
-@test "replay: the registered hook list is the thirteen borg hooks plus borg-cortex-plan.sh" {
-    [ "$(wc -l < "${BATS_TEST_TMPDIR}/hooks.txt" | tr -d ' ')" -eq 14 ]
+@test "replay: the registered hook list is the eighteen borg hooks plus borg-cortex-plan.sh" {
+    [ "$(wc -l < "${BATS_TEST_TMPDIR}/hooks.txt" | tr -d ' ')" -eq 19 ]
     grep -qx 'borg-cortex-plan.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
     grep -qx 'bash-guard.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
     grep -qx 'borg-agent-model-guard.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
@@ -222,4 +222,100 @@ $hook $fx: stdout is not JSON: ${OUT:0:120}"
     _replay borg-prefer-tool-log.sh posttooluse-bash
     [ "$RC" -eq 0 ]
     [ -z "$OUT" ]
+}
+
+# --- the S2 hooks: precompact checkpoint, subagent guards, large-output nudge, nanoprobe skill gate ------------------
+
+# Run hook $1 on fixture $2 with cwd the sandbox repository and the jq filter $3 applied.
+_replay_jq() {
+    local hook="$1" fixture="$2" filter="$3" payload="${BATS_TEST_TMPDIR}/payload.json"
+    jq --arg cwd "$REPO" "(.cwd = \$cwd) | $filter" "$FIXTURES/$fixture.json" > "$payload"
+    _run_hook "$hook" "$payload"
+}
+
+@test "replay: the precompact hook writes a checkpoint quoting the last prompt from the history beside the json" {
+    mkdir -p "$REPO/.borg/checkpoints"
+    local conv="${BATS_TEST_TMPDIR}/00000000-0000-4000-8000-000000000001"
+    printf '{"history_length": 2}\n' > "$conv.json"
+    printf '%s\n' '{"role":"user","id":"u1","content":[{"type":"text","text":"wire the cortex hooks","is_user_prompt":true,"internalOnly":false}]}' > "$conv.history.jsonl"
+    jq --arg cwd "$REPO" --arg t "$conv.json" '.cwd = $cwd | .transcript_path = $t' "$FIXTURES/pre-compact.json" > "${BATS_TEST_TMPDIR}/payload.json"
+    _run_hook borg-precompact-checkpoint.sh "${BATS_TEST_TMPDIR}/payload.json"
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+    local written=("$REPO/.borg/checkpoints"/*.md)
+    [ "${#written[@]}" -eq 1 ]
+    grep -q '> wire the cortex hooks' "${written[0]}"
+    grep -q 'trigger=manual' "${written[0]}"
+}
+
+@test "replay: the precompact hook stays silent in a repository borg does not live in" {
+    _replay borg-precompact-checkpoint.sh pre-compact
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+    [ ! -e "$REPO/.borg" ]
+}
+
+@test "replay: the scout guard denies a mutating Bash call from the Cortex-named scout and allows a read-only one" {
+    _replay_jq scout-readonly-guard.sh pretooluse-in-subagent '.tool_name = "Bash" | .tool_input = {command: "rm -r build"}'
+    [ "$RC" -eq 2 ]
+    grep -q 'borg scout guard' "${BATS_TEST_TMPDIR}/err"
+    _replay_jq scout-readonly-guard.sh pretooluse-in-subagent '.tool_name = "Bash" | .tool_input = {command: "git status"}'
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+}
+
+@test "replay: the scout guard ignores a Cortex Bash call from a different agent" {
+    _replay_jq scout-readonly-guard.sh pretooluse-in-subagent '.agent_type = "borg-collective:borg-grunt" | .tool_name = "Bash" | .tool_input = {command: "rm -r build"}'
+    [ "$RC" -eq 0 ]
+    _replay scout-readonly-guard.sh pretooluse-bash "rm -r build"
+    [ "$RC" -eq 0 ]
+}
+
+@test "replay: the verifier guard denies a push from the Cortex-named verifier and allows a read-only git call" {
+    local base='.agent_type = "borg-collective:borg-verifier" | .tool_name = "Bash"'
+    _replay_jq borg-verifier-guard.sh pretooluse-in-subagent "$base | .tool_input = {command: \"git push origin main\"}"
+    [ "$RC" -eq 2 ]
+    grep -q 'borg verifier guard' "${BATS_TEST_TMPDIR}/err"
+    _replay_jq borg-verifier-guard.sh pretooluse-in-subagent "$base | .tool_input = {command: \"git status\"}"
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+}
+
+@test "replay: the large-output nudge reads Cortex's content[] text parts, in and out of a subagent" {
+    export BORG_LARGE_OUTPUT_CHARS=50
+    _replay large-output-nudge.sh posttooluse-bash
+    [ "$RC" -eq 0 ]
+    printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | contains("That result was") and contains("echo probe-bash")' >/dev/null
+    export BORG_LARGE_OUTPUT_CHARS=10
+    _replay large-output-nudge.sh posttooluse-in-subagent
+    [ "$RC" -eq 0 ]
+    printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | contains("/work/probe/notes.txt")' >/dev/null
+}
+
+@test "replay: the large-output nudge sums several text parts and is silent under the default limit" {
+    _replay large-output-nudge.sh posttooluse-bash
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+    _replay_jq large-output-nudge.sh posttooluse-bash '.tool_response.content = [range(0; 3) | {type: "text", text: ("x" * 3000)}]'
+    [ "$RC" -eq 0 ]
+    printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | contains("9000 chars")' >/dev/null
+}
+
+@test "replay: the nanoprobe guard denies an ungranted lowercase skill call and allows a granted one" {
+    local brief="$XDG_CONFIG_HOME/borg/extensions/agent-extensions/borg-nanoprobe"
+    _replay_jq borg-nanoprobe-guard.sh pretooluse-skill '.agent_type = "borg-collective:borg-nanoprobe"'
+    [ "$RC" -eq 2 ]
+    grep -q "probe-skill" "${BATS_TEST_TMPDIR}/err"
+    mkdir -p "$brief"
+    printf -- '- Grant-skill: probe-skill\n' > "$brief/brief.md"
+    _replay_jq borg-nanoprobe-guard.sh pretooluse-skill '.agent_type = "borg-collective:borg-nanoprobe"'
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+}
+
+@test "replay: the nanoprobe guard leaves a lowercase skill call from any other caller alone" {
+    _replay borg-nanoprobe-guard.sh pretooluse-skill
+    [ "$RC" -eq 0 ]
+    _replay_jq borg-nanoprobe-guard.sh pretooluse-skill '.agent_type = "borg-collective:borg-scout"'
+    [ "$RC" -eq 0 ]
 }

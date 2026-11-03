@@ -123,8 +123,11 @@ def main():
     ti = data.get("tool_input")
     if not isinstance(ti, dict):
         return 0
-    if tool == "Skill":
+    if tool in ("Skill", "skill"):
         skill = ti.get("skill")
+        if tool == "skill" and "skill" not in ti:
+            # Cortex's lowercase skill tool carries the skill name in tool_input.command.
+            skill = ti.get("command")
         if not isinstance(skill, str) or not skill:
             return deny("Skill call without a skill name")
         try:
