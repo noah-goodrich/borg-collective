@@ -22,7 +22,7 @@
 #      exists when borg is installed.
 #
 # Usage:
-#   ./scripts/build-plugin.sh [--dry-run]
+#   ./scripts/build-plugin.sh [--dry-run] [-h | --help]
 #
 # In --dry-run mode, no files are written; the script prints what would change.
 # Invoked automatically by 'borg setup' (idempotent).
@@ -47,8 +47,36 @@ fi
 
 DRY_RUN=0
 
+_usage() {
+    cat <<'USAGE'
+Usage: scripts/build-plugin.sh [--dry-run] [-h | --help]
+
+Build the publishable plugin subset from this repo into the plugin directory.
+
+Options:
+  --dry-run     Write nothing; print what would change.
+  -h, --help    Print this usage and exit 0 without building.
+
+Environment:
+  PLUGIN_DIR_OVERRIDE      Build into this directory instead of the default.
+  BORG_ORCHESTRATOR_ROOT   Workspace root; the default destination is
+                           $BORG_ORCHESTRATOR_ROOT/claude-plugins/borg-collective
+                           (BORG_ORCHESTRATOR_ROOT defaults to $HOME/dev).
+
+With no PLUGIN_DIR_OVERRIDE the default destination is the LIVE plugin that
+every Claude Code session loads. Set PLUGIN_DIR_OVERRIDE to a scratch directory
+when testing.
+
+An unknown argument prints this usage to stderr and exits 2 without building.
+USAGE
+}
+
 for arg in "$@"; do
-    [[ "$arg" == "--dry-run" ]] && DRY_RUN=1
+    case "$arg" in
+        --dry-run) DRY_RUN=1 ;;
+        -h|--help) _usage; exit 0 ;;
+        *) echo "build-plugin.sh: unknown argument: $arg" >&2; _usage >&2; exit 2 ;;
+    esac
 done
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

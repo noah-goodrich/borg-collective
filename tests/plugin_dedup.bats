@@ -209,6 +209,39 @@ EOF
     [[ "$output" == *"dest: ${BATS_TEST_TMPDIR}/"* ]] || false
 }
 
+@test "B1: build-plugin.sh --help prints usage, exits 0, and builds nothing" {
+    [[ "$PLUGIN_DIR_OVERRIDE" == "$BATS_TEST_TMPDIR"/* ]] || false
+    mkdir -p "$PLUGIN_DIR_OVERRIDE"
+    run bash "$BUILD_PLUGIN" --help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]] || false
+    [[ "$output" == *"--dry-run"* ]] || false
+    [[ "$output" == *"PLUGIN_DIR_OVERRIDE"* ]] || false
+    [[ "$output" == *"BORG_ORCHESTRATOR_ROOT"* ]] || false
+    [ -z "$(ls -A "$PLUGIN_DIR_OVERRIDE")" ]
+}
+
+@test "B1: build-plugin.sh -h prints usage, exits 0, and builds nothing" {
+    [[ "$PLUGIN_DIR_OVERRIDE" == "$BATS_TEST_TMPDIR"/* ]] || false
+    mkdir -p "$PLUGIN_DIR_OVERRIDE"
+    run bash "$BUILD_PLUGIN" -h
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]] || false
+    [ -z "$(ls -A "$PLUGIN_DIR_OVERRIDE")" ]
+}
+
+@test "B1: build-plugin.sh unknown flag prints usage to stderr, exits 2, and builds nothing" {
+    [[ "$PLUGIN_DIR_OVERRIDE" == "$BATS_TEST_TMPDIR"/* ]] || false
+    mkdir -p "$PLUGIN_DIR_OVERRIDE"
+    run bash -c 'bash "$1" --bogus 2>"$2"' _ "$BUILD_PLUGIN" "${BATS_TEST_TMPDIR}/err.txt"
+    [ "$status" -eq 2 ]
+    [ -z "$output" ]
+    run cat "${BATS_TEST_TMPDIR}/err.txt"
+    [[ "$output" == *"Usage:"* ]] || false
+    [[ "$output" == *"--bogus"* ]] || false
+    [ -z "$(ls -A "$PLUGIN_DIR_OVERRIDE")" ]
+}
+
 @test "B1: with no override, the default resolution still lands in the sandbox" {
     # DISCRIMINATING GUARD: drop the override and ask the script to resolve its own default. It must
     # land under BATS_TEST_TMPDIR via the sandboxed BORG_ORCHESTRATOR_ROOT/HOME. If setup() stops
