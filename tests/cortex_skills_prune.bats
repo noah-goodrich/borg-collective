@@ -80,9 +80,10 @@ _paths() { jq -r '.paths[]' "$CORTEX/skills.json"; }
 @test "cortex prune: nothing dead means the file is not rewritten" {
     printf '{"paths":["%s/borg-plan"]}' "$BSKILLS" > "$CORTEX/skills.json"
     touch -t 200001010000 "$CORTEX/skills.json"
+    touch -t 200101010000 "${BATS_TEST_TMPDIR}/ref"
     _prune
     [ -z "$output" ]
-    [ "$(stat -f %m "$CORTEX/skills.json" 2>/dev/null || stat -c %Y "$CORTEX/skills.json")" -lt 1000000000 ]
+    [ ! "$CORTEX/skills.json" -nt "${BATS_TEST_TMPDIR}/ref" ]
 }
 
 @test "cortex prune: a missing or malformed skills.json is left alone" {
