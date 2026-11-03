@@ -57,6 +57,13 @@
       "ref": "noah-goodrich/borg-collective#497",
       "status": "open",
       "why": "Step 3a-A: agent-gates evals for borg-nanoprobe and borg-verify (AC3); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "9",
+      "ref": "noah-goodrich/borg-collective#499",
+      "status": "open",
+      "why": "Step 3a-B: orchestrator-skills evals for borg-resume, borg-review, break-glass (AC3); tracking #480"
     }
   ]
 }
