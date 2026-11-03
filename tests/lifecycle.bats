@@ -580,9 +580,8 @@ _seed_state() {
 
 # ── Queen vocabulary ─────────────────────────────────────────────────────────────────────────────
 # The identity is injected on EVERY SessionStart so it survives compaction, and it deliberately
-# carries the lookup rather than a literal address. Measured 2026-09-16: the addressable name's hex
-# suffix is session-scoped, so `~/dev` has been both `dev-4a` and `dev-db`. A baked-in address would
-# be silently wrong after the Queen restarts.
+# carries the lookup rather than a literal address (the name's hex suffix is session-scoped, so a
+# baked-in address would be silently wrong after the Queen restarts; history in the hook's comments).
 
 @test "queen: project-mode injection names the Queen unconditionally" {
     run bash "$BORG_START" <<< "$(_start_input)"
@@ -597,24 +596,33 @@ _seed_state() {
     run bash "$BORG_START" <<< "$(_start_input)"
     local ctx
     ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')
-    # Both halves the request asked for: the name AND how to reach her.
     [[ "$ctx" == *"ListAgents"* ]]   || { echo "no lookup instruction"; false; }
     [[ "$ctx" == *"SendMessage"* ]]  || { echo "no addressing instruction"; false; }
     [[ "$ctx" == *"Never hardcode an address"* ]] || { echo "no prohibition"; false; }
-    # The discriminating half: `dev-4a` may appear ONLY as an example of instability, never as
-    # the address to use. It must be accompanied by the counter-example that proves it drifts.
-    if [[ "$ctx" == *"dev-4a"* ]]; then
-        [[ "$ctx" == *"dev-db"* ]] || {
-            echo "dev-4a appears WITHOUT the counter-example — reads as the canonical address"; false; }
-    fi
+    # The trimmed block carries no example address at all; the hex history lives in the hook's comments.
+    [[ "$ctx" != *"dev-4a"* ]] || { echo "an example address crept back into the injection"; false; }
 }
 
-@test "queen: the address is presented as session-scoped, not directory-scoped" {
+@test "queen: the durable definition is cwd == BORG_ORCHESTRATOR_ROOT, in a small block" {
     run bash "$BORG_START" <<< "$(_start_input)"
-    local ctx
+    local ctx block
     ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')
-    [[ "$ctx" == *"session-scoped"* ]] || { echo "instability not stated"; false; }
     [[ "$ctx" == *'BORG_ORCHESTRATOR_ROOT'* ]] || { echo "durable definition missing"; false; }
+    block=${ctx#*VOCABULARY:}
+    block=${block%%$'\n'*}
+    [ "${#block}" -lt 260 ] || { echo "VOCABULARY block regrew: ${#block} bytes"; false; }
+}
+
+@test "session start injects no git block (the client supplies its own gitStatus)" {
+    git -C "$TEST_CWD" init -q
+    echo x > "$TEST_CWD/dirty"
+    run bash "$BORG_START" <<< "$(_start_input)"
+    [ "$status" -eq 0 ]
+    local ctx
+    ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext // ""')
+    [[ "$ctx" != *"Git branch:"* ]] || { echo "git branch block is back"; false; }
+    [[ "$ctx" != *"Recent commits:"* ]] || { echo "recent commits block is back"; false; }
+    [[ "$ctx" != *"Uncommitted changes:"* ]] || { echo "status block is back"; false; }
 }
 
 @test "queen: orchestrator mode tells the Queen she is the Queen" {
@@ -626,7 +634,7 @@ _seed_state() {
     [[ "$ctx" == *"You are the QUEEN"* ]] || { echo "orchestrator not self-identified"; false; }
     [[ "$ctx" != *"Orchestrator session"* ]] || { echo "old prefix still present"; false; }
     # Discriminates against the project branch: the Queen does not get the drone vocabulary block.
-    [[ "$ctx" != *"Call her the Queen in prose"* ]] || {
+    [[ "$ctx" != *"VOCABULARY:"* ]] || {
         echo "orchestrator got the drone-facing block"; false; }
 }
 

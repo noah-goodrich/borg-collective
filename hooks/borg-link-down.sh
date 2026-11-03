@@ -4,7 +4,6 @@
 #
 # Consolidates all SessionStart context injection:
 # - Registry update: status=active, session_id
-# - Git context: branch, uncommitted changes, recent commits
 # - Docker container status
 # - Plan-mode nudge (if no PROJECT_PLAN.md)
 # - Uncommitted-changes reminder from previous session
@@ -249,24 +248,9 @@ fi
 
 CONTEXT_PARTS=()
 
-# Git context (branch, status, recent commits)
-if git -C "$CWD" rev-parse --is-inside-work-tree &>/dev/null; then
-    git_ctx=""
-    branch=$(git -C "$CWD" branch --show-current 2>/dev/null || echo "detached")
-    git_ctx+="Git branch: $branch"$'\n'
-
-    status=$(git -C "$CWD" status --short 2>/dev/null | head -20 || true)
-    if [[ -n "$status" ]]; then
-        git_ctx+="Uncommitted changes:"$'\n'"$status"$'\n'
-    fi
-
-    recent=$(git -C "$CWD" log --oneline -5 2>/dev/null || true)
-    if [[ -n "$recent" ]]; then
-        git_ctx+="Recent commits:"$'\n'"$recent"$'\n'
-    fi
-
-    CONTEXT_PARTS+=("$git_ctx")
-fi
+# No git block: Claude Code injects its own gitStatus (branch, status, 5 recent commits), and Cortex Code
+# does not deliver SessionStart context at all (only PostToolUse context reaches its model), so a block
+# here was a duplicate for one and dead weight for the other.
 
 # Docker container status
 container=$(docker ps --filter "label=dev.role=app" --format '{{.Names}}' 2>/dev/null | head -1 || true)
@@ -418,25 +402,11 @@ fi
 # An identity line is neither -- it is a reference a drone needs only when it addresses a peer -- so
 # it sits between the two rather than displacing the actionable content at the top.
 #
-# WHY THE ADDRESS IS NOT BAKED IN. The request that prompted this asked to inject "the orchestrator
-# is addressed as `dev-4a`". Measured 2026-09-16 across every transcript on this machine: the
-# addressable name is `<basename-of-cwd>-<2 hex>` and the hex is SESSION-scoped, not
-# directory-scoped. `~/dev` has been BOTH `dev-4a` (441 occurrences) and `dev-db` (4); `~/dev/
-# borg-collective` has been both `borg-collective-6a` (217) and `borg-collective-65` (4). So a
-# literal here is correct only until the Queen restarts, after which this hook injects a confidently
-# wrong address into every session -- and the failure is silent, because a drone reading an
-# authoritative injection has no way to know the hook lied. That is strictly worse than the status
-# quo it would replace, where a stale name at least fails visibly. What IS durable is the
-# definition (cwd == $BORG_ORCHESTRATOR_ROOT) and the lookup, so those are what get injected.
-CONTEXT_PARTS+=("VOCABULARY: the orchestrator session is the QUEEN.
-
-The Queen is the session whose cwd is exactly \$BORG_ORCHESTRATOR_ROOT (default ~/dev). That
-definition is durable; her address is NOT. Addressable names are \`<basename-of-cwd>-<2 hex>\` and
-the hex is session-scoped, so it changes whenever she restarts — ~/dev has been both \`dev-4a\` and
-\`dev-db\`.
-
-Call her the Queen in prose. To message her, take her CURRENT name from ListAgents and pass it
-verbatim to SendMessage. Never hardcode an address — not here, not in a checkpoint, not in a skill.")
+# WHY THE ADDRESS IS NOT BAKED IN. The addressable name is `<basename-of-cwd>-<2 hex>` and the hex is
+# SESSION-scoped (measured 2026-09-16: ~/dev has been both `dev-4a` and `dev-db`), so a literal is silently
+# wrong after the Queen restarts. The durable parts are the definition (cwd == $BORG_ORCHESTRATOR_ROOT) and
+# the lookup, so only those are injected. The history lives here, not in the injection: it cost ~375 B a session.
+CONTEXT_PARTS+=("VOCABULARY: the QUEEN is the session whose cwd is exactly \$BORG_ORCHESTRATOR_ROOT. To message her, take her current name from ListAgents and pass it verbatim to SendMessage. Never hardcode an address.")
 
 CONTEXT_PARTS+=("$ROUTING_CARD")
 
