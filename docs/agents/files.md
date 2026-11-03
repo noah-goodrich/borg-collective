@@ -27,6 +27,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
     evals/sweep/            Weekly live eval sweep: core.py (pure), shell.py, cli.py
     nextpick/sweeprow.py    Pure: the `borg next` item the eval sweep raises
     launchd/borg.eval-sweep.plist   Weekly sweep agent (opt-in: BORG_EVAL_SWEEP=1)
+    handoff/                `borg handoff`: core.py (pure template + lint), shell.py, cli.py, fixtures/
     registry/               Registry read/write core, shell adapter, CLI entry
     recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
     extensions/             Local-extension resolution: layer precedence, prefer-tool, liveness
