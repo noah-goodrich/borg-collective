@@ -173,7 +173,7 @@ _run_installed_statusline() {
     local file="$XDG_CACHE_HOME/borg/context/same.json"
     touch -t 200001010000 "$file"
     _run_installed_statusline '{"session_id":"same","context_window":{"total_input_tokens":5}}'
-    [ "$(stat -f %Sm -t %Y "$file" 2>/dev/null || stat -c %y "$file" | cut -c1-4)" = "2000" ]
+    [ -z "$(find "$file" -newermt 2001-01-01)" ]
     rm -f "$file"
     printf 'x' > "$BATS_TEST_TMPDIR/blocker"
     export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/blocker"
