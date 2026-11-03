@@ -73,6 +73,12 @@ Cortex Code v1.2.33, model claude-sonnet-5-5. Part of the Cortex hook parity wor
 - `source: "resume"` in the TUI.
 - Whether SessionStart `compact`, Notification and PermissionRequest additionalContext reach the model.
 - `idle_prompt` notifications.
+- Whether a borg guard registered in Cortex denies a live subagent's Bash call end to end (#516 S2 replays the fixture payloads only). The `agent_type` the fixtures carry is `borg-collective:borg-scout`, the plugin form `borg setup` writes into the installed agent's `name:`, and both guards already list that form; if a live run reports a different value the guards stay inert, which is the pre-S2 state.
+
+## Corrections found in S2
+
+- `transcript_path` (`<id>.json`) is conversation metadata with no messages; the messages are the JSONL beside it, `<id>.history.jsonl`. The user's own prompt is a `role: user` entry whose text block has `is_user_prompt: true`; injected context blocks are `internalOnly: true`. `borg-precompact-checkpoint.sh` reads that sibling file.
+- The `skill` tool carries the skill name in `tool_input.command`, so `borg-nanoprobe-guard.sh` falls back to it for the lowercase tool only.
 
 ## Cleanup (Cortex files these sessions created)
 
