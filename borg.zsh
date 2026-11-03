@@ -2105,6 +2105,7 @@ _borg_unregister_hook() {
 # task -> Task, the same table that maps bash -> Bash).
 typeset -ga _BORG_CORTEX_HOOKS=(
     "SessionStart|borg-link-down.sh"
+    # No matcher: arrival_hook.py itself ignores SessionStart sources other than startup and resume.
     "SessionStart|borg-arrival-brief.sh"
     "Stop|borg-link-up.sh"
     "Stop|notify.sh"
