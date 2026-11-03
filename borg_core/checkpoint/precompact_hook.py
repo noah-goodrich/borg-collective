@@ -68,6 +68,9 @@ def _last_message(payload: dict) -> str:
     if not isinstance(transcript, str) or not transcript:
         return ""
     try:
+        if transcript.endswith(".json"):
+            # Cortex: transcript_path is the conversation's metadata document; its messages are the JSONL beside it.
+            return precompact.last_user_text_cortex(_transcript_tail(transcript[: -len(".json")] + ".history.jsonl"))
         return precompact.last_user_text(_transcript_tail(transcript))
     except OSError:
         return ""

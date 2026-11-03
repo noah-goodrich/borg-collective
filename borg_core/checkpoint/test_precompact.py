@@ -68,6 +68,63 @@ def test_last_user_text_joins_text_blocks_and_is_empty_without_any():
     assert precompact.last_user_text([]) == ""
 
 
+def _cortex_user(*blocks):
+    return json.dumps({"role": "user", "id": "u1", "content": list(blocks)})
+
+
+def _prompt(text, **extra):
+    return {"type": "text", "text": text, "is_user_prompt": True, "internalOnly": False, **extra}
+
+
+def test_last_user_text_cortex_takes_the_newest_real_prompt():
+    result = {"type": "tool_result", "tool_result": {"content": [{"type": "text", "text": "ok"}], "name": "bash"}}
+    lines = [
+        _cortex_user(_prompt("first question")),
+        _cortex_user(_prompt("the real last one")),
+        _cortex_user(result),
+        _cortex_user({"type": "text", "text": "injected context", "is_user_prompt": False, "internalOnly": True}),
+        _cortex_user(_prompt("<command-name>/compact</command-name>")),
+        "not json",
+        json.dumps({"role": "assistant", "content": [{"type": "text", "text": "hi"}]}),
+    ]
+    assert precompact.last_user_text_cortex(lines) == "the real last one"
+    assert precompact.last_user_text_cortex([]) == ""
+
+
+def test_last_user_text_cortex_keeps_the_prompt_when_context_blocks_ride_along():
+    context = {"type": "text", "text": "injected", "is_user_prompt": False, "internalOnly": True}
+    assert precompact.last_user_text_cortex([_cortex_user(context, _prompt("a"), _prompt("b"))]) == "a\nb"
+
+
+def test_writer_reads_a_cortex_conversation_from_the_history_beside_the_json(tmp_path, monkeypatch):
+    monkeypatch.setenv("BORG_CHECKPOINT_PREPARE_NOW", "2026-11-02T10:00:00")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git_repo(repo)
+    (repo / ".borg" / "checkpoints").mkdir(parents=True)
+    conversation = tmp_path / "0a1b2c3d-0000-4000-8000-000000000001"
+    (tmp_path / f"{conversation.name}.json").write_text('{"history_length": 2}')
+    (tmp_path / f"{conversation.name}.history.jsonl").write_text(_cortex_user(_prompt("ship the cortex hooks")) + "\n")
+    payload = {
+        "cwd": str(repo),
+        "session_id": "0a1b2c3d-0000",
+        "transcript_path": f"{conversation}.json",
+        "trigger": "manual",
+    }
+    body = open(precompact_hook.write_checkpoint(payload), encoding="utf-8").read()
+    assert "> ship the cortex hooks" in body
+
+
+def test_writer_survives_a_cortex_conversation_with_no_history_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("BORG_CHECKPOINT_PREPARE_NOW", "2026-11-02T10:00:00")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git_repo(repo)
+    (repo / ".borg" / "checkpoints").mkdir(parents=True)
+    payload = {"cwd": str(repo), "session_id": "s", "transcript_path": str(tmp_path / "gone.json"), "trigger": "manual"}
+    assert precompact_hook.write_checkpoint(payload).startswith(str(repo / ".borg"))
+
+
 def test_sections_and_branch_and_message_are_present():
     text = _render()
     for heading in (

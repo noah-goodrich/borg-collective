@@ -73,6 +73,35 @@ def last_user_text(transcript_lines: list[str]) -> str:
     return ""
 
 
+def last_user_text_cortex(history_lines: list[str]) -> str:
+    """The text of the newest real user prompt in a Cortex `<id>.history.jsonl`, or "".
+
+    Cortex's `transcript_path` is `<id>.json`, a metadata document with no messages; the messages are the JSONL beside
+    it. A real prompt is a `role: user` entry with a text block flagged `is_user_prompt`. Tool results and injected
+    context (`internalOnly`, no `is_user_prompt`) are skipped, and so is slash-command plumbing. Newest first.
+    """
+    for raw in reversed(history_lines):
+        try:
+            entry = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict) or entry.get("role") != "user" or not isinstance(entry.get("content"), list):
+            continue
+        parts = [
+            block.get("text", "")
+            for block in entry["content"]
+            if isinstance(block, dict)
+            and block.get("type") == "text"
+            and block.get("is_user_prompt") is True
+            and not block.get("internalOnly")
+            and isinstance(block.get("text"), str)
+        ]
+        text = "\n".join(parts).strip()
+        if text and not text.startswith(("<command-", "<local-command", "Caveat:")):
+            return text
+    return ""
+
+
 _MARKER = re.compile(rf"^<!-- {re.escape(AUTO_MARKER)} trigger=\S+ session=(\S+) carried-from=(\S+) -->$", re.MULTILINE)
 
 
