@@ -1,0 +1,26 @@
+{
+  "cwd": "__CWD__",
+  "hook_event_name": "PostToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "tool_input": {
+    "command": "probe-skill"
+  },
+  "tool_name": "skill",
+  "tool_response": {
+    "content": [
+      {
+        "text": "Launching skill: probe-skill\n\n<command-message>The \"probe-skill\" skill is running</command-message>\n<command-name>probe-skill</command-name>\n\nSKILL.md: /work/probe/.cortex/skills/probe-skill/SKILL.md\nBase directory: /work/probe/.cortex/skills/probe-skill\n\nReply with the single line PROBE-SKILL-OK.",
+        "type": "text"
+      }
+    ],
+    "metrics": {
+      "duration_ms": 1
+    },
+    "name": "skill",
+    "status": "success",
+    "tool_use_id": "toolu_synthetic01"
+  },
+  "tool_use_id": "toolu_synthetic01",
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json"
+}

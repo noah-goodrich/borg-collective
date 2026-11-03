@@ -1,0 +1,29 @@
+{
+  "agent_id": "subagent-scout",
+  "agent_transcript_path": "/work/.cortex/conversations/subagent-scout.json",
+  "agent_type": "borg-collective:borg-scout",
+  "cwd": "__CWD__",
+  "hook_event_name": "PostToolUse",
+  "parent_session_id": "00000000-0000-4000-8000-000000000001",
+  "parent_thread_id": "70901695061",
+  "parent_thread_message_id": "70901742237",
+  "permission_mode": "bypassPermissions",
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "tool_input": {
+    "file_path": "/work/probe/notes.txt"
+  },
+  "tool_name": "Read",
+  "tool_response": {
+    "content": [
+      {
+        "text": "1... goodbye probe\n2... ",
+        "type": "text"
+      }
+    ],
+    "name": "read",
+    "status": "success",
+    "tool_use_id": "toolu_synthetic01"
+  },
+  "tool_use_id": "toolu_synthetic01",
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json"
+}
