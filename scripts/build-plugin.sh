@@ -354,6 +354,9 @@ _build_self_contained_hook "$HOOKS_SRC/borg-supabase-guard.sh" "$HOOKS_DST/borg-
 # borg-verifier-guard.sh is self-contained (python3, stdin JSON only) — copy as-is. agents/borg-verifier.md
 # grants Bash, and this hook is what makes that grant read-only; tests/verifier_guard.bats pins the pair.
 _build_self_contained_hook "$HOOKS_SRC/borg-verifier-guard.sh" "$HOOKS_DST/borg-verifier-guard.sh" 0
+# scout-readonly-guard.sh is self-contained (python3, stdin JSON only) — copy as-is. agents/borg-scout.md grants
+# Bash, and this hook is what makes that grant read-only; tests/scout_readonly_guard.bats pins the pair.
+_build_self_contained_hook "$HOOKS_SRC/scout-readonly-guard.sh" "$HOOKS_DST/scout-readonly-guard.sh" 0
 # borg-nanoprobe-guard.sh is self-contained (python3, stdin JSON plus the machine-layer brief) — copy as-is.
 # It gates the nanoprobe's Skill calls and its writes under borg/extensions/; tests/nanoprobe_guard.bats.
 _build_self_contained_hook "$HOOKS_SRC/borg-nanoprobe-guard.sh" "$HOOKS_DST/borg-nanoprobe-guard.sh" 0
@@ -598,6 +601,16 @@ HOOKS_JSON='{
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-verifier-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scout-readonly-guard.sh",
             "timeout": 5
           }
         ]

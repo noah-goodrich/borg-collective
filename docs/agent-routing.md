@@ -40,7 +40,7 @@ Pick the cheapest tier that fits.
 - **borg-reviewer**: independent blind adversarial review. It arrives cold; do not prime it with the author's reasoning.
 - **borg-verifier**: verification of a deliverable against its acceptance criteria. Read-only by enforcement: `hooks/borg-verifier-guard.sh` (PreToolUse, Bash) lets it run any verification command but holds git and gh to a read-only allowlist and denies constructs it cannot see through. It is a no-op for every other caller.
 - **claude-code-guide**: questions about Claude Code itself.
-- **borg-scout has read-only file tools only (no Bash).** Route git and GitHub lookups ("state of PR X?", "what changed in commit Y?") to an agent that has Bash: borg-grunt for a fully-specified command, borg-nanoprobe when judgment is needed. A scoped read-only shell for the scout is tracked in `docs/plans/directives/2026-10-10-scout-shell-allowlist.md`.
+- **borg-scout has read-only Bash (#502).** Its Bash is gated by `hooks/scout-readonly-guard.sh` on `agent_type`: git and gh reads (`gh api` GET only), `jq`, `rg`, `grep`, `find` (no `-exec`/`-delete`/`-fprint*`), `head`, `tail`, `wc`, `ls`, `cat`, `sort`, `uniq`, `cut`, joined by a plain pipe; anything else is denied. So git and GitHub lookups ("state of PR X?", "what changed in commit Y?") can go to the scout. A scout that lists Bash may lose Grep and Glob on macOS and Linux (verified in the #502 trace: tools were Read and Bash) and searches through Bash `grep`/`find` instead. The Cortex copy keeps Bash out, because the guard is not registered for Cortex. Anything that writes still goes to borg-grunt or borg-nanoprobe.
 
 ## Decision tree
 

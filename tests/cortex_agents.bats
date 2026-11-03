@@ -35,7 +35,7 @@ _install() {
 _expected() {
     local n
     n=$(sed -n 's/^name: //p' "$1" | head -1)
-    sed "s/^name: $n\$/name: \"borg-collective:$n\"/" "$1"
+    sed "s/^name: $n\$/name: \"borg-collective:$n\"/" "$1" | { if [ "$n" = "borg-scout" ]; then sed '/^tools: /s/, Bash//'; else cat; fi; }
 }
 
 @test "cortex agents: the sandbox HOME is not the real home" {
@@ -52,8 +52,10 @@ _expected() {
         n=${f##*/}
         _expected "$f" > "${BATS_TEST_TMPDIR}/expected.md"
         cmp -s "${BATS_TEST_TMPDIR}/expected.md" "$COCO_DIR/agents/$n" || { echo "missing or different: $n"; return 1; }
-        # exactly one line differs from the source: the name line
-        [ "$(diff "$f" "$COCO_DIR/agents/$n" | grep -c '^[<>]')" -eq 2 ] || { echo "more than the name changed: $n"; return 1; }
+        # exactly one line differs from the source (the name line), two for the scout (its tools line loses Bash)
+        local want=2
+        [ "$n" = "borg-scout.md" ] && want=4
+        [ "$(diff "$f" "$COCO_DIR/agents/$n" | grep -c '^[<>]')" -eq "$want" ] || { echo "more than the name changed: $n"; return 1; }
         sources=$((sources + 1))
     done
     for f in "$COCO_DIR/agents"/* "$COCO_DIR/agents"/.[!.]*; do
@@ -192,4 +194,12 @@ _note() {
     before=$(shasum -a 256 "$COCO_DIR/settings.json")
     _note
     [ "$(shasum -a 256 "$COCO_DIR/settings.json")" = "$before" ]
+}
+
+@test "cortex agents: the scout copy has no Bash (its read-only guard is not registered for Cortex)" {
+    _install
+    [ "$status" -eq 0 ]
+    grep -qE '^tools: Read, Grep, Glob$' "$COCO_DIR/agents/borg-scout.md"
+    grep -qE '^tools:.*Bash' "$AGENTS/borg-scout.md"
+    ! grep -qE '^tools:.*Bash' "$COCO_DIR/agents/borg-scout.md"
 }

@@ -25,7 +25,7 @@ Use these patterns to avoid permission prompts:
 
 - `run-in` is at `~/.claude/bin/run-in` (installed by `borg setup`).
 - `bash -c` is in the global allowlist. Use it for pipelines and compound commands.
-- Prefer built-in tools (Grep, Glob, Read) over Bash when they can do the job.
+- Read files with Read; search with Grep and Glob where the session has them, else `grep`/`find` through Bash with tight patterns.
 
 ### Other Rules
 - **No inline `#` comments in one-liner bash commands.** Quotes inside comments confuse the
