@@ -1,0 +1,8 @@
+{
+  "cwd": "__CWD__",
+  "hook_event_name": "Stop",
+  "permission_mode": "bypassPermissions",
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "stop_hook_active": true,
+  "transcript_path": "/work/.cortex/conversations/00000000-0000-4000-8000-000000000001.json"
+}
