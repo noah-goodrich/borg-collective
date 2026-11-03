@@ -166,6 +166,80 @@ def cap_problems(model, effort, need_pin, agent_type=None):
     return out
 # POLICY-END
 
+# GRANTS-BEGIN
+# The ONE reader of the machine-layer brief's skill grants. hooks/borg-nanoprobe-guard.sh (call time) and
+# hooks/borg-agent-model-guard.sh (spawn time) embed this block byte-for-byte (tests/nanoprobe_guard.bats diffs
+# them), so the two verdicts cannot disagree. Deny by default: anything unreadable or malformed grants nothing.
+INSTEAD_OF = "gh pr create"
+
+
+def field(text, name):
+    """Values of every `- Name: value` line, backticks and spaces stripped."""
+    out = []
+    prefix = "- " + name.lower() + ":"
+    for line in text.splitlines():
+        s = line.strip()
+        if s.lower().startswith(prefix):
+            out.append(s[len(prefix):].strip().strip("`").strip())
+    return out
+
+
+def config_home():
+    return os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.environ.get("HOME", ""), ".config")
+
+
+def skill_allowed(skill):
+    """(True, "") when the MACHINE-layer brief grants exactly this skill, else (False, why).
+
+    Granted by a `- Grant-skill:` line naming it, or by the complete Prefer-tool trio (Prefer-tool naming it, an
+    `- Instead-of: gh pr create` line, a `- Requires:` line). A repository-layer brief is never read.
+    """
+    path = os.path.join(config_home(), "borg", "extensions", "agent-extensions", "borg-nanoprobe", "brief.md")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except (OSError, ValueError):
+        return False, "no readable machine-layer brief at %s, so no skill is granted" % path
+    if not isinstance(skill, str) or not skill or skill != skill.strip():
+        return False, "no exact skill name"
+    if skill in field(text, "Grant-skill"):
+        return True, ""
+    if skill not in field(text, "Prefer-tool"):
+        return False, ("the machine-layer brief names %r in neither a '- Grant-skill:' nor a '- Prefer-tool:' line"
+                       % skill)
+    if INSTEAD_OF not in field(text, "Instead-of"):
+        return False, "the machine-layer brief has no '- Instead-of: %s' line" % INSTEAD_OF
+    if not any(field(text, "Requires")):
+        return False, "the machine-layer brief has no '- Requires:' line"
+    return True, ""
+# GRANTS-END
+
+NANOPROBE_TYPES = ("borg-collective:borg-nanoprobe", "borg-nanoprobe")
+
+
+def skill_problems(st, prompt):
+    """Spawn-time twin of borg-nanoprobe-guard.sh rule 1: one problem per `- Skill:` line the machine layer does not
+    grant. Only a nanoprobe brief's structured line is a request; free text that mentions a skill is not."""
+    if not (isinstance(st, str) and st.strip() in NANOPROBE_TYPES) or not isinstance(prompt, str):
+        return []
+    out = []
+    for raw in field(prompt, "Skill"):
+        # `- Skill: <exact name> [args]`: the name is the first word; a leading slash is the slash-command spelling.
+        words = raw.split()
+        name = words[0].lstrip("/") if words else ""
+        try:
+            ok, why = skill_allowed(name) if name else (False, "the '- Skill:' line names no skill")
+        except Exception as exc:
+            ok, why = False, "the grant check failed (%s)" % exc
+        if not ok:
+            brief = os.path.join(config_home(), "borg", "extensions", "agent-extensions", "borg-nanoprobe", "brief.md")
+            out.append("this nanoprobe brief declares '- Skill: %s' but %s. A nanoprobe may run only skills the "
+                       "machine-layer brief grants, and would be denied after the spawn. Choose one: "
+                       "(1) grant it with a '- Grant-skill: %s' line in %s (only for a skill whose whole flow stays "
+                       "in the worktree); (2) run the skill in the Queen session if it only reads or drafts and "
+                       "need not be blind; (3) hand it to a drone" % (name or raw, why, name or "<skill>", brief))
+    return out
+
 # Cortex Code only (outside the shared POLICY block; borg-workflow-model-guard.sh has no Cortex twin, since Cortex has
 # no Workflow tool). Cortex runs every command hook with CORTEX_PROJECT_DIR set and Claude Code never sets it, so that
 # is the signal. Measured live on Cortex 1.2.24 (evals/cortex-agents, 2026-10-30): a per-call `model` on the task tool
@@ -228,11 +302,15 @@ def main():
         p = cortex_model_problem(st.strip(), model)
         if p:
             problems.append(p)
-    if not problems:
+    skills = skill_problems(st, ti.get("prompt"))
+    if not problems and not skills:
         return 0
     sys.stderr.write("borg agent model guard: Agent call denied.\n")
-    for q in problems:
+    for q in problems + skills:
         sys.stderr.write("  - %s\n" % q)
+    if not problems:
+        sys.stderr.write("Kill switch: BORG_AGENT_MODEL_GUARD=0.\n")
+        return 2
     sys.stderr.write("Policy: Queen/drone sessions run Opus xhigh; subagents must be below that "
                      "(Sonnet/Haiku, effort low/medium/high); claude-code-guide also needs effort low/medium/high. "
                      "Only research-tools:* is exempt, and only "
