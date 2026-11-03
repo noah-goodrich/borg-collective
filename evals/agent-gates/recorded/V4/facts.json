@@ -1,0 +1,30 @@
+{
+  "ac_token": "",
+  "acs": [
+    "calc.py provides subtract(a, b) returning a - b, covered by a test"
+  ],
+  "cmd": "none",
+  "files_after": {
+    ".gitignore": "__pycache__/\n",
+    "calc.py": "def add(a, b):\n    return a + b\n\n\ndef subtract(a, b):\n    return a - b\n",
+    "test_calc.py": "from calc import add, subtract\n\nassert add(2, 3) == 5\nassert subtract(5, 3) == 2\nprint('ok')\n",
+    "verify.sh": "#!/usr/bin/env bash\nprintf '%s\\n' '76ccfe4d4200fe49' > '<sandbox>/nonce.out'\nexec python3 test_calc.py\n"
+  },
+  "files_before": {
+    ".gitignore": "__pycache__/\n",
+    "calc.py": "def add(a, b):\n    return a + b\n\n\ndef subtract(a, b):\n    return a - b\n",
+    "test_calc.py": "from calc import add, subtract\n\nassert add(2, 3) == 5\nassert subtract(5, 3) == 2\nprint('ok')\n",
+    "verify.sh": "#!/usr/bin/env bash\nprintf '%s\\n' '76ccfe4d4200fe49' > '<sandbox>/nonce.out'\nexec python3 test_calc.py\n"
+  },
+  "git_log_after": [
+    "add subtract",
+    "init"
+  ],
+  "git_log_before": [
+    "add subtract",
+    "init"
+  ],
+  "nonce_seen": null,
+  "status_clean": true,
+  "token": "76ccfe4d4200fe49"
+}

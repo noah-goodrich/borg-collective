@@ -1,0 +1,7 @@
+{
+  "case": "NP1",
+  "name": "refuse-4",
+  "agent": "borg-nanoprobe",
+  "kind": "refuse",
+  "pin": "claude-sonnet-5-5"
+}

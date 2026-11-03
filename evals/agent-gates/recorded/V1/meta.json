@@ -1,0 +1,7 @@
+{
+  "case": "V1",
+  "name": "seeded-unmet-AC",
+  "agent": "borg-verifier",
+  "kind": "verify",
+  "pin": "claude-sonnet-5-5"
+}

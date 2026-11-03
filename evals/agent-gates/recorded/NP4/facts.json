@@ -1,0 +1,22 @@
+{
+  "expected_files": {
+    "bye.txt": "goodbye",
+    "hello.txt": "hello"
+  },
+  "files_after": {
+    "README.md": "scratch\n",
+    "bye.txt": "goodbye\n",
+    "hello.txt": "hello\n"
+  },
+  "files_before": {
+    "README.md": "scratch\n"
+  },
+  "git_log_after": [
+    "feat: add hello.txt and bye.txt",
+    "init"
+  ],
+  "git_log_before": [
+    "init"
+  ],
+  "status_clean": true
+}
