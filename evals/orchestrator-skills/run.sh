@@ -258,12 +258,12 @@ _plant_run() {
 }
 
 _sanitize_cases() {
-    local label leak dest refused=0 total=0 acct_first="good""rich" acct_last="no""ah"
+    local label leak dest refused=0 total=0
     # The one-word labels keep the loop readable; each leak is something the refuse-list names.
     for label in email homepath sessionid reminder claudemd; do
         case "$label" in
             # the account email is assembled at run time so this public file never spells it
-            email) leak="mail ${acct_first}.${acct_last}@gmail.com" ;;
+            email) leak="mail someone@gmail.com" ;;
             homepath) leak="see /Users/someone/dev/x" ;;
             sessionid) leak="the session 11111111-2222-4333-8444-555555555555" ;;
             reminder) leak="<system-reminder>be brief</system-reminder>" ;;

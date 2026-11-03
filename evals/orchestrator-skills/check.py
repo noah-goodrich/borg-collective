@@ -877,6 +877,7 @@ def snapshot(repo: Path, home: Path) -> dict:
 
 # ── the sanitizer: this repository is public ─────────────────────────────────────────────────────────────────────
 _LEAK_PATTERNS = (
+    (re.compile(r"[A-Za-z0-9._+-]+@gmail\.com", re.I), "an account email"),
     (re.compile(r"goodrich", re.I), "the account email or surname"),
     (re.compile(r"noah", re.I), "the account name"),
     (re.compile(r"/Users/"), "a home path"),
@@ -963,7 +964,9 @@ def scan(rec: Path) -> list[tuple[str, str, str]]:
     files = sorted(p for p in rec.iterdir() if p.is_file())
     for f in files:
         found = _leaks(f.read_text(encoding="utf-8"), set())
-        out.append(("fail" if found else "pass", f.name, ", ".join(found) if found else "nothing the sanitizer refuses"))
+        out.append(
+            ("fail" if found else "pass", f.name, ", ".join(found) if found else "nothing the sanitizer refuses")
+        )
     if not files:
         out.append(("fail", "recorded", "there is no recording"))
     return out
