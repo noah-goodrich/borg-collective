@@ -196,8 +196,8 @@ run_cases() {
             bad "ENV borg-resume status did not read the seeded ledgers as RS1, RS3 and RS4 assume (see $OUT/status-*.json)"
         fi
         bin="$(_os_allowlist_bin "$OUT/noresume-bin" 0)"
-        if ! ( PATH="$bin"; command -v borg-resume >/dev/null 2>&1 ) \
-            && ( PATH="$OUT/resume-bin"; command -v borg-resume >/dev/null 2>&1 ); then
+        # A PATH of exactly one directory resolves a name iff an executable of that name is in it.
+        if [ ! -e "$bin/borg-resume" ] && [ -x "$OUT/resume-bin/borg-resume" ]; then
             ok "ENV borg-resume is unresolvable on RS2's PATH and resolvable on the others"
         else
             bad "ENV the borg-resume PATH variants do not differ"

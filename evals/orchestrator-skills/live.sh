@@ -39,6 +39,23 @@
 # sandbox's own, so no real settings, hooks, extensions or CLAUDE.md reach the session.
 #
 # A claude -p session ends when the command returns, so a CronCreate made by RS2 dies with it; nothing persists.
+#
+# TWO GRANTS A HEADLESS RUN NEEDS, both measured 2026-11-03 on claude 2.1.300 and both scoped to one sandbox path:
+#   * break-glass writes .claude/settings.local.json, a protected path: acceptEdits refuses it and an allow rule for it
+#     (relative or absolute) does not lift that. allow-write.sh, registered as a PermissionRequest hook through
+#     --settings for the BG cases only, allows exactly the sandbox repository's file. It is on for BG2 and BG3 as well,
+#     so their "the file did not change" cannot be a refused write.
+#   * borg-review reads references/gates.md from the plugin build, outside the sandbox repository, and a headless Read
+#     there is refused; the RV cases get --add-dir <plugin build>.
+#
+# THE SPIKES this design rested on (each one cheap call, 2026-11-03): CronCreate is callable in -p (a deferred tool: the
+# model loads it with ToolSearch first) and its input is in the stream; a disable-model-invocation skill runs when
+# slash-invoked in -p; `borg-resume status` on a seeded ledger needs no network and no model. The settings.local.json
+# write was NOT possible without the hook above.
+#
+# KNOWN LIVE FAILURES, recorded and replayed offline (recorded/live-verdicts.json): on claude-opus-5-5 at xhigh, RV2 and
+# RV4 failed twice each. The skill reads references/gates.md and does the gates' work, but never emits the five-line
+# ledger (RV2) or the `Gates: trivial` line (RV4). They are findings about the skill, not about this harness.
 
 set -uo pipefail
 
