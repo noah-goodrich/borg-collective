@@ -35,6 +35,8 @@ _ANY_H2 = re.compile(r"^##\s")
 _STOP_LINE = re.compile(r"^\s*Stop condition:\s*(.*\S)\s*$", re.IGNORECASE | re.MULTILINE)
 _NEXT_LINE = re.compile(r"^\s*Next thread\b[^:\n]*:\s*(.*\S)\s*$", re.IGNORECASE | re.MULTILINE)
 _DONE_WHEN = re.compile(r"\bdone when\b\s*\S", re.IGNORECASE)
+_CLOSE_TAIL = re.compile(r"[,;]?\s*then\s+/borg-link-up\s+and\s+end\.?\s*$", re.IGNORECASE)
+_DONE_LEAD = re.compile(r"^\s*done when\s+", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -134,7 +136,8 @@ def check(text: str) -> Verdict:
 def render(goal: str, done_when: str, next_thread: str, waits_on_you: tuple[str, ...] = ()) -> str:
     """The handoff document for one PR thread. The caller runs `check` on the result before writing it."""
     goal = " ".join(goal.split())
-    stop = f"Done when {' '.join(done_when.split())}, {CLOSE_PHRASE}."
+    condition = _DONE_LEAD.sub("", _CLOSE_TAIL.sub("", " ".join(done_when.split())))
+    stop = f"Done when {condition}, {CLOSE_PHRASE}."
     nxt = " ".join(next_thread.split()) or NEXT_NONE
     waits = "\n".join(f"- {' '.join(item.split())}" for item in waits_on_you)
     waits_block = f"Waits on you:\n{waits}" if waits else "Waits on you: none"

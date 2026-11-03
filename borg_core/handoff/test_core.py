@@ -107,3 +107,13 @@ def test_render_with_no_next_thread_writes_none():
     text = core.render("o/r#5: ship it", "merged", "")
     assert text.rstrip().endswith("not this one): none")
     assert core.check(text).ok
+
+
+@pytest.mark.parametrize(
+    "done_when",
+    ["merged", "Done when merged", "merged, then /borg-link-up and end", "done when merged, then /borg-link-up and end."],
+)
+def test_render_does_not_double_the_close_phrase(done_when):
+    text = core.render("o/r#5: ship it", done_when, "none")
+    assert "Stop condition: Done when merged, then /borg-link-up and end.\n" in text
+    assert text.count("then /borg-link-up and end") == 3
