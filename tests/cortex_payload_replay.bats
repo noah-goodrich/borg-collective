@@ -53,12 +53,12 @@ _replay() {
 # Run hook $1 on payload file $2 the way Cortex does (CORTEX_PROJECT_DIR set), cwd the sandbox repository.
 _run_hook() {
     RC=0
-    OUT=$(HOME="$BORG_TEST_HOME" BORG_ORCHESTRATOR_ROOT="${BORG_TEST_HOME}/dev" CORTEX_PROJECT_DIR="$REPO" \
+    OUT=$(HOME="$BORG_TEST_HOME" XDG_CACHE_HOME="$BORG_TEST_HOME/.cache" BORG_ORCHESTRATOR_ROOT="${BORG_TEST_HOME}/dev" CORTEX_PROJECT_DIR="$REPO" \
         bash "${BATS_TEST_DIRNAME}/../hooks/$1" < "$2" 2>"${BATS_TEST_TMPDIR}/err") || RC=$?
 }
 
-@test "replay: the registered hook list is the nine borg hooks plus borg-cortex-plan.sh" {
-    [ "$(wc -l < "${BATS_TEST_TMPDIR}/hooks.txt" | tr -d ' ')" -eq 10 ]
+@test "replay: the registered hook list is the thirteen borg hooks plus borg-cortex-plan.sh" {
+    [ "$(wc -l < "${BATS_TEST_TMPDIR}/hooks.txt" | tr -d ' ')" -eq 14 ]
     grep -qx 'borg-cortex-plan.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
     grep -qx 'bash-guard.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
     grep -qx 'borg-agent-model-guard.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
@@ -185,4 +185,41 @@ $hook $fx: stdout is not JSON: ${OUT:0:120}"
     [ "$(jq -r .zero_commit "$log")" = "true" ]
     [ "$(jq -r .model "$log")" = "claude-sonnet-5-5" ]
     [ "$(jq -r .effort "$log")" = "high" ]
+}
+
+# --- the S1 hooks: arrival brief, supabase guard, tool-count nudge, prefer-tool log ---------------------------------
+
+@test "replay: the arrival brief answers Cortex's startup SessionStart with a systemMessage" {
+    _replay borg-arrival-brief.sh session-start
+    [ "$RC" -eq 0 ]
+    printf '%s' "$OUT" | jq -e '.systemMessage | length > 0' >/dev/null
+}
+
+@test "replay: the arrival brief stays silent on the compact SessionStart Cortex fires after PreCompact" {
+    _replay borg-arrival-brief.sh session-start-compact
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+}
+
+@test "replay: the supabase guard denies a local stack boot outside the shared stack and allows an ordinary command" {
+    _replay borg-supabase-guard.sh pretooluse-bash "supabase start"
+    [ "$RC" -eq 2 ]
+    grep -qi 'supabase' "${BATS_TEST_TMPDIR}/err"
+    _replay borg-supabase-guard.sh pretooluse-bash
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
+}
+
+@test "replay: the tool-count nudge speaks once the context file is over the threshold, on a Cortex PostToolUse" {
+    mkdir -p "$BORG_TEST_HOME/.cache/borg/context"
+    printf '{"total_input_tokens": 200000}\n' > "$BORG_TEST_HOME/.cache/borg/context/00000000-0000-4000-8000-000000000001.json"
+    _replay tool-count-nudge.sh posttooluse-bash
+    [ "$RC" -eq 0 ]
+    printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | contains("SESSION CHECK-IN")' >/dev/null
+}
+
+@test "replay: the prefer-tool log is silent and exits 0 on a Cortex Bash PostToolUse with no preference set" {
+    _replay borg-prefer-tool-log.sh posttooluse-bash
+    [ "$RC" -eq 0 ]
+    [ -z "$OUT" ]
 }

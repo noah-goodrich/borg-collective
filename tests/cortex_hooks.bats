@@ -89,8 +89,8 @@ EOF
     [ -f "$HOOKS_JSON" ]
     jq -e . "$HOOKS_JSON" >/dev/null
 
-    # exactly twelve hook commands in total
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 12 ]
+    # exactly seventeen hook commands in total
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 17 ]
 
     local pair event name
     while IFS='|' read -r event name; do
@@ -149,10 +149,10 @@ EOF
     local tmp="$HOOKS_JSON.old"
     jq '.hooks.PreToolUse |= map(select(.hooks[0].command | endswith("borg-agent-model-guard.sh") | not))' \
         "$HOOKS_JSON" > "$tmp" && mv "$tmp" "$HOOKS_JSON"
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 11 ]
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 16 ]
     _register
     [ "$status" -eq 0 ]
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 12 ]
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 17 ]
     [[ "$output" == *"borg-agent-model-guard.sh"* ]] || false
 }
 
@@ -181,7 +181,7 @@ EOF
     _register
     [ "$status" -eq 0 ]
     [ "$(shasum -a 256 "$HOOKS_JSON")" = "$first" ]
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 12 ]
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 17 ]
 }
 
 @test "cortex hooks: a second run leaves a migrated settings.json byte-identical too" {
@@ -215,8 +215,8 @@ EOF
     # and no empty husk of the emptied hooks object is left behind
     [ "$(jq 'has("hooks")' "$SETTINGS_JSON")" = "false" ]
 
-    # the entries moved: hooks.json now carries all twelve
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 12 ]
+    # the entries moved: hooks.json now carries all seventeen
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 17 ]
 }
 
 @test "cortex hooks: only borg's stale entries leave settings.json, a user's own hook there stays" {
@@ -274,8 +274,8 @@ EOF
     run jq -e '.hooks.SessionEnd[0].hooks[0].command == "/opt/mine/cleanup.sh"' "$HOOKS_JSON"
     [ "$status" -eq 0 ]
     [ "$(jq .someOtherKey "$HOOKS_JSON")" = "7" ]
-    # the user's two hooks plus borg's twelve
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 14 ]
+    # the user's two hooks plus borg's seventeen
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 19 ]
 }
 
 @test "cortex hooks: an unreadable hooks.json is left alone, settings.json keeps its stale entries, setup is told" {
@@ -303,16 +303,16 @@ EOF
     [ ! -e "$BORG_TEST_HOME/.cortex/settings.json" ]
 }
 
-@test "cortex hooks: a hooks.json from before the plan-mode hooks gains exactly the three new entries" {
+@test "cortex hooks: a hooks.json from before the plan-mode hooks gains exactly the entries it lacks" {
     _register
     [ "$status" -eq 0 ]
     local tmp="$HOOKS_JSON.old"
     jq 'del(.hooks.PostToolUse) | .hooks.PreToolUse |= map(select(.hooks[0].command | endswith("borg-cortex-plan.sh") | not))' \
         "$HOOKS_JSON" > "$tmp" && mv "$tmp" "$HOOKS_JSON"
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 9 ]
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 12 ]
     _register
     [ "$status" -eq 0 ]
-    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 12 ]
+    [ "$(jq '[.hooks[][] | .hooks[]] | length' "$HOOKS_JSON")" -eq 17 ]
     local first
     first=$(shasum -a 256 "$HOOKS_JSON")
     _register

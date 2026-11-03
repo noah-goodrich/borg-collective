@@ -2105,7 +2105,9 @@ _borg_unregister_hook() {
 # task -> Task, the same table that maps bash -> Bash).
 typeset -ga _BORG_CORTEX_HOOKS=(
     "SessionStart|borg-link-down.sh"
+    "SessionStart|borg-arrival-brief.sh"
     "Stop|borg-link-up.sh"
+    "Stop|notify.sh"
     "Notification|notify.sh"
     "Notification|borg-notify.sh"
     "PreToolUse|pre-commit-remind.sh"
@@ -2116,6 +2118,29 @@ typeset -ga _BORG_CORTEX_HOOKS=(
     "PreToolUse|borg-cortex-plan.sh|ExitPlanMode|exit_plan_mode"
     "PostToolUse|borg-plan-promote.sh|ExitPlanMode|exit_plan_mode"
     "PreToolUse|borg-agent-model-guard.sh|Agent|Task"
+    "PreToolUse|borg-supabase-guard.sh|Bash"
+    "PostToolUse|tool-count-nudge.sh"
+    "PostToolUse|borg-prefer-tool-log.sh|Bash"
+)
+
+# Plugin hooks that stay out of Cortex on purpose, as "<script>|<reason>" entries. Together with _BORG_CORTEX_HOOKS and
+# _BORG_CORTEX_PENDING this must cover every hook the Claude plugin registers (HOOKS_JSON in scripts/build-plugin.sh):
+# tests/cortex_parity.bats fails otherwise, naming the script. Directive: docs/plans/directives/2026-10-15-borg-in-cortex.md AC7.
+typeset -ga _BORG_CORTEX_CLAUDE_ONLY=(
+    "borg-resume-hook.sh|Claude Workflow and quota notifications; Cortex has neither"
+    "borg-dispatch-guard.sh|reads Claude /usage samples, which Cortex does not produce"
+    "borg-workflow-model-guard.sh|guards Claude's Workflow tool; Cortex has no Workflow tool"
+    "borg-memory-read-log.sh|logs reads of Claude project-memory paths; Cortex has no such memory"
+)
+
+# Plugin hooks not yet registered for Cortex, as "<script>|<reason>" entries naming the #516 slice (S2 or S3) that
+# adapts them. An entry leaves this array when the hook moves to _BORG_CORTEX_HOOKS.
+typeset -ga _BORG_CORTEX_PENDING=(
+    "borg-precompact-checkpoint.sh|#516 S2: reads a JSON transcript in Cortex and needs a PreCompact registration"
+    "borg-verifier-guard.sh|#516 S3: agent_type is present in Cortex's payload; adapt the guard"
+    "scout-readonly-guard.sh|#516 S3: agent_type is present in Cortex's payload; adapt the guard"
+    "large-output-nudge.sh|#516 S2: Cortex's tool_response is {name, content[], status, metrics}, not Claude's shape"
+    "borg-nanoprobe-guard.sh|#516 S3: Cortex's skill tool is lowercase skill; adapt the grant check"
 )
 
 # Hooks an older borg registered under names it has since dropped (borg-start.sh/borg-stop.sh became

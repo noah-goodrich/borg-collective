@@ -19,7 +19,7 @@ Cortex names its tools in lowercase (`bash`, `read`, `edit`, `write`, `grep`, `g
 
 ## Acceptance Criteria
 
-- [ ] **AC1: `borg setup` registers the eight Cortex hooks where Cortex reads them.** `~/.snowflake/cortex/hooks.json` carries SessionStart `borg-link-down.sh`, Stop `borg-link-up.sh`, Notification `notify.sh` and `borg-notify.sh`, PreToolUse `pre-commit-remind.sh`, `bash-guard.sh` and `borg-plan-promote.sh`, and SubagentStop `borg-nanoprobe-log.sh`, pointing at the copies under `~/.snowflake/cortex/hooks/`. A second run changes nothing (byte-identical file). The stale entries written earlier into `~/.snowflake/cortex/settings.json` are removed and every other key of that file, including a user's own hooks, is untouched; a user's own entries already in `hooks.json` survive. Nothing is registered into `~/.claude/settings.json`. (this PR)
+- [ ] **AC1: `borg setup` registers the Cortex hooks where Cortex reads them.** `~/.snowflake/cortex/hooks.json` carries every entry of `_BORG_CORTEX_HOOKS` in `borg.zsh` (the eight first registered were SessionStart `borg-link-down.sh`, Stop `borg-link-up.sh`, Notification `notify.sh` and `borg-notify.sh`, PreToolUse `pre-commit-remind.sh`, `bash-guard.sh` and `borg-plan-promote.sh`, and SubagentStop `borg-nanoprobe-log.sh`; the array is the current list), pointing at the copies under `~/.snowflake/cortex/hooks/`. A second run changes nothing (byte-identical file). The stale entries written earlier into `~/.snowflake/cortex/settings.json` are removed and every other key of that file, including a user's own hooks, is untouched; a user's own entries already in `hooks.json` survive. Nothing is registered into `~/.claude/settings.json`. (this PR)
   - Verify: `bats tests/cortex_hooks.bats`.
   - Evidence: `bats:tests/cortex_hooks.bats`
 - [ ] **AC2: `borg-plan-promote.sh` accepts Cortex's lowercase tool names.** `edit` and `write` behave exactly like `Edit` and `Write`; behaviour under Claude Code names is unchanged. (this PR)
@@ -37,6 +37,9 @@ Cortex names its tools in lowercase (`bash`, `read`, `edit`, `write`, `grep`, `g
 - [x] **AC6: Whether SessionStart `additionalContext` reaches the model in Cortex is settled and documented with the version.** The validation saw the injected text in the UI but the model answered as if it had never seen it, and the saved history held no trace of it, so the question is open; the answer, with the evidence, goes in a dated note. (S2 or S3)
   - Verify: the note exists and states the version and the observation.
   - Evidence: `path:docs/evidence/2026-10-cortex-session-start-context.md`
+- [ ] **AC7: Every hook the Claude plugin registers is registered for Cortex, or listed as Claude-only or pending with a reason; `tests/cortex_parity.bats` enforces it.** The lists are `_BORG_CORTEX_HOOKS`, `_BORG_CORTEX_CLAUDE_ONLY` and `_BORG_CORTEX_PENDING` in `borg.zsh`; the plugin side is read from `HOOKS_JSON` in `scripts/build-plugin.sh`. (#516 S1)
+  - Verify: `bats tests/cortex_parity.bats`
+  - Evidence: `path:tests/cortex_parity.bats`
 
 ## Testability
 
@@ -61,7 +64,7 @@ Cortex names its tools in lowercase (`bash`, `read`, `edit`, `write`, `grep`, `g
 
 ## Ship Definition
 
-Each slice: PR opened, CI green, the owner's word, squash-merged. After S1 merges, run `borg setup` once on a machine with Cortex installed and confirm `~/.snowflake/cortex/hooks.json` holds the eight hooks; that real run is the one thing the tests deliberately do not do.
+Each slice: PR opened, CI green, the owner's word, squash-merged. After S1 merges, run `borg setup` once on a machine with Cortex installed and confirm `~/.snowflake/cortex/hooks.json` holds every `_BORG_CORTEX_HOOKS` entry; that real run is the one thing the tests deliberately do not do.
 
 ## Timeline
 
@@ -76,4 +79,4 @@ Target: S1 on 2026-10-15, S2 and S3 within the week.
 
 ## Promotion Trigger
 
-`PROJECT_PLAN.md` holds another plan. This directive is executed in place from `docs/plans/directives/` and is assimilated on its own when AC1 to AC6 are ticked; it does not displace that plan.
+`PROJECT_PLAN.md` holds another plan. This directive is executed in place from `docs/plans/directives/` and is assimilated on its own when AC1 to AC7 are ticked; it does not displace that plan.
