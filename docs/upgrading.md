@@ -2,7 +2,7 @@
 
 A runbook for bringing a machine from an older borg to the current release, or for installing borg on a fresh machine. It is written so that a person, or a Claude Code session with no other context, can follow it top to bottom. The GitHub release notes for each version describe what changed; this page holds the per-machine steps, and a future release that needs anything from you adds a row to the migration table in section 5 instead of rewriting the notes.
 
-This page was last checked against release 0.9.13.
+This page was last checked against release 0.9.14.
 
 ## 1. Who this is for and how to use it with Claude Code
 
@@ -130,7 +130,8 @@ Find the row for the version you started from. If you skipped several releases, 
 | 0.9.10 | 0.9.11 update order, below |
 | 0.9.11 | 0.9.12 update order, below |
 | 0.9.12 | 0.9.13 update order, below |
-| 0.9.13 | None (current release) |
+| 0.9.13 | 0.9.14 update order, below |
+| 0.9.14 | None (current release) |
 
 Cortex hooks: 0.9.7's `borg setup` registers borg's Cortex hooks in Cortex's `hooks.json`, where Cortex reads them; older versions wrote them to a file Cortex never read. The normal upgrade's `borg setup` step does it, nothing extra.
 
@@ -146,9 +147,46 @@ run-in <BORG> ./install.sh
 
 2. Run `borg doctor`. Every RESUME row should now be OK except `resume-guardian`, which stays a known warning (section 6). On a machine signed in with a subscription this clears both the `resume-watch` and the `resume-probe` FAIL rows: the probe reads the path of the Claude binary from the watcher's plist, so it cannot pass without it. On a usage-billed account (an Enterprise seat), `/usage` reports cost and has no session limit, so `resume-probe` shows `INFO`, not `OK`: limit-class resumes and the guardian's limit thresholds do not apply there, and every other resume path is unchanged. A `FAIL` on that row on any account still means the probe cannot read `/usage` at all.
 
-### After 0.9.13 (unreleased): three skills are gone
+### Updating to 0.9.14: update order
 
-`no-unnecessary-read-perms` is retired (its rule lives in your global `CLAUDE.md`), `borg-recon` is folded into `/borg-link` (ask it "what changed" or "catch me up"), and `fable-reviewer` is merged into `/borg-review` (say "apply the gates"). After `claude plugin update` and `borg setup` the plugin build drops the three directories; restart open sessions. Cortex Code keeps any copy it registered earlier until you remove it by hand, because `borg setup` has no retired-skill cleanup for Cortex.
+0.9.14 retires three skills, slims the context borg loads, adds nudges that keep sessions small, lets a nanoprobe run a skill you grant it, and adds a weekly eval sweep that is off unless you turn it on. No migration is needed and the normal upgrade (section 4) is the whole required path.
+
+The path from 0.9.13 or earlier, in order (the commands are in section 4):
+
+1. Pull the checkouts (`git -C <BORG> pull --ff-only`, and the same for `<PLUGINS>`).
+2. Run `./install.sh` or `borg setup`. A plain `./install.sh` does not install the eval sweep (see "Do not" below).
+3. Run `claude plugin update` for every plugin installed from the marketplace, not only borg-collective (section 4, step c).
+4. Restart every open Claude Code session and every open Cortex session.
+
+What `borg setup` now does by itself, with nothing for you to run:
+
+- It drops borg's dead Cortex skill registrations from `~/.snowflake/cortex/skills.json` on every run: `borg-search`, `borg-recon`, `fable-reviewer`, `no-unnecessary-read-perms`, `simplify`, and any borg skill path whose directory no longer exists. This replaces the old advice to remove retired skills from Cortex by hand. It also reports `cortex skill add` errors instead of hiding them.
+- It updates the borg-managed rules (`~/.claude/borg-managed.md`), which gain a "Narrow reads" section and say to use Grep and Glob "where the session has them, otherwise grep/find through Bash". Claude Code leaves Grep and Glob out of main sessions on macOS, Linux and WSL by default, so a session without them is normal.
+- It asks `git check-ignore` before appending `.borg/state.json` to a repository's `.gitignore`, so a repository that already ignores the file some other way is not touched.
+
+Optional, only if you want them:
+
+- `borg setup --statusline` makes the context nudge use the size of the context instead of a count of tool calls. Without it the nudge stays on the 75-call count. It copies `bin/borg-statusline` to `~/.claude/borg-statusline.sh` and sets `statusLine` in `~/.claude/settings.json` (through a symlink if the file is one), keeping every other key. The script also writes the session's context size to `${XDG_CACHE_HOME:-~/.cache}/borg/context/<session_id>.json`, which the nudge reads. What it does to an existing status line: a `statusLine` that is not borg's (its command does not end in `/borg-statusline.sh`) is refused. The command warns, prints the existing command, leaves the file untouched and exits 1. Only `borg setup --statusline --force` replaces it, and it keeps no backup, so copy the existing `statusLine` value out of `settings.json` first if you want it back. `borg setup --statusline=off` removes borg's own status line and script, and leaves a status line that is not borg's alone. A machine that already has its own status line should skip this step, or accept the 75-call nudge.
+- `- Grant-skill:` lines let a nanoprobe run a named skill. A brief declares `- Skill: <name>`, and the Agent guard denies the spawn at the start unless the MACHINE-layer brief grants that name; nanoprobes answer `SKILL-NOT-GRANTED` or `SKILL-RAN`. Put one line per skill in `${XDG_CONFIG_HOME:-~/.config}/borg/extensions/agent-extensions/borg-nanoprobe/brief.md`, for example `- Grant-skill: simplify`. A repository-layer brief grants nothing. Grant only a skill whose whole flow stays inside the worktree: a skill that posts, merges or edits outside the worktree must not be granted. With no grant line, behavior is unchanged.
+
+Do not:
+
+- Do not set `BORG_EVAL_SWEEP=1` on a work machine. `BORG_EVAL_SWEEP=1 ./install.sh` installs the launchd agent `borg.eval-sweep`, which runs the live eval sweep every Sunday at 04:00 and spends money (up to $10 a run) on whatever account `claude` is logged into. It is for a personal machine only. A plain `./install.sh` leaves the agent alone, neither installing nor removing it, and `BORG_EVAL_SWEEP=0` removes it.
+
+Changed behavior to know:
+
+- Three skills are gone. `no-unnecessary-read-perms` is retired (its rule lives in your global `CLAUDE.md`), `borg-recon` is folded into `/borg-link` (ask it "what changed" or "catch me up"), and `fable-reviewer` is merged into `/borg-review` (say "apply the gates"). The plugin build drops the three directories. `break-glass` is slash-only: type `/break-glass`, because the model no longer sees it. Every skill description is now one quoted line, which Cortex needs to load a skill.
+- `borg-researcher` runs on Haiku.
+- `borg-scout` can run read-only Bash behind a guard, in Claude Code. The Cortex copy keeps no Bash.
+- A PostToolUse hook nudges after a tool result over 8000 characters, to read narrowly.
+- A PreCompact hook writes an automatic checkpoint before compaction, so a new file may appear in `.borg/checkpoints/` that you did not ask for. It carries the previous checkpoint's rows forward, so `borg next` and `borg link` still show what waits on you. It is only written in a directory where borg already lives.
+- `borg handoff write|check` keeps one PR thread per worker handoff. The SessionStart context is smaller: no duplicate git block and a one-line vocabulary. `scripts/build-plugin.sh --help` prints usage and no longer builds.
+
+For developers, the evals gained a JSONL run history (`python3 -m borg_core.evals.history --report`), tiers in the ledger, `evals/agent-gates` and `evals/orchestrator-skills`.
+
+What `borg doctor` should show: the `eval-sweep` row is OK when the agent is not installed, which is the right state for a machine that never opted in. Section 6 lists the rest.
+
+Known issue (noah-goodrich/borg-collective#510, not fixed): `/borg-review` in gates mode does not print its G1 to G5 ledger. Diagnostic mode is unaffected.
 
 ### Updating to 0.9.13: update order
 
