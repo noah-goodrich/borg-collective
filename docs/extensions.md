@@ -52,10 +52,29 @@ a return contract. There is no "before the artifact" moment to hook.
 
 The nanoprobe's scope gate is **not** extensible: an extension may add instructions, but never
 widen what the agent may touch, raise its deliverable ceiling, or relax bounded termination. There
-is one sanctioned exception: the **machine-layer** `- Prefer-tool:` may name the Skill target the
-nanoprobe uses at step 3 (opening its PR), and nothing else. `hooks/borg-nanoprobe-guard.sh` enforces
-it: the hook reads the machine-layer brief itself, denies every other Skill call, and denies nanoprobe
-writes under `borg/extensions/`. A repository-layer file never grants a Skill.
+are two sanctioned exceptions, both **machine-layer**: `- Prefer-tool:` may name the Skill target the
+nanoprobe uses at step 3 (opening its PR), and `- Grant-skill:` may name a skill a brief asks it to run
+(next section). Nothing else widens it. `hooks/borg-nanoprobe-guard.sh` enforces both: the hook reads the
+machine-layer brief itself, denies every other Skill call, and denies nanoprobe writes under
+`borg/extensions/`. A repository-layer file never grants a Skill, and neither does the Task text.
+
+### Skills a nanoprobe may run: `Grant-skill`
+
+A machine-layer brief grants a skill with one line per skill, matched exactly (no prefix, namespace or case folding; backticks around the name are ignored):
+
+```
+- Grant-skill: simplify
+- Grant-skill: <plugin>:pr-review
+```
+
+A brief asks for a skill on one structured line, `- Skill: <exact name> [args]`. Mentioning a skill in free text is not a request. The check runs twice from one parser (the `GRANTS` block that `hooks/borg-agent-model-guard.sh` and `hooks/borg-nanoprobe-guard.sh` embed byte-for-byte, pinned by `tests/nanoprobe_guard.bats`):
+
+- **At spawn**, `hooks/borg-agent-model-guard.sh` denies a nanoprobe `Agent` or `Task` call whose brief declares a skill the machine layer does not grant. The message names the skill and three routes: grant it, run it in the Queen session if it only reads or drafts and need not be blind, or hand it to a drone.
+- **At call**, `hooks/borg-nanoprobe-guard.sh` denies any Skill call that is neither a grant nor the `Prefer-tool` target.
+
+A nanoprobe whose declared skill is denied returns `SKILL-NOT-GRANTED: <skill>` and stops; it never imitates the flow by hand. When the skill runs, its hand-back starts with `SKILL-RAN: <skill>`.
+
+Grant only a skill whose whole flow stays inside the worktree: reading, editing, running local commands and returning text. A skill that posts to GitHub, chat or a tracker, approves, merges, or needs a human partway through stays out; run it in the Queen or a drone. A granted review skill gives a blind review by construction when the brief carries only the PR reference and the `- Skill:` line.
 
 ## The `prefer-tool` type
 

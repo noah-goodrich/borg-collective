@@ -7,10 +7,12 @@
 # the borg-setup copy reports the bare `borg-nanoprobe`; every other caller is a no-op that allows):
 #
 #   1. Skill: a nanoprobe may call a skill only when the MACHINE-layer brief extension
-#      (${XDG_CONFIG_HOME:-$HOME/.config}/borg/extensions/agent-extensions/borg-nanoprobe/brief.md) carries a
-#      `- Prefer-tool:` line naming exactly that skill, a `- Instead-of:` line equal to `gh pr create`, and a
-#      `- Requires:` line. The hook reads that file itself; nothing the agent or its brief says can widen it.
-#      Every other Skill call is denied.
+#      (${XDG_CONFIG_HOME:-$HOME/.config}/borg/extensions/agent-extensions/borg-nanoprobe/brief.md) either has a
+#      `- Grant-skill:` line naming exactly that skill, or carries a `- Prefer-tool:` line naming it plus a
+#      `- Instead-of:` line equal to `gh pr create` and a `- Requires:` line. The hook reads that file itself;
+#      nothing the agent or its brief says can widen it. Every other Skill call is denied, and so is a Skill call
+#      when the grant check itself fails. The grant reader is the GRANTS block, shared byte-for-byte with
+#      hooks/borg-agent-model-guard.sh, which runs the same check when a nanoprobe is spawned.
 #   2. Write|Edit|MultiEdit|NotebookEdit: denied for any path under ${XDG_CONFIG_HOME:-$HOME/.config}/borg/
 #      extensions/, so a nanoprobe cannot author its own permission.
 #   3. Bash: denied for any command whose text references the extensions directory in any spelling (resolved
@@ -38,6 +40,11 @@ import json, os, sys
 
 NANOPROBE_TYPES = ("borg-collective:borg-nanoprobe", "borg-nanoprobe")
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+
+# GRANTS-BEGIN
+# The ONE reader of the machine-layer brief's skill grants. hooks/borg-nanoprobe-guard.sh (call time) and
+# hooks/borg-agent-model-guard.sh (spawn time) embed this block byte-for-byte (tests/nanoprobe_guard.bats diffs
+# them), so the two verdicts cannot disagree. Deny by default: anything unreadable or malformed grants nothing.
 INSTEAD_OF = "gh pr create"
 
 
@@ -57,19 +64,30 @@ def config_home():
 
 
 def skill_allowed(skill):
+    """(True, "") when the MACHINE-layer brief grants exactly this skill, else (False, why).
+
+    Granted by a `- Grant-skill:` line naming it, or by the complete Prefer-tool trio (Prefer-tool naming it, an
+    `- Instead-of: gh pr create` line, a `- Requires:` line). A repository-layer brief is never read.
+    """
     path = os.path.join(config_home(), "borg", "extensions", "agent-extensions", "borg-nanoprobe", "brief.md")
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
-    except OSError:
-        return False, "no machine-layer brief at %s, so no skill is granted" % path
+    except (OSError, ValueError):
+        return False, "no readable machine-layer brief at %s, so no skill is granted" % path
+    if not isinstance(skill, str) or not skill or skill != skill.strip():
+        return False, "no exact skill name"
+    if skill in field(text, "Grant-skill"):
+        return True, ""
     if skill not in field(text, "Prefer-tool"):
-        return False, "the machine-layer brief does not name %r in a '- Prefer-tool:' line" % skill
+        return False, ("the machine-layer brief names %r in neither a '- Grant-skill:' nor a '- Prefer-tool:' line"
+                       % skill)
     if INSTEAD_OF not in field(text, "Instead-of"):
         return False, "the machine-layer brief has no '- Instead-of: %s' line" % INSTEAD_OF
     if not any(field(text, "Requires")):
         return False, "the machine-layer brief has no '- Requires:' line"
     return True, ""
+# GRANTS-END
 
 
 def under_extensions(p, cwd):
@@ -109,7 +127,10 @@ def main():
         skill = ti.get("skill")
         if not isinstance(skill, str) or not skill:
             return deny("Skill call without a skill name")
-        ok, why = skill_allowed(skill.strip())
+        try:
+            ok, why = skill_allowed(skill)
+        except Exception as exc:
+            ok, why = False, "the grant check failed (%s)" % exc
         if ok:
             return 0
         return deny("Skill %r is not granted to a nanoprobe: %s" % (skill, why))

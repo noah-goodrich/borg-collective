@@ -417,3 +417,125 @@ CORTEX_SPECIALISTS="snowflake-object-discovery semantic-view-transform dbt-verif
     grep -q '^CORTEX_SPECIALISTS = ' "$HOOK"
     ! grep -q 'CORTEX_SPECIALISTS' "$WF_HOOK"
 }
+
+# --- nanoprobe skill requests are checked at spawn (#498) -----------------------------------------------------------
+
+NP='borg-collective:borg-nanoprobe'
+
+# _skill_grant <skill>...: a machine-layer brief granting exactly these skills.
+_skill_grant() {
+    local d="$XDG_CONFIG_HOME/borg/extensions/agent-extensions/borg-nanoprobe" s
+    mkdir -p "$d"
+    for s in "$@"; do printf -- '- Grant-skill: %s\n' "$s"; done > "$d/brief.md"
+}
+
+# _np <prompt> [subagent_type] [tool_name]: a nanoprobe-style spawn carrying this prompt.
+_np() {
+    _agent "$(jq -nc --arg p "$1" --arg t "${2:-$NP}" '{subagent_type:$t, model:"sonnet", prompt:$p}')" "" "${3:-Agent}"
+}
+
+@test "skill: an ungranted '- Skill:' line is denied, naming the skill and all three routes" {
+    _np $'Review PR 5.\n- Skill: simplify'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"- Skill: simplify"* ]] || false
+    [[ "$output" == *"Grant-skill: simplify"* ]] || false
+    [[ "$output" == *"Queen session"* ]] || false
+    [[ "$output" == *"drone"* ]] || false
+}
+
+@test "skill: the same prompt passes once the machine layer grants the skill" {
+    _skill_grant simplify
+    _np $'Review PR 5.\n- Skill: simplify'
+    [ "$status" -eq 0 ]
+}
+
+@test "skill: a skill with args is checked by its name" {
+    _skill_grant simplify
+    _np $'- Skill: /simplify focus on hooks/'
+    [ "$status" -eq 0 ]
+}
+
+@test "skill: two declared skills with one ungranted is denied, naming the ungranted one" {
+    _skill_grant simplify
+    _np $'- Skill: simplify\n- Skill: pr-review'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"- Skill: pr-review"* ]] || false
+    [[ "$output" != *"'- Skill: simplify'"* ]] || false
+}
+
+@test "skill: a free-text mention with no '- Skill:' line is allowed" {
+    _np 'Do not use the Skill tool; the simplify skill is not for you. Skill: simplify, mentioned inline.'
+    [ "$status" -eq 0 ]
+}
+
+@test "skill: an empty '- Skill:' line is denied" {
+    _skill_grant simplify
+    _np $'- Skill:'
+    [ "$status" -eq 2 ]
+}
+
+@test "skill: a grant only in a repository-layer brief does not count" {
+    local d="$BATS_TEST_TMPDIR/repo/.borg/agent-extensions/borg-nanoprobe"
+    mkdir -p "$d"
+    printf -- '- Grant-skill: simplify\n' > "$d/brief.md"
+    _np $'- Skill: simplify'
+    [ "$status" -eq 2 ]
+}
+
+@test "skill: a granted-by-Prefer-tool skill passes at spawn too" {
+    local d="$XDG_CONFIG_HOME/borg/extensions/agent-extensions/borg-nanoprobe"
+    mkdir -p "$d"
+    printf -- '- Prefer-tool: dev:create-pr\n- Instead-of: gh pr create\n- Requires: skill:dev:create-pr\n' > "$d/brief.md"
+    _np $'- Skill: dev:create-pr'
+    [ "$status" -eq 0 ]
+}
+
+@test "skill: other agent types carrying a '- Skill:' line are unaffected" {
+    _np $'- Skill: simplify' borg-collective:borg-grunt
+    [ "$status" -eq 0 ]
+    _np $'- Skill: simplify' borg-collective:borg-reviewer
+    [ "$status" -eq 0 ]
+}
+
+@test "skill: the legacy Task tool name gives the same verdicts" {
+    _np $'- Skill: simplify' "$NP" Task
+    [ "$status" -eq 2 ]
+    _skill_grant simplify
+    _np $'- Skill: simplify' "$NP" Task
+    [ "$status" -eq 0 ]
+}
+
+@test "skill: cortex Task payloads get the same verdicts" {
+    _cortex "$(jq -nc --arg t "$NP" '{subagent_type:$t, prompt:"- Skill: simplify"}')"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"Grant-skill: simplify"* ]] || false
+    _skill_grant simplify
+    _cortex "$(jq -nc --arg t "$NP" '{subagent_type:$t, prompt:"- Skill: simplify"}')"
+    [ "$status" -eq 0 ]
+}
+
+@test "skill: a skill-only denial does not print the model policy footer" {
+    _np $'- Skill: simplify'
+    [ "$status" -eq 2 ]
+    [[ "$output" != *"Policy: Queen/drone"* ]] || false
+    [[ "$output" == *"BORG_AGENT_MODEL_GUARD=0"* ]] || false
+}
+
+@test "skill: a model-cap denial and a skill denial are reported together" {
+    _agent "$(jq -nc --arg t "$NP" '{subagent_type:$t, model:"opus", prompt:"- Skill: simplify"}')"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"above the cap"* ]] || false
+    [[ "$output" == *"- Skill: simplify"* ]] || false
+}
+
+@test "skill: the kill switch allows an ungranted request" {
+    export BORG_AGENT_MODEL_GUARD=0
+    _np $'- Skill: simplify'
+    [ "$status" -eq 0 ]
+}
+
+@test "skill: an unreadable machine brief denies and grants nothing" {
+    mkdir -p "$XDG_CONFIG_HOME/borg/extensions/agent-extensions/borg-nanoprobe/brief.md"
+    _np $'- Skill: simplify'
+    [ "$status" -eq 2 ]
+}
