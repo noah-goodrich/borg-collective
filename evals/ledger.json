@@ -76,6 +76,20 @@
         1,
         2
       ]
+    },
+    "evals/orchestrator-skills": {
+      "covers": [
+        "evals/orchestrator-skills/**",
+        "skills/borg-resume/**",
+        "skills/borg-review/**",
+        "skills/break-glass/**",
+        "bin/borg-resume",
+        "lib/borg/resume*.sh"
+      ],
+      "tiers": [
+        1,
+        2
+      ]
     }
   },
   "items": {
@@ -126,12 +140,10 @@
       "eval": "evals/lifecycle-manifests"
     },
     "skills/borg-resume": {
-      "waiver": "Phase 2 (evals-for-everything): orchestrator-facing eval to be built",
-      "review_by": "2026-12-15"
+      "eval": "evals/orchestrator-skills"
     },
     "skills/borg-review": {
-      "waiver": "Phase 2 (evals-for-everything): orchestrator-facing eval to be built",
-      "review_by": "2026-12-15"
+      "eval": "evals/orchestrator-skills"
     },
     "skills/borg-switch": {
       "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
@@ -141,8 +153,7 @@
       "eval": "evals/agent-gates"
     },
     "skills/break-glass": {
-      "waiver": "Phase 2 (evals-for-everything): eval to be built (negative-heavy: no unprompted permission change)",
-      "review_by": "2026-12-15"
+      "eval": "evals/orchestrator-skills"
     },
     "skills/pane": {
       "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
