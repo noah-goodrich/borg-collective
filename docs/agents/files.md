@@ -90,6 +90,7 @@ install.sh                  Installer: deps, symlinks, hooks, skills, launchd ag
 lib/launchd-label.zsh       THE launchd label resolver (see "launchd labels" under Key Patterns)
 lib/launchd-agents.zsh      borg setup warning for shipped launchd agents that are not loaded
 lib/gitignore.zsh           borg setup: append .borg/state.json to .gitignore only when git does not already ignore it
+lib/output-caps.zsh         borg setup: add-only BASH_MAX_OUTPUT_LENGTH and CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS to ~/.claude/settings.json .env
 launchd/                    Templates; Label is `{{LABEL}}`, installed as <label>.plist
     borg.notifyd.plist      LaunchAgent: borg-notifyd (fswatch daemon)
     borg.cortex-wake.plist  LaunchAgent: borg-cortex-watch (30s interval)

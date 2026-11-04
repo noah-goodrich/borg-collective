@@ -45,6 +45,7 @@ Avoid these shapes, which cannot be checked before they run (top-level prompt, f
   - Pass `-q` to `git commit` and `git push`.
   - Pipe `--stat` output through `tail -n`.
   - Never `find` under `/private/tmp`: sealed eval directories print a permission error per entry.
+  - A lookup expected to read more than ~3 files or ~10k chars goes to a scout.
 
 ## Subagent Rules
 When spawning subagents via the Agent tool, ALWAYS include these rules in the prompt:

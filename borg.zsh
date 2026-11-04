@@ -2674,6 +2674,9 @@ CONF
         warn "Hooks are managed by the borg-collective plugin. Install it to register hooks."
     fi
 
+    # ── 3a. Output caps: bound one Bash/Read result (add-only, see lib/output-caps.zsh) ──
+    _borg_ensure_output_caps
+
     # ── 3b. CoCo (Cortex Code) integration ───────────────────────────────────
     local COCO_DIR="$HOME/.snowflake/cortex"
     local COCO_SETTINGS="$COCO_DIR/settings.json"

@@ -67,6 +67,8 @@ borg nanoprobe-log <id>  Fetch the transcript/summary for a nanoprobe run
 borg spend               Summarize accurate token spend from ~/.claude/token-spend.jsonl
 borg doctor              Environment/dependency health check
 borg setup               Install/refresh hooks, skills, agents, tmux keybinding
+                         Adds BASH_MAX_OUTPUT_LENGTH=12000 and CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=8000 to
+                         ~/.claude/settings.json .env only when absent; never overwrites a value.
 borg setup --statusline  OPT-IN, and the only thing that run does: copy bin/borg-statusline to
                          ~/.claude/borg-statusline.sh and set `statusLine` in ~/.claude/settings.json
                          to it (line 1 `borg next --line`, line 2 model and context). Other keys are
