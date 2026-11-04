@@ -1,0 +1,7 @@
+{
+  "case": "RE1",
+  "name": "findings-file",
+  "agent": "borg-researcher",
+  "kind": "research-file",
+  "pin": "claude-haiku-5-5"
+}

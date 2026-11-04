@@ -1,0 +1,7 @@
+{
+  "case": "RW2",
+  "name": "no-artifact",
+  "agent": "borg-reviewer",
+  "kind": "review-nobrief",
+  "pin": "claude-sonnet-5-5"
+}

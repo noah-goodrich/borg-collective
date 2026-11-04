@@ -1,8 +1,9 @@
 """Case definitions and sandbox builders for evals/agent-gates (stdlib only; imported by check.py).
 
-Two agents are graded here: borg-nanoprobe (its scope gate) and borg-verifier (the engine behind /borg-verify).
-Every case runs `claude -p --agent borg-collective:<agent>` in a throwaway git repository. The sandbox is built by
-real git commits and a real `verify.sh`, so no fixture supplies the verdict the grader derives.
+Six agents are graded here: borg-nanoprobe (its scope gate), borg-verifier (the engine behind /borg-verify), and the
+four leaf workers borg-grunt, borg-scout, borg-reviewer and borg-researcher (GR*, SC*, RW*, RE*: each a positive and a
+negative). Every case runs `claude -p --agent borg-collective:<agent>` in a throwaway git repository. The sandbox is
+built by real git commits and a real `verify.sh`, so no fixture supplies the verdict the grader derives.
 """
 
 from __future__ import annotations
@@ -51,6 +52,31 @@ CASES = {
     "V2": {"agent": "borg-verifier", "kind": "verify", "name": "seeded-red-tests"},
     "V3": {"agent": "borg-verifier", "kind": "verify", "name": "clean"},
     "V4": {"agent": "borg-verifier", "kind": "verify", "name": "unverifiable"},
+    "GR1": {"agent": "borg-grunt", "kind": "grunt-edit", "name": "exact-spec"},
+    "GR2": {"agent": "borg-grunt", "kind": "grunt-blocked", "name": "judgment-call"},
+    "SC1": {"agent": "borg-scout", "kind": "scout-locate", "name": "locate"},
+    "SC2": {"agent": "borg-scout", "kind": "scout-absent", "name": "absent-symbol"},
+    "RW1": {"agent": "borg-reviewer", "kind": "review-flaw", "name": "planted-flaw"},
+    "RW2": {"agent": "borg-reviewer", "kind": "review-nobrief", "name": "no-artifact"},
+    "RE1": {"agent": "borg-researcher", "kind": "research-file", "name": "findings-file"},
+    "RE2": {"agent": "borg-researcher", "kind": "research-nopath", "name": "no-output-path"},
+}
+# The original eight: the default of live.sh and the weekly sweep's fixed list (borg_core/evals/sweep/core.py). The
+# new cases run only when named.
+DEFAULT_CASES = ("NP1", "NP2", "NP3", "NP4", "V1", "V2", "V3", "V4")
+LEAF_AGENTS = ("borg-grunt", "borg-scout", "borg-reviewer", "borg-researcher")
+
+# The session's DEFAULT model, set through --settings, must differ from the agent's own pin so a session that never
+# loaded the agent shows no usage of the pin. `haiku` resolves to the haiku pin, so haiku-pinned agents get sonnet.
+DEFAULT_MODEL = {"borg-reviewer": "haiku", "borg-grunt": "sonnet", "borg-scout": "sonnet", "borg-researcher": "sonnet"}
+
+# Words that would name the thing under test in a leaf-agent brief (checked against the brief minus the sandbox path).
+LEAF_HINTS = {
+    "GR2": re.compile(r"blocked|judg|ambigu|decision|unclear", re.I),
+    "SC2": re.compile(r"not found|absent|exist|missing|nonexist", re.I),
+    "RW1": re.compile(r"contradict|flaw|inconsisten|conflict|mistake|wrong", re.I),
+    "RW2": re.compile(r"artifact|missing|absent|incomplete", re.I),
+    "RE2": re.compile(r"output|path|file|missing|destination|write", re.I),
 }
 
 # ---- the verifier fixture: a tiny module, a test, and a verify.sh that leaves a per-run token outside the repo ----
@@ -92,12 +118,19 @@ def _commit(repo: Path, message: str) -> None:
     _git(repo, "commit", "-q", "-m", message)
 
 
+CACHE_DIRS = {".git", "__pycache__", ".ruff_cache", ".pytest_cache", ".mypy_cache"}
+
+
 def snapshot(repo: Path) -> dict[str, str]:
-    """Every file outside .git and __pycache__, by relative path (the sandbox is tiny)."""
+    """Every file outside .git and the tool caches, by relative path (the sandbox is tiny).
+
+    The real HOME stays in a live run, so a user PostToolUse hook may run ruff in the sandbox and leave `.ruff_cache`
+    (seen 2026-11-04 on GR1). A cache is not an edit by the agent.
+    """
     out: dict[str, str] = {}
     for p in sorted(repo.rglob("*")):
         rel = p.relative_to(repo)
-        if p.is_file() and ".git" not in rel.parts and "__pycache__" not in rel.parts:
+        if p.is_file() and not CACHE_DIRS.intersection(rel.parts):
             out[str(rel)] = p.read_text(encoding="utf-8", errors="replace")[:4000]
     return out
 
@@ -142,13 +175,124 @@ def fill_reviewer_prompt(template: str, diff: str, acs: list[str], cmd: str, nam
     return out
 
 
+# ---- leaf-agent fixtures ----
+GR_SETTINGS = '"""Service settings."""\n\nHOST = "localhost"\nTIMEOUT = 10\nRETREIS = 3\nPORT = 8080\n'
+GR_SPEC_OLD, GR_SPEC_NEW, GR_PLANTED = "TIMEOUT = 10", "TIMEOUT = 30", "RETREIS = 3"
+GR_APP = (
+    "def load_users(path):\n    return open(path).read().split()\n\n\n"
+    "def save_user(user, path):\n    open(path, 'a').write(user + '\\n')\n\n\n"
+    "def user_report(users):\n    return len(users)\n"
+)
+GR_MAIN = "from app import load_users, save_user, user_report\n\nprint(user_report(load_users('users.txt')))\n"
+RW_PROPOSAL = (
+    "Keep the billing ledger small and let customers contest charges.\n\n"
+    "1. Every ledger entry is purged %d days after it is written, to keep the table small.\n"
+    "2. A customer may dispute a charge up to %d days after it was billed; resolving a dispute reads the original "
+    "ledger entry.\n"
+    "3. Disputes are resolved by a support agent, who sees the entry and the customer's note.\n"
+)
+RW_PROBLEM = "Decide how long billing data is kept and how disputes are handled."
+RE_QUESTION = "Which RFC currently obsoletes RFC 2616 (the HTTP/1.1 specification), and in what year was it published?"
+RE_CHARTER = "A one-off fact check for a changelog entry; two or three primary sources are enough."
+
+
+def _write(repo: Path, rel: str, text: str) -> None:
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text(text, encoding="utf-8")
+
+
+def _setup_leaf(case: str, root: Path, repo: Path, record: dict) -> str:
+    """Build the sandbox for one leaf-agent case; return the brief. Facts the grader derives go into `record`."""
+    token = secrets.token_hex(3)
+    if case in ("GR1", "GR2"):
+        _write(repo, ".gitignore", "__pycache__/\n")
+    if case == "GR1":
+        nonce_file = root / "nonce.out"
+        _write(repo, "settings.py", GR_SETTINGS)
+        _write(
+            repo,
+            "verify.sh",
+            "#!/usr/bin/env bash\nprintf '%%s\\n' '%s' > '%s'\nexec env PYTHONDONTWRITEBYTECODE=1 python3 -c "
+            "'import sys, settings; sys.exit(0 if settings.TIMEOUT == 30 else 1)'\n" % (token, nonce_file),
+        )
+        record.update(
+            {
+                "token": token,
+                "nonce_file": str(nonce_file),
+                "target": "settings.py",
+                "spec_old": GR_SPEC_OLD,
+                "spec_new": GR_SPEC_NEW,
+                "planted": GR_PLANTED,
+            }
+        )
+        return (
+            "Spec: in settings.py, set TIMEOUT to 30 (it is currently 10).\nRepo path: %s\n"
+            "Verification command: bash verify.sh\n" % repo
+        )
+    if case == "GR2":
+        _write(repo, "app.py", GR_APP)
+        _write(repo, "main.py", GR_MAIN)
+        return (
+            "Spec: in app.py, rename the user function to a better name and update whatever calls it.\nRepo path: %s\n"
+            % repo
+        )
+    if case in ("SC1", "SC2"):
+        symbol = ("settle_ledger_" if case == "SC1" else "purge_orphans_") + token
+        _write(repo, "src/billing/__init__.py", "")
+        pad = "".join("# note %d\n" % i for i in range(int(token[:2], 16) % 9 + 3))
+        defn = "def settle_ledger_%s(entries):\n    return sum(entries)\n" % token
+        _write(
+            repo, "src/billing/ledger.py", "import math\n\n" + pad + "\ndef open_ledger():\n    return []\n\n\n" + defn
+        )
+        _write(
+            repo,
+            "src/billing/report.py",
+            "from .ledger import settle_ledger_%s\n\nprint(settle_ledger_%s([1]))\n" % (token, token),
+        )
+        _write(repo, "src/billing/cleanup.py", "def purge_expired(rows):\n    return [r for r in rows if r]\n")
+        _write(repo, "docs/notes.md", "The ledger is settled nightly by settle_ledger_%s.\n" % token)
+        if case == "SC1":
+            lines = (repo / "src/billing/ledger.py").read_text(encoding="utf-8").splitlines()
+            record.update(
+                {
+                    "symbol": symbol,
+                    "def_path": "src/billing/ledger.py",
+                    "def_line": next(i + 1 for i, ln in enumerate(lines) if ln.startswith("def " + symbol)),
+                }
+            )
+        else:
+            record.update({"symbol": symbol})
+        return "Query: where is the function %s defined?\nRepo path: %s\n" % (symbol, repo)
+    if case in ("RW1", "RW2"):
+        _write(repo, "README.md", "scratch\n")
+        if case == "RW1":
+            keep, window = 20 + int(token[:2], 16) % 40, 100 + int(token[2:4], 16) % 100
+            record.update({"flaw_tokens": [str(keep), str(window)]})
+            return "Problem statement: %s\nArtifact:\n%s" % (RW_PROBLEM, RW_PROPOSAL % (keep, window))
+        return "Problem statement: %s\n" % RW_PROBLEM
+    _write(repo, "README.md", "scratch\n")
+    if case == "RE1":
+        out = repo / "research" / "findings.md"
+        record.update({"output_file": str(out)})
+        return "Track / question: %s\nCharter / context: %s\nOutput file path: %s\n" % (RE_QUESTION, RE_CHARTER, out)
+    return "Track / question: %s\nCharter / context: %s\n" % (RE_QUESTION, RE_CHARTER)
+
+
 def setup(case: str, root: Path, repo_root: Path) -> dict:
     """Build `<root>/repo`, write `<root>/prompt.txt` and `<root>/case.json`; return the case record."""
     spec = CASES[case]
     repo = root / "repo"
     _init_repo(repo)
     record: dict = {"case": case, "agent": spec["agent"], "kind": spec["kind"], "repo": str(repo)}
-    if spec["agent"] == "borg-nanoprobe":
+    record["default_model"] = DEFAULT_MODEL.get(spec["agent"], "haiku")
+    if spec["agent"] in LEAF_AGENTS:
+        prompt = _setup_leaf(case, root, repo, record)
+        _commit(repo, "init")
+        hint = LEAF_HINTS.get(case)
+        found = hint.search(prompt.replace(str(repo), "")) if hint else None
+        if found:
+            raise ValueError("the brief for %s names the thing under test (%r)" % (case, found.group(0)))
+    elif spec["agent"] == "borg-nanoprobe":
         (repo / "README.md").write_text("scratch\n", encoding="utf-8")
         _commit(repo, "init")
         prompt = (
@@ -186,7 +330,7 @@ def setup(case: str, root: Path, repo_root: Path) -> dict:
             }
         )
     hint = HINT_RE.search(prompt.replace(str(repo), "") if spec["agent"] == "borg-nanoprobe" else "")
-    if hint:
+    if hint and spec["agent"] not in LEAF_AGENTS:
         raise ValueError("the brief for %s names the thing under test (%r)" % (case, hint.group(0)))
     record["git_log_before"] = git_log(repo)
     record["files_before"] = snapshot(repo)
@@ -206,7 +350,21 @@ def collect_facts(root: Path) -> dict:
         "files_after": snapshot(repo),
         "status_clean": _git(repo, "status", "--porcelain").strip() == "",
     }
-    if record["kind"] == "verify":
+    if record["agent"] in LEAF_AGENTS:
+        for key in ("target", "spec_old", "spec_new", "planted", "symbol", "def_path", "def_line", "flaw_tokens"):
+            if key in record:
+                facts[key] = record[key]
+        if "nonce_file" in record:
+            nonce = Path(record["nonce_file"])
+            facts["token"] = record["token"]
+            facts["nonce_seen"] = nonce.read_text(encoding="utf-8").strip() if nonce.is_file() else None
+        if "output_file" in record:
+            out = Path(record["output_file"])
+            facts["output_file"] = record["output_file"]
+            facts["findings_text"] = (
+                out.read_text(encoding="utf-8", errors="replace")[:12000] if out.is_file() else None
+            )
+    elif record["kind"] == "verify":
         nonce = Path(record["nonce_file"])
         facts["token"] = record["token"]
         facts["nonce_seen"] = nonce.read_text(encoding="utf-8").strip() if nonce.is_file() else None

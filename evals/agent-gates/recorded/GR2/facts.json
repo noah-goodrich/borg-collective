@@ -1,0 +1,19 @@
+{
+  "files_after": {
+    ".gitignore": "__pycache__/\n",
+    "app.py": "def load_users(path):\n    return open(path).read().split()\n\n\ndef save_user(user, path):\n    open(path, 'a').write(user + '\\n')\n\n\ndef user_report(users):\n    return len(users)\n",
+    "main.py": "from app import load_users, save_user, user_report\n\nprint(user_report(load_users('users.txt')))\n"
+  },
+  "files_before": {
+    ".gitignore": "__pycache__/\n",
+    "app.py": "def load_users(path):\n    return open(path).read().split()\n\n\ndef save_user(user, path):\n    open(path, 'a').write(user + '\\n')\n\n\ndef user_report(users):\n    return len(users)\n",
+    "main.py": "from app import load_users, save_user, user_report\n\nprint(user_report(load_users('users.txt')))\n"
+  },
+  "git_log_after": [
+    "init"
+  ],
+  "git_log_before": [
+    "init"
+  ],
+  "status_clean": true
+}

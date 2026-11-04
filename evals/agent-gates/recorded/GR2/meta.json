@@ -1,0 +1,7 @@
+{
+  "case": "GR2",
+  "name": "judgment-call",
+  "agent": "borg-grunt",
+  "kind": "grunt-blocked",
+  "pin": "claude-haiku-5-5"
+}

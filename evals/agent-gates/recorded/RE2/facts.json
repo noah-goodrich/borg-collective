@@ -1,0 +1,15 @@
+{
+  "files_after": {
+    "README.md": "scratch\n"
+  },
+  "files_before": {
+    "README.md": "scratch\n"
+  },
+  "git_log_after": [
+    "init"
+  ],
+  "git_log_before": [
+    "init"
+  ],
+  "status_clean": true
+}

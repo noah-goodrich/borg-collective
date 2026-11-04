@@ -68,9 +68,14 @@
         "evals/agent-gates/**",
         "agents/borg-nanoprobe.md",
         "agents/borg-verifier.md",
+        "agents/borg-grunt.md",
+        "agents/borg-scout.md",
+        "agents/borg-reviewer.md",
+        "agents/borg-researcher.md",
         "skills/borg-verify/**",
         "hooks/borg-nanoprobe-guard.sh",
-        "hooks/borg-verifier-guard.sh"
+        "hooks/borg-verifier-guard.sh",
+        "hooks/scout-readonly-guard.sh"
       ],
       "tiers": [
         1,
@@ -94,27 +99,22 @@
   },
   "items": {
     "agents/borg-grunt": {
-      "waiver": "Phase 4 long-tail review (evals-for-everything)",
-      "review_by": "2027-01-31"
+      "eval": "evals/agent-gates"
     },
     "agents/borg-nanoprobe": {
       "eval": "evals/agent-gates"
     },
     "agents/borg-researcher": {
-      "waiver": "Phase 4 long-tail review (evals-for-everything)",
-      "review_by": "2027-01-31"
+      "eval": "evals/agent-gates"
     },
     "agents/borg-reviewer": {
-      "waiver": "Phase 4 long-tail review (evals-for-everything)",
-      "review_by": "2027-01-31"
+      "eval": "evals/agent-gates"
     },
     "agents/borg-scout": {
-      "waiver": "Phase 4 long-tail review (evals-for-everything)",
-      "review_by": "2027-01-31"
+      "eval": "evals/agent-gates"
     },
     "agents/borg-verifier": {
-      "waiver": "Phase 4 long-tail review (evals-for-everything)",
-      "review_by": "2027-01-31"
+      "eval": "evals/agent-gates"
     },
     "skills/adhd-guardrails": {
       "waiver": "always-on guidance with no observable output to grade; revisit in the Phase 4 waiver review",
