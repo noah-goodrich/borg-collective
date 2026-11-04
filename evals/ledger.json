@@ -89,7 +89,11 @@
         "skills/borg-review/**",
         "skills/break-glass/**",
         "bin/borg-resume",
-        "lib/borg/resume*.sh"
+        "lib/borg/resume*.sh",
+        "skills/borg-switch/**",
+        "skills/pane/**",
+        "skills/borg-collective-review/**",
+        "skills/adhd-guardrails/**"
       ],
       "tiers": [
         1,
@@ -117,15 +121,13 @@
       "eval": "evals/agent-gates"
     },
     "skills/adhd-guardrails": {
-      "waiver": "always-on guidance with no observable output to grade; revisit in the Phase 4 waiver review",
-      "review_by": "2027-01-31"
+      "eval": "evals/orchestrator-skills"
     },
     "skills/borg-assimilate": {
       "eval": "evals/lifecycle-manifests"
     },
     "skills/borg-collective-review": {
-      "waiver": "Phase 4 long-tail review (evals-for-everything): multi-persona review, graded only by a judge model",
-      "review_by": "2027-01-31"
+      "eval": "evals/orchestrator-skills"
     },
     "skills/borg-link": {
       "eval": "evals/link-next"
@@ -146,8 +148,7 @@
       "eval": "evals/orchestrator-skills"
     },
     "skills/borg-switch": {
-      "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
-      "review_by": "2027-01-31"
+      "eval": "evals/orchestrator-skills"
     },
     "skills/borg-verify": {
       "eval": "evals/agent-gates"
@@ -156,8 +157,7 @@
       "eval": "evals/orchestrator-skills"
     },
     "skills/pane": {
-      "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
-      "review_by": "2027-01-31"
+      "eval": "evals/orchestrator-skills"
     }
   }
 }

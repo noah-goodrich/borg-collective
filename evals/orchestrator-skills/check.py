@@ -1293,7 +1293,6 @@ def env_proofs(repo: Path, wf_run: str, script_rel: str, stray: str, criteria: s
     return out
 
 
-
 # ── step 3b offline proofs ───────────────────────────────────────────────────────────────────────────────────────────
 def _read(repo: Path, rel: str) -> str:
     try:
@@ -1318,7 +1317,12 @@ def skill_proofs(repo: Path) -> list[tuple[str, str, str]]:
         "ENV-switch-skill",
         _has_all(
             _read(repo, "skills/borg-switch/SKILL.md"),
-            ["borg switch <name>", "borg link --local --all --overview", "Switched to <repository>", "borg link --overview"],
+            [
+                "borg switch <name>",
+                "borg link --local --all --overview",
+                "Switched to <repository>",
+                "borg link --overview",
+            ],
         ),
         "borg-switch names its two commands, the confirmation and the failure pointer",
     )
@@ -1333,7 +1337,10 @@ def skill_proofs(repo: Path) -> list[tuple[str, str, str]]:
     ad = _read(repo, "skills/adhd-guardrails/SKILL.md")
     row(
         "ENV-adhd-skill",
-        _has_all(ad, ["This isn't in the current plan.", "Add it (adjusts timeline) or note it for later?", "CAPACITY WARNING"]),
+        _has_all(
+            ad,
+            ["This isn't in the current plan.", "Add it (adjusts timeline) or note it for later?", "CAPACITY WARNING"],
+        ),
         "adhd-guardrails carries the not-in-plan wording, the add-or-defer choice and the capacity rule",
     )
     flagged = re.search(r"^user-invocable:\s*false\s*$", ad, re.M) is not None
@@ -1346,13 +1353,22 @@ def skill_proofs(repo: Path) -> list[tuple[str, str, str]]:
             else "adhd-guardrails is user-invocable now: the delivery premise of AD1-AD4 changed",
         )
     )
-    review, personas = _read(repo, "skills/borg-collective-review/SKILL.md"), _read(repo, "skills/borg-collective-review/references/personas.md")
-    gone = _has_all(review, ["## The Collective Review", "Code owners summoned:", "Rotating specialist:", "**The Adult:**"])
+    review, personas = (
+        _read(repo, "skills/borg-collective-review/SKILL.md"),
+        _read(repo, "skills/borg-collective-review/references/personas.md"),
+    )
+    gone = _has_all(
+        review, ["## The Collective Review", "Code owners summoned:", "Rotating specialist:", "**The Adult:**"]
+    )
     gone += _has_all(review, [f"**{v}:**" for v in CORE_VOICES])
     stated = re.search(r"Total review:\s*\d+-(\d+) lines", review)
     if not stated or int(stated.group(1)) != REVIEW_STATED_MAX:
         gone.append(f"'Total review: N-{REVIEW_STATED_MAX} lines' (the grader's length bound derives from it)")
-    row("ENV-cr-skill", gone, f"the review template and its stated length ({REVIEW_STATED_MAX}) are what the graders match")
+    row(
+        "ENV-cr-skill",
+        gone,
+        f"the review template and its stated length ({REVIEW_STATED_MAX}) are what the graders match",
+    )
     tier2 = personas.split("## Tier 2", 1)[-1].split("## Tier 3", 1)[0]
     owners = tuple(re.findall(r"^### (The [A-Za-z' -]+)$", tier2, re.M))
     tier1 = personas.split("## Tier 2", 1)[0]
@@ -1364,7 +1380,11 @@ def skill_proofs(repo: Path) -> list[tuple[str, str, str]]:
         bad.append(f"core cast {cores} differs from the grader's")
     if "Non-trivial schema changes" not in personas:
         bad.append("the Database Architect summon rule (non-trivial schema changes)")
-    row("ENV-cr-personas", bad, "personas.md lists the graders' six core voices and six code owners with the schema summon rule")
+    row(
+        "ENV-cr-personas",
+        bad,
+        "personas.md lists the graders' six core voices and six code owners with the schema summon rule",
+    )
     ok = REVIEW_LINES_MAX == int(REVIEW_STATED_MAX * REVIEW_HEADROOM) and REVIEW_LINES_MAX > REVIEW_STATED_MAX
     out.append(
         (
@@ -1397,9 +1417,7 @@ def source_texts(repo: Path, wname: str, count: str, limit: str) -> dict[str, st
         else None,
         "pane-new": f"{wname}: " + new.replace("$direction", "{dir}") if new else None,
         "pane-nodir": _src(drone, r'die "(Specify a direction: top, bottom, left, or right\.)"'),
-        "switch-fail": (
-            _src(borg, r'warn "(No tmux window registered for)\s*\$repository"')
-        ),
+        "switch-fail": (_src(borg, r'warn "(No tmux window registered for)\s*\$repository"')),
         "capacity": cap.replace("$_active_count", count).replace("$_max_active", limit) if cap else None,
     }
     return out
@@ -1413,7 +1431,9 @@ def src_proofs(repo: Path, texts: Path, wname: str, count: str, limit: str) -> l
         f = texts / f"{kind}.txt"
         ident = f"SRC-{kind}"
         if expected is None:
-            out.append(("fail", ident, "the source line this text is copied from could not be found (it moved or changed)"))
+            out.append(
+                ("fail", ident, "the source line this text is copied from could not be found (it moved or changed)")
+            )
             continue
         if not f.is_file():
             out.append(("fail", ident, f"no captured text at {f.name}"))

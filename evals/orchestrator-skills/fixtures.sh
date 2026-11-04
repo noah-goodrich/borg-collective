@@ -239,45 +239,11 @@ _os_prompt_leaks() {
 #   EVAL_STUB_LOG   the log (outside the repository, so it never moves a file hash)
 #   EVAL_STUB_MODE  switch-fail | pane-new | pane-reuse | pane-reuse-zoomed
 _OS_STUB_WNAME="alpha-api"
-_os_write_stub() {
-    local dest="$1"
-    cat > "$dest" <<'STUB'
-#!/usr/bin/env bash
-printf '%s\n' "${0##*/} $*" >> "${EVAL_STUB_LOG:?}"
-wname="alpha-api"
-case "${0##*/}:${1:-}" in
-    borg:switch)
-        if [ "${EVAL_STUB_MODE:-}" = switch-fail ]; then
-            echo "▸ No tmux window registered for ${2:-}"
-            exit 1
-        fi
-        exit 0 ;;
-    borg:link)
-        printf 'repository   state\nalpha-api    active\nbeacon-web   waiting\ncedar-docs   idle\n'
-        exit 0 ;;
-    drone:pane)
-        if [ -z "${2:-}" ]; then
-            echo "▸ ERROR: Specify a direction: top, bottom, left, or right." >&2
-            exit 1
-        fi
-        case "${EVAL_STUB_MODE:-pane-new}" in
-            pane-reuse) echo "▸ $wname: reusing existing side pane %7 (two panes per window)"; echo "%7" ;;
-            pane-reuse-zoomed) echo "▸ $wname: reusing existing side pane %7 (two panes per window, unzoomed)"; echo "%7" ;;
-            *) echo "▸ $wname: new pane opened ($2)" ;;
-        esac
-        exit 0 ;;
-esac
-echo "stub: unsupported: ${0##*/} $*" >&2
-exit 2
-STUB
-    chmod +x "$dest"
-}
-
 # The sandbox bin for the stub cases: the usual allowlist plus the two stubs. Args: <bindir>
 _os_stub_bin() {
     local bindir="$1"
     _os_allowlist_bin "$bindir" 0 >/dev/null
-    _os_write_stub "$bindir/borg"
+    ln -sf "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/stub-cli.sh" "$bindir/borg"
     ln -sf "$bindir/borg" "$bindir/drone"
     printf '%s\n' "$bindir"
 }

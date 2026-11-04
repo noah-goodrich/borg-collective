@@ -184,18 +184,18 @@ run_cases() {
     fi
     # THE SWEEP'S GROUPS DO NOT MOVE: the weekly sweep calls live.sh with one of these selectors (borg_core/evals/sweep/shell.py)
     # and reserves budget from fixed case lists, so each must still select exactly the cases it did before step 3b.
-    if live_dry --case review 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'RV1 RV2 RV4 ' \
-        && live_dry --case break-glass 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'BG1 BG2 BG3 ' \
-        && live_dry --case resume 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'RS1 RS2 RS3 RS4 '; then
+    if live_dry --case review 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'RV1 RV2 RV4 ' \
+        && live_dry --case break-glass 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'BG1 BG2 BG3 ' \
+        && live_dry --case resume 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'RS1 RS2 RS3 RS4 '; then
         ok "ENV the sweep's selectors (review, resume, break-glass) still select exactly their original cases"
     else
         bad "ENV a sweep selector (review, resume or break-glass) no longer selects its original cases"
     fi
-    if live_dry --case switch 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'SW1 SW2 SW3 ' \
-        && live_dry --case pane 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'PN1 PN2 PN3 ' \
-        && live_dry --case collective-review 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'CR1 CR2 ' \
-        && live_dry --case adhd 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'AD1 AD3 AD2 ' \
-        && live_dry --case AD4 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'AD2 ' \
+    if live_dry --case switch 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'SW1 SW2 SW3 ' \
+        && live_dry --case pane 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'PN1 PN2 PN3 ' \
+        && live_dry --case collective-review 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'CR1 CR2 ' \
+        && live_dry --case adhd 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'AD1 AD3 AD2 ' \
+        && live_dry --case AD4 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'AD2 ' \
         && ! grep -q '^CASE ADP' "$OUT/dry-all.txt"; then
         ok "ENV the step 3b selectors select their own cases (adhd runs the positive before its negative), AD4 rides AD2's run, the probe is in no default"
     else
@@ -333,7 +333,7 @@ _env_stubs() {
     EVAL_STUB_MODE=switch-fail "$bin/borg" switch nonesuch-repo > "$t/switch-fail.txt" 2>&1
     _os_capacity_text "$_OS_CAP_COUNT" "$_OS_CAP_LIMIT" > "$t/capacity.txt"
     unset EVAL_STUB_LOG
-    if [ "$(wc -l < "$log" | tr -d ' ')" -eq 5 ] && sed -n 1p "$log" | grep -qx 'drone pane right' && sed -n 5p "$log" | grep -qx 'borg switch nonesuch-repo'; then
+    if [ "$(grep -c '' "$log")" -eq 5 ] && sed -n 1p "$log" | grep -qx 'drone pane right' && sed -n 5p "$log" | grep -qx 'borg switch nonesuch-repo'; then
         ok "ENV the stubs log one argv line per call"
     else
         bad "ENV the stubs did not log what they were called with (see $log)"
