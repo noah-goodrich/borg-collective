@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Offline harness (Tier 1) for the two agent gates: borg-nanoprobe's scope gate and borg-verifier (the engine of
-# /borg-verify). THIS FILE NEVER REACHES A MODEL, THE WIRE OR A CREDENTIAL. The live half is live.sh (headless
+# Offline harness (Tier 1) for the agent gates: borg-nanoprobe's scope gate, borg-verifier (the engine of
+# /borg-verify), and the four leaf workers borg-grunt, borg-scout, borg-reviewer and borg-researcher (GR*, SC*, RW*, RE*). THIS FILE NEVER REACHES A MODEL, THE WIRE OR A CREDENTIAL. The live half is live.sh (headless
 # `claude -p --agent`, a developer command that spends money, never CI); it records each case as a sanitized,
 # content-stripped stream plus sandbox facts under recorded/, and this harness grades those recordings with the same
 # check.py that grades a live run:
@@ -80,10 +80,13 @@ run_cases() {
     "$PYTHON" "$HERE/check.py" env "$REPO" > "$OUT/env.txt" 2>&1
     tally env "$OUT/env.txt"
 
-    if [ ! -f "$REC/V3/meta.json" ] || [ ! -f "$REC/NP1/meta.json" ]; then
-        bad "no recording at $REC: run evals/agent-gates/live.sh --record"
-        return
-    fi
+    local want
+    for want in NP1 NP2 NP3 NP4 V1 V2 V3 V4 GR1 GR2 SC1 SC2 RW1 RW2 RE1 RE2; do
+        if [ ! -f "$REC/$want/meta.json" ]; then
+            bad "no recording at $REC/$want: run evals/agent-gates/live.sh --case $want --record"
+            return
+        fi
+    done
 
     # RECORDED
     "$PYTHON" "$HERE/check.py" grade "$REC" > "$OUT/grade.txt" 2>&1

@@ -1,0 +1,7 @@
+{
+  "case": "RW1",
+  "name": "planted-flaw",
+  "agent": "borg-reviewer",
+  "kind": "review-flaw",
+  "pin": "claude-sonnet-5-5"
+}

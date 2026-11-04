@@ -1,0 +1,7 @@
+{
+  "case": "SC2",
+  "name": "absent-symbol",
+  "agent": "borg-scout",
+  "kind": "scout-absent",
+  "pin": "claude-haiku-5-5"
+}

@@ -1,0 +1,26 @@
+{
+  "def_line": 19,
+  "def_path": "src/billing/ledger.py",
+  "files_after": {
+    "docs/notes.md": "The ledger is settled nightly by settle_ledger_7458ff.\n",
+    "src/billing/__init__.py": "",
+    "src/billing/cleanup.py": "def purge_expired(rows):\n    return [r for r in rows if r]\n",
+    "src/billing/ledger.py": "import math\n\n# note 0\n# note 1\n# note 2\n# note 3\n# note 4\n# note 5\n# note 6\n# note 7\n# note 8\n# note 9\n# note 10\n\ndef open_ledger():\n    return []\n\n\ndef settle_ledger_7458ff(entries):\n    return sum(entries)\n",
+    "src/billing/report.py": "from .ledger import settle_ledger_7458ff\n\nprint(settle_ledger_7458ff([1]))\n"
+  },
+  "files_before": {
+    "docs/notes.md": "The ledger is settled nightly by settle_ledger_7458ff.\n",
+    "src/billing/__init__.py": "",
+    "src/billing/cleanup.py": "def purge_expired(rows):\n    return [r for r in rows if r]\n",
+    "src/billing/ledger.py": "import math\n\n# note 0\n# note 1\n# note 2\n# note 3\n# note 4\n# note 5\n# note 6\n# note 7\n# note 8\n# note 9\n# note 10\n\ndef open_ledger():\n    return []\n\n\ndef settle_ledger_7458ff(entries):\n    return sum(entries)\n",
+    "src/billing/report.py": "from .ledger import settle_ledger_7458ff\n\nprint(settle_ledger_7458ff([1]))\n"
+  },
+  "git_log_after": [
+    "init"
+  ],
+  "git_log_before": [
+    "init"
+  ],
+  "status_clean": true,
+  "symbol": "settle_ledger_7458ff"
+}

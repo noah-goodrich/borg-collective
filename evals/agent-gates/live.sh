@@ -4,8 +4,10 @@
 #
 #   usage: evals/agent-gates/live.sh [--case NAME]... [--record] [--max-budget-usd USD]
 #
-#   --case NAME           one case (repeatable); EVAL_CASES="NP1 V3" does the same. Default: all eight.
+#   --case NAME           one case (repeatable); EVAL_CASES="NP1 V3" does the same. Default: the original eight.
 #                         NP1-NP4 grade borg-nanoprobe's scope gate; V1-V4 grade borg-verifier (/borg-verify).
+#                         GR1-GR2 grade borg-grunt, SC1-SC2 borg-scout, RW1-RW2 borg-reviewer, RE1-RE2
+#                         borg-researcher. Those eight run ONLY when named (the weekly sweep names its own list).
 #   --record              copy each passing case's sanitized recording to evals/agent-gates/recorded/<case>
 #   --max-budget-usd USD  hard `claude --max-budget-usd` ceiling for EACH attempt (default 0.50, EVAL_MAX_BUDGET_USD)
 #
@@ -14,7 +16,9 @@
 # the agent's own `model:` pin is the thing under test (measured 2026-11-03: `--model` OVERRIDES the pin, so passing it
 # would grade the wrong model). Instead `--settings '{"model":"haiku"}'` makes the session DEFAULT a different model
 # than the pin, so a session that never loaded the agent shows no usage of the pin; `grade` SKIPs a case whose result's
-# modelUsage lacks the pin (measured: the agent's pin beats the settings model). Each attempt runs in a throwaway git
+# modelUsage lacks the pin (measured: the agent's pin beats the settings model). The settings model is per agent
+# (case.json `default_model`): `haiku` for the sonnet-pinned agents, `sonnet` for the haiku-pinned ones, since a haiku
+# default would put the haiku pin into modelUsage even when the agent never loaded. Each attempt runs in a throwaway git
 # repository under mktemp with the real HOME: a hermetic HOME loses the subscription login, so the user's CLAUDE.md is
 # in the session; graders read only the reduced trace, and the recorder commits nothing but a whitelisted subset of the
 # stream (see check.py).
@@ -40,7 +44,7 @@ while [ $# -gt 0 ]; do
         --case) WANT+=("$2"); shift ;;
         --record) RECORD=1 ;;
         --max-budget-usd) BUDGET="$2"; shift ;;
-        -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
         *) echo "unknown flag: $1" >&2; exit 2 ;;
     esac
     shift
@@ -48,7 +52,7 @@ done
 # shellcheck disable=SC2206
 [ ${#WANT[@]} -gt 0 ] || WANT=(${EVAL_CASES:-NP1 NP2 NP3 NP4 V1 V2 V3 V4})
 for c in "${WANT[@]}"; do
-    case " NP1 NP2 NP3 NP4 V1 V2 V3 V4 " in *" $c "*) ;; *) echo "unknown case: $c" >&2; exit 2 ;; esac
+    case " NP1 NP2 NP3 NP4 V1 V2 V3 V4 GR1 GR2 SC1 SC2 RW1 RW2 RE1 RE2 " in *" $c "*) ;; *) echo "unknown case: $c" >&2; exit 2 ;; esac
 done
 
 _rec() {
@@ -73,10 +77,14 @@ fi
 
 NP_TOOLS='Bash(git:*) Bash(mkdir:*) Bash(ls:*) Bash(cat:*) Bash(pwd:*) Bash(printf:*) Bash(echo:*) Bash(test:*)'
 V_TOOLS='Bash(bash:*) Bash(git:*) Bash(ls:*) Bash(cat:*) Bash(pwd:*) Bash(test:*)'
+GR_TOOLS='Bash(bash:*) Bash(git:*) Bash(ls:*) Bash(cat:*) Bash(pwd:*) Bash(test:*) Bash(python3:*)'
+SC_TOOLS='Bash(grep:*) Bash(rg:*) Bash(find:*) Bash(ls:*) Bash(cat:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(git:*)'
+RW_TOOLS='Read Grep Glob'
+RE_TOOLS='Bash(mkdir:*) Bash(ls:*) Bash(cat:*) Bash(pwd:*) WebSearch WebFetch'
 
 # One attempt of one case into $2 (a directory). Sets VERDICT, REASON, COST, TURNS; adds COST to TOTAL.
 _attempt() {
-    local c="$1" d="$2" root agent tools result crc subtype
+    local c="$1" d="$2" root agent tools result crc subtype dmodel
     rm -rf "$d"; mkdir -p "$d"
     root="$(mktemp -d "${TMPDIR:-/tmp}/sbx.XXXXXX")"
     root="$(cd "$root" && pwd -P)"
@@ -85,9 +93,17 @@ _attempt() {
         REASON="sandbox setup failed: $(head -1 "$d/setup.err")"; return
     fi
     agent="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["agent"])' "$root/case.json")"
-    case "$agent" in borg-nanoprobe) tools="$NP_TOOLS" ;; *) tools="$V_TOOLS" ;; esac
+    dmodel="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("default_model", "haiku"))' "$root/case.json")"
+    case "$agent" in
+        borg-nanoprobe) tools="$NP_TOOLS" ;;
+        borg-grunt) tools="$GR_TOOLS" ;;
+        borg-scout) tools="$SC_TOOLS" ;;
+        borg-reviewer) tools="$RW_TOOLS" ;;
+        borg-researcher) tools="$RE_TOOLS" ;;
+        *) tools="$V_TOOLS" ;;
+    esac
     ( cd "$root/repo" && claude -p "$(cat "$root/prompt.txt")" --agent "borg-collective:$agent" \
-        --settings '{"model":"haiku"}' --plugin-dir "$PLUGIN" --permission-mode acceptEdits --allowedTools "$tools" \
+        --settings "{\"model\":\"$dmodel\"}" --plugin-dir "$PLUGIN" --permission-mode acceptEdits --allowedTools "$tools" \
         --output-format stream-json --verbose --max-budget-usd "$BUDGET" > "$d/raw.jsonl" 2> "$d/err.txt" )
     crc=$?
     result="$(grep '"type":"result"' "$d/raw.jsonl" | tail -n 1)"

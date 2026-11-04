@@ -1,0 +1,7 @@
+{
+  "case": "SC1",
+  "name": "locate",
+  "agent": "borg-scout",
+  "kind": "scout-locate",
+  "pin": "claude-haiku-5-5"
+}
