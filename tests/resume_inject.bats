@@ -63,6 +63,18 @@ launch_fake() {
     done
 }
 
+# split_fake [session]: split a second fake into the session and wait for its first draw, so its
+# pane_current_command already names the fake when the test reads it (a bare split-window races).
+split_fake() {
+    local _s="${1:-t}" _p _i=0
+    _p="$(tmux -L "$SOCK" split-window -t "$_s" -d -P -F '#{pane_id}' env "${BATS_TEST_TMPDIR}/bin/claude")"
+    while [ "$_i" -lt 50 ]; do
+        tmux -L "$SOCK" capture-pane -p -t "$_p" 2>/dev/null | grep -q . && break
+        sleep 0.1
+        _i=$((_i + 1))
+    done
+}
+
 pane_of() { tmux -L "$SOCK" list-panes -t "${1:-t}" -F '#{pane_id}'; }
 panepid_of() { tmux -L "$SOCK" list-panes -t "${1:-t}" -F '#{pane_pid}' | head -1; }
 
@@ -185,7 +197,7 @@ keylog() { cat "$FAKE_KEYLOG"; }
 
 @test "bind_container: two claude panes never bind and never fall back to the rightmost" {
     launch_fake t
-    tmux -L "$SOCK" split-window -t t -d env "${BATS_TEST_TMPDIR}/bin/claude"
+    split_fake t
     tmux -L "$SOCK" set-option -w -t t @project_dir /work/proj
     run bash -c ". '$LIB'; borg_inject_bind_container '$SID' /work/proj"
     [ "$status" -ne 0 ]
