@@ -20,7 +20,24 @@ setup() {
     [ "${lines[0]}" = "/tmp" ]
     [ "${lines[1]}" = "/private/tmp" ]
     [ "${lines[2]}" = "/var/folders" ]
-    [ "${lines[3]}" = "/somewhere/custom" ]
+    [ "${lines[3]}" = "/private/var/folders" ]
+    [ "${lines[4]}" = "/somewhere/custom" ]
+}
+
+@test "scan temp roots: both /var/folders and /private/var/folders sandbox paths hit the temp-root skip" {
+    unset BORG_SCAN_TEMP_ROOTS
+    # The path does not exist, so the later "no longer on disk" skip also returns 0; the dbg line is only
+    # printed by the temp-root branch, so it is what tells the two apart.
+    local p
+    for p in /private/var/folders/xy/abc/T/sbx.123/repo /var/folders/xy/abc/T/sbx.123/repo; do
+        run zsh -c "
+            source '$BORG_HOME/lib/registry.zsh'
+            dbg() { print -r -- \"\$*\"; }
+            borg_scan_path_should_skip '$p'
+        "
+        [ "$status" -eq 0 ]
+        [[ "$output" == *"skipping temp path $p"* ]] || false
+    done
 }
 
 @test "scan temp roots: a path under a temp root is skipped, a sibling is not" {

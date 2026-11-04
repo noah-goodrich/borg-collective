@@ -326,7 +326,8 @@ borg_reap_persist() {
     return 0
 }
 
-# Temp roots a scan never registers a repository under, one per line: /tmp, /private/tmp, /var/folders and
+# Temp roots a scan never registers a repository under, one per line: /tmp, /private/tmp, /var/folders,
+# /private/var/folders (macOS resolves /var to /private/var, and eval sessions log the resolved spelling) and
 # $TMPDIR when set. BORG_SCAN_TEMP_ROOTS (colon-separated) REPLACES the list; the bats sandbox sets it, because
 # the sandbox itself lives under a temp root.
 borg_scan_temp_roots() {
@@ -337,6 +338,7 @@ borg_scan_temp_roots() {
     print -r -- /tmp
     print -r -- /private/tmp
     print -r -- /var/folders
+    print -r -- /private/var/folders
     [[ -n "${TMPDIR:-}" ]] && print -r -- "${TMPDIR%/}"
     return 0
 }
