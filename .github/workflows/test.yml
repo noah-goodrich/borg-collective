@@ -70,10 +70,15 @@ jobs:
         uses: bats-core/bats-action@4.0.0
       # GitHub's ubuntu-latest has 4 CPUs on a public repository, so 4 jobs matches it. bats `--jobs`
       # needs GNU parallel (installed above). `--no-parallelize-within-files` because running the tests
-      # inside one file in parallel added a failure locally (link-next) while file-level parallelism
-      # added none.
+      # inside one file in parallel added a failure locally (link-next). tests/resume_hook.bats runs alone
+      # in the next step because it asserts wall-clock budgets of 50 and 100 ms, which failed on `main`
+      # under `--jobs 4` when other files shared the CPUs.
       - name: Run full suite
-        run: bats --jobs 4 --no-parallelize-within-files tests/*.bats
+        run: |
+          shopt -s extglob
+          bats --jobs 4 --no-parallelize-within-files tests/!(resume_hook).bats
+      - name: Run the latency-budget suite alone
+        run: bats tests/resume_hook.bats
 
   python:
     # T4 (python-core-and-toolchain directive, Part 1): pinned to the Python version installed on
