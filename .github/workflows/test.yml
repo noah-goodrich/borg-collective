@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt-get install -y zsh jq fzf
+        run: sudo apt-get install -y zsh jq fzf parallel
       # WHY A BATS JOB INSTALLS PYTHON: exactly one suite needs it. tests/eval_floor.bats is the
       # oracle for the eval harness's execution floors, and FIVE of its ten cases must EXECUTE
       # evals/*/run.sh — whose one always-runnable case (E2a) is a pytest selection, and pytest is a
@@ -68,8 +68,12 @@ jobs:
       # under us with no signal in this repo. Pinned to a released action version.
       - name: Setup bats
         uses: bats-core/bats-action@4.0.0
+      # GitHub's ubuntu-latest has 4 CPUs on a public repository, so 4 jobs matches it. bats `--jobs`
+      # needs GNU parallel (installed above). `--no-parallelize-within-files` because running the tests
+      # inside one file in parallel added a failure locally (link-next) while file-level parallelism
+      # added none.
       - name: Run full suite
-        run: bats tests/*.bats
+        run: bats --jobs 4 --no-parallelize-within-files tests/*.bats
 
   python:
     # T4 (python-core-and-toolchain directive, Part 1): pinned to the Python version installed on
