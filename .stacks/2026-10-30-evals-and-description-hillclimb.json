@@ -71,6 +71,13 @@
       "ref": "noah-goodrich/borg-collective#523",
       "status": "open",
       "why": "Step 3a-C: sweep agent-gates and orchestrator-skills, $15 cap to 2026-12-03"
+    },
+    {
+      "lane": "_default",
+      "order": "11",
+      "ref": "noah-goodrich/borg-collective#529",
+      "status": "open",
+      "why": "Step 3b-A: agent-gates evals for borg-grunt, scout, reviewer, researcher (AC3); tracking #480"
     }
   ]
 }
