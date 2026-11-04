@@ -257,7 +257,9 @@ _env_args() {
         "GIT_COMMITTER_EMAIL=eval@localhost" "BORG_IN_CONTAINER=0"
     case "$c" in
         BG*) printf '%s\n' "EVAL_ALLOW_WRITE=$sb/repo/.claude/settings.local.json" ;;
-        SW*|PN*) printf '%s\n' "EVAL_STUB_LOG=$sb/state/stub.log" "EVAL_STUB_MODE=$(_stub_mode "$c")" ;;
+        # BORG_NO_SESSION_HOOKS=1: the plugin's SessionStart hook runs `borg link repo --json`, which the stub logged ahead
+        # of the model's own call (measured 2026-11-04, SW1's first run). The log must hold only what the skill ran.
+        SW*|PN*) printf '%s\n' "EVAL_STUB_LOG=$sb/state/stub.log" "EVAL_STUB_MODE=$(_stub_mode "$c")" "BORG_NO_SESSION_HOOKS=1" ;;
         RS*) printf '%s\n' "BORG_RESUME_DIR=$sb/state/resume" "BORG_RESUME_PROJECTS_DIR=$sb/state/projects" \
                 "BORG_RESUME_NOW_EPOCH=$_OS_SEED_EPOCH" ;;
     esac

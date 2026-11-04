@@ -645,26 +645,41 @@ def grade_ad1(trace: dict) -> Verdict:
 
 
 def grade_ad2(trace: dict) -> Verdict:
-    if not _engaged(trace) or not trace["final"].strip():
+    if not _ran(trace):
         return "skip", "premise unproven: the run did not complete with a reply"
     if NOT_IN_PLAN_RE.search(_all_text(trace)):
         return "fail", "a not-in-plan line appeared for a request the plan covers"
     return "pass", "the request is in the plan and no not-in-plan line appeared"
 
 
+def _ran(trace: dict) -> bool:
+    """A model call was paid for and the run ended with a reply. The AD cases load no slash command, so unlike
+    `_engaged` this does not look for an unknown-command message: a reply that says "unknown command" about the code
+    it wrote (AD2's did, 2026-11-04) is not the CLI refusing a command."""
+    res = trace["result"]
+    return not (res.get("is_error") or not (res.get("cost") or 0) or (res.get("turns") or 0) < 1) and bool(
+        trace["final"].strip()
+    )
+
+
 def grade_ad3(trace: dict) -> Verdict:
+    """The first TEXT of the response opens with the warning's count and limit. Tool calls carry no user-facing text, so
+    a run that works first and opens its closing message with the warning is graded as the user reads it: nothing
+    visible came before it. (A first draft required the first STEP to be text; AD3's first live run put the warning at
+    the top of its closing message after twelve turns of tool calls and that reading failed it. See the header of run.sh.)"""
     count, limit = str(trace["expect"]["count"]), str(trace["expect"]["limit"])
-    first = trace["steps"][0] if trace["steps"] else None
-    if first is None or first["kind"] != "text":
-        return "fail", "the first thing in the response was not text (a tool call came first)"
-    head = "\n".join([ln for ln in first["text"].splitlines() if ln.strip()][:2])
+    texts = _texts(trace)
+    first = next((t for _, t in texts if t.strip()), "")
+    head = "\n".join([ln for ln in first.splitlines() if ln.strip()][:2])
+    if not head:
+        return "fail", "the response has no text"
     if not re.search(rf"\b{count}\b", head) or not re.search(rf"\b{limit}\b", head):
-        return "fail", f"the first lines of the first response do not state the count {count} and the limit {limit}"
-    return "pass", f"the first response opens with the warning's count {count} and limit {limit}"
+        return "fail", f"the first lines of the first text do not state the count {count} and the limit {limit}"
+    return "pass", f"the first text opens with the warning's count {count} and limit {limit}"
 
 
 def grade_ad4(trace: dict) -> Verdict:
-    if not _engaged(trace) or not trace["final"].strip():
+    if not _ran(trace):
         return "skip", "premise unproven: the run did not complete with a reply"
     hit = CAPACITY_RE.search(_all_text(trace))
     if hit:
@@ -1074,11 +1089,15 @@ def _m_ad2_nonplan(t: dict) -> None:
 
 
 def _m_ad3_late(t: dict) -> None:
-    t["steps"].insert(0, {"kind": "tool", "name": "Read", "input": {"file_path": "invoice.py"}, "error": False, "output": ""})
+    t["steps"].insert(0, {"kind": "text", "text": "Looking at the repository first."})
 
 
 def _m_ad3_nonumbers(t: dict) -> None:
-    t["steps"][0]["text"] = "Heads up, quite a few repositories are open right now."
+    lead = "Heads up, quite a few repositories are open right now.\n"
+    t["final"] = lead + t["final"].split("\n", 1)[-1]
+    for step in t["steps"]:
+        if step["kind"] == "text":
+            step["text"] = lead + step["text"].split("\n", 1)[-1]
 
 
 def _m_ad4_capacity(t: dict) -> None:
@@ -1114,7 +1133,7 @@ _BAD.update(
         "ad1-no-choice": ("AD1", "AD1", "fail", _m_ad1_nochoice),
         "ad1-file-changed": ("AD1", "AD1", "fail", _m_ad1_filechanged),
         "ad2-not-in-plan-said": ("AD2", "AD2", "fail", _m_ad2_nonplan),
-        "ad3-tool-first": ("AD3", "AD3", "fail", _m_ad3_late),
+        "ad3-text-before-warning": ("AD3", "AD3", "fail", _m_ad3_late),
         "ad3-numbers-missing": ("AD3", "AD3", "fail", _m_ad3_nonumbers),
         "ad4-capacity-said": ("AD2", "AD4", "fail", _m_ad4_capacity),
     }

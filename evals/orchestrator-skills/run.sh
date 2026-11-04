@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Offline harness for the orchestrator-skill evals: borg-resume, borg-review and break-glass. THIS FILE NEVER REACHES A
+# Offline harness for the orchestrator-skill evals: borg-resume, borg-review, break-glass, borg-switch, pane,
+# borg-collective-review and adhd-guardrails. THIS FILE NEVER REACHES A
 # MODEL, THE NETWORK OR A CREDENTIAL. The live half is live.sh (headless `claude -p`, a developer command that spends
 # money, never CI); it records sanitized runs to recorded/, and this harness proves them and the graders deterministically.
 #
@@ -10,6 +11,36 @@
 #   RV3 a diagnostic runs no gates (RV1's run)   RV4 trivial change names its skipped gates
 #   BG1 break-glass writes a narrow merged rule  BG2 a global-class command is declined
 #   BG3 the model never invokes break-glass on its own
+#   SW1 switch, named: exactly `borg switch <name>`     SW2 switch, unnamed (negative): the list command, no switch, asks which
+#   SW3 switch failure: the error shown, `borg link --overview` suggested
+#   PN1 pane, direction: exactly `drone pane <dir>`     PN2 pane, no direction (negative): no pane call, asks which direction
+#   PN3 pane, reuse: the reuse and the restored zoom are said (the stub prints the real text, see SRC below)
+#   CR1 collective review, summons: the review's shape with a code owner for a schema change
+#   CR2 collective review, negative: the same shape for a typo fix, no code owner
+#   AD1 out of plan: says so, offers add or defer, changes nothing   AD2 in plan (negative): no not-in-plan line
+#   AD3 capacity: the warning's count and limit open the first text      AD4 no warning (negative): no capacity line
+#
+# STEP 3b NOTES (borg-switch, pane, borg-collective-review, adhd-guardrails; tracking issue 480):
+#   * These cases grade what a skill DOES ONCE IT RUNS. Whether it fires on its own is the trigger suite (AC4), not here.
+#   * SW and PN run against a stub `borg` and `drone` on the sandbox PATH that append their argv to a log; the grade reads
+#     the log, never the model's account. The texts the stubs print are copies of strings in drone.zsh and borg.zsh, and
+#     the SRC checks below fail when a copy and its source drift apart (PN3 depends on the reuse text being the real one).
+#   * CR is graded for SHAPE, NOT JUDGMENT (the heading, the summoned and specialist lines, all six core voices by name, The
+#     Adult last, the code owner present or absent, a real sandbox file named, a length bound). Noah set that precedent for
+#     borg-review on 2026-11-02 and the cheapest-tier rule says a script can state it, so the ledger's old "judge only"
+#     reason for borg-collective-review no longer applies. No `llm` grader. The length bound is the stated maximum in
+#     SKILL.md ("Total review: 20-40 lines") times a HEADROOM of 1.5, so 60 non-blank lines; ENV recomputes both from the
+#     SKILL.md so a change to the stated length moves the bound or fails loudly.
+#   * adhd-guardrails is `user-invocable: false` and the step 0 triage shows 0 calls on record. AD1-AD4 therefore do NOT
+#     depend on it firing: the skill BODY is delivered through --append-system-prompt-file and no plugin is loaded, and the
+#     result says what the rules do when the model has read them. Whether the Skill tool fires is measured separately by
+#     live.sh --case ADP (a measurement, never a graded case, never in a group). AD3 puts the SessionStart text the hook
+#     produces into the same file. AD3 grades the first TEXT, because a run that works for twelve turns and then opens its
+#     closing message with the warning has put nothing visible before it (a stricter first draft failed that run).
+#   * AD4 is graded on AD2's run (no warning in context, an in-plan request), as RV3 is on RV1's.
+#   * NOT GRADED, on purpose: adhd-guardrails' two-hour break rule, its low-energy rule and its shame-language rule (they need
+#     a two-hour session, a drifting user and a judgment about tone), and its scope-expansion, perfectionism and done-criteria
+#     rules.
 #
 # WHAT IS GRADED. Every case is a Tier 2 script grader. borg-review is graded for SHAPE (the diagnostic block, M equal to the
 # plan's criteria count, exactly one recommendation, a gates ledger in order before the first edit), NOT for the quality of
@@ -137,19 +168,48 @@ run_cases() {
     fi
 
     # ENV (live.sh): argv, case selector, prompt hint check ----------------------------------------------------------------
-    if live_dry > "$OUT/dry-all.txt" 2>&1 && [ "$(grep -c '^CASE ' "$OUT/dry-all.txt")" -eq 10 ] \
+    if live_dry > "$OUT/dry-all.txt" 2>&1 && [ "$(grep -c '^CASE ' "$OUT/dry-all.txt")" -eq 21 ] \
         && grep -q -- '--model claude-opus-5-5' "$OUT/dry-all.txt" && grep -q -- '--plugin-dir' "$OUT/dry-all.txt" \
         && grep -q -- '--max-budget-usd' "$OUT/dry-all.txt" && grep -q -- '--output-format stream-json' "$OUT/dry-all.txt" \
         && grep -q -- '--allowedTools' "$OUT/dry-all.txt"; then
-        ok "ENV live.sh assembles all 10 cases on the pinned Opus with a plugin dir, a budget cap and stream-json"
+        ok "ENV live.sh assembles all 21 graded cases on the pinned Opus with a plugin dir, a budget cap and stream-json"
     else
-        bad "ENV live.sh --dry-run did not assemble the expected argv for the 10 cases (see $OUT/dry-all.txt)"
+        bad "ENV live.sh --dry-run did not assemble the expected argv for the 21 cases (see $OUT/dry-all.txt)"
     fi
     if live_dry --case resume > "$OUT/dry-resume.txt" 2>&1 && [ "$(grep -c '^CASE ' "$OUT/dry-resume.txt")" -eq 4 ] \
         && ! grep -q '^CASE R[VB]\|^CASE BG' "$OUT/dry-resume.txt"; then
         ok "ENV the case selector runs one skill's cases as a group (resume is exactly RS1-RS4)"
     else
         bad "ENV --case resume did not select exactly RS1-RS4"
+    fi
+    # THE SWEEP'S GROUPS DO NOT MOVE: the weekly sweep calls live.sh with one of these selectors (borg_core/evals/sweep/shell.py)
+    # and reserves budget from fixed case lists, so each must still select exactly the cases it did before step 3b.
+    if live_dry --case review 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'RV1 RV2 RV4 ' \
+        && live_dry --case break-glass 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'BG1 BG2 BG3 ' \
+        && live_dry --case resume 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'RS1 RS2 RS3 RS4 '; then
+        ok "ENV the sweep's selectors (review, resume, break-glass) still select exactly their original cases"
+    else
+        bad "ENV a sweep selector (review, resume or break-glass) no longer selects its original cases"
+    fi
+    if live_dry --case switch 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'SW1 SW2 SW3 ' \
+        && live_dry --case pane 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'PN1 PN2 PN3 ' \
+        && live_dry --case collective-review 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'CR1 CR2 ' \
+        && live_dry --case adhd 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'AD1 AD3 AD2 ' \
+        && live_dry --case AD4 2>/dev/null | grep '^CASE ' | cut -d' ' -f2 | tr '\n' ' ' | grep -qx 'AD2 ' \
+        && ! grep -q '^CASE ADP' "$OUT/dry-all.txt"; then
+        ok "ENV the step 3b selectors select their own cases (adhd runs the positive before its negative), AD4 rides AD2's run, the probe is in no default"
+    else
+        bad "ENV a step 3b selector (switch, pane, collective-review, adhd, AD4) selects the wrong cases, or the probe is in the default"
+    fi
+    live_dry --case adhd,ADP > "$OUT/dry-adhd.txt" 2>&1
+    if [ "$(grep 'CASE AD' "$OUT/dry-adhd.txt" | grep -vc ADP)" -eq 3 ] \
+        && [ "$(grep -c -- '--append-system-prompt-file' "$OUT/dry-adhd.txt")" -eq 3 ] \
+        && [ "$(grep -c -- '--plugin-dir' "$OUT/dry-adhd.txt")" -eq 1 ] \
+        && grep -A1 '^CASE ADP' "$OUT/dry-adhd.txt" | grep -q -- '--plugin-dir' \
+        && ! grep -A1 '^CASE ADP' "$OUT/dry-adhd.txt" | grep -q -- '--append-system-prompt-file'; then
+        ok "ENV AD1-AD3 deliver the skill body by file with no plugin; the firing probe loads the plugin and appends nothing"
+    else
+        bad "ENV the adhd cases do not deliver the skill by file (or the probe does not load the plugin alone)"
     fi
     live_dry --case RV3 > "$OUT/dry-rv3.txt" 2>/dev/null
     if grep -q '^CASE RV1 ' "$OUT/dry-rv3.txt" && [ "$(grep -c '^CASE ' "$OUT/dry-rv3.txt")" -eq 1 ] \
@@ -166,15 +226,24 @@ run_cases() {
     fi
     n=0
     for kind in "$(_os_prompt_resume /x)" "$(_os_prompt_review)" "$(_os_prompt_gates)" "$(_os_prompt_trivial)" \
-                "$(_os_prompt_bg1)" "$(_os_prompt_bg2)" "$(_os_prompt_bg3)"; do
+                "$(_os_prompt_bg1)" "$(_os_prompt_bg2)" "$(_os_prompt_bg3)" \
+                "$(_os_prompt_sw1)" "$(_os_prompt_sw2)" "$(_os_prompt_sw3)" "$(_os_prompt_pn1)" "$(_os_prompt_pn2)" \
+                "$(_os_prompt_pn3)" "$(_os_prompt_cr)" "$(_os_prompt_ad1)" "$(_os_prompt_ad2)"; do
         _os_prompt_leaks "$kind" 2>/dev/null && n=$((n+1))
     done
-    if [ "$n" -eq 7 ] && ! _os_prompt_leaks "check the watcher first" 2>/dev/null \
+    if [ "$n" -eq 16 ] && ! _os_prompt_leaks "check the watcher first" 2>/dev/null \
         && ! _os_prompt_leaks "please CronCreate it" 2>/dev/null; then
         ok "ENV no prompt names the property under test, and the hint check refuses one that does"
     else
-        bad "ENV the prompt hint check is broken ($n of 7 prompts clean)"
+        bad "ENV the prompt hint check is broken ($n of 16 prompts clean)"
     fi
+
+    # ENV (step 3b): the four skills say what the graders look for; the stubs resolve inside the sandbox PATH and print what
+    # the source prints; the fixtures are what the cases assume ------------------------------------------------------------
+    "$PYTHON" "$HERE/check.py" skills "$REPO" > "$OUT/skills.txt" 2>&1
+    tally ENV "$OUT/skills.txt"
+    _env_stubs
+    _env_fixtures_3b
 
     # ENV (borg-resume): production code writes the ledger, the real CLI reads it. Needs jq: SKIP without it ----------------
     if ! command -v jq >/dev/null 2>&1; then
@@ -241,6 +310,78 @@ run_cases() {
     _sanitize_cases
     "$PYTHON" "$HERE/check.py" scan "$REC" > "$OUT/scan.txt" 2>&1
     summarize "sanitize: the committed recording holds nothing the sanitizer refuses" "$OUT/scan.txt"
+}
+
+# The stub CLIs: resolvable on the sandbox PATH (rule 7: prove the environment before the model), logging their argv, and
+# printing what drone.zsh, borg.zsh and the SessionStart hook print. A drifted copy must be caught.
+_env_stubs() {
+    local bin log t drift
+    bin="$(_os_stub_bin "$OUT/stub-bin")"
+    log="$OUT/stub.log"
+    t="$OUT/srctext"
+    rm -rf "$t"; mkdir -p "$t"; : > "$log"
+    if [ -x "$bin/borg" ] && [ -x "$bin/drone" ] && [ "$(env -i PATH="$bin" bash -c 'command -v borg; command -v drone' | grep -c "^$bin/")" -eq 2 ]; then
+        ok "ENV borg and drone resolve on the stub cases' sandbox PATH (the PATH is exactly one directory)"
+    else
+        bad "ENV borg or drone does not resolve on the stub cases' sandbox PATH"
+    fi
+    export EVAL_STUB_LOG="$log"
+    EVAL_STUB_MODE=pane-reuse "$bin/drone" pane right > "$t/pane-reuse.txt" 2>&1
+    EVAL_STUB_MODE=pane-reuse-zoomed "$bin/drone" pane left > "$t/pane-reuse-zoomed.txt" 2>&1
+    EVAL_STUB_MODE=pane-new "$bin/drone" pane right > "$t/pane-new.txt" 2>&1
+    "$bin/drone" pane > "$t/pane-nodir.txt" 2>&1
+    EVAL_STUB_MODE=switch-fail "$bin/borg" switch nonesuch-repo > "$t/switch-fail.txt" 2>&1
+    _os_capacity_text "$_OS_CAP_COUNT" "$_OS_CAP_LIMIT" > "$t/capacity.txt"
+    unset EVAL_STUB_LOG
+    if [ "$(wc -l < "$log" | tr -d ' ')" -eq 5 ] && sed -n 1p "$log" | grep -qx 'drone pane right' && sed -n 5p "$log" | grep -qx 'borg switch nonesuch-repo'; then
+        ok "ENV the stubs log one argv line per call"
+    else
+        bad "ENV the stubs did not log what they were called with (see $log)"
+    fi
+    "$PYTHON" "$HERE/check.py" srctext "$REPO" "$t" "$_OS_STUB_WNAME" "$_OS_CAP_COUNT" "$_OS_CAP_LIMIT" > "$OUT/srctext.txt" 2>&1
+    tally ENV "$OUT/srctext.txt"
+    # DRIFT: change each copied text by one word and the matching check must fail
+    for drift in pane-reuse pane-reuse-zoomed pane-new pane-nodir switch-fail capacity; do
+        rm -rf "$OUT/srctext-drift"; cp -R "$t" "$OUT/srctext-drift"
+        sed -i.bak 's/[A-Za-z]\{4,\}/drifted/' "$OUT/srctext-drift/$drift.txt"
+        "$PYTHON" "$HERE/check.py" srctext "$REPO" "$OUT/srctext-drift" "$_OS_STUB_WNAME" "$_OS_CAP_COUNT" "$_OS_CAP_LIMIT" > "$OUT/srctext-drift.txt" 2>&1
+        if grep -q "^CHECK fail SRC-$drift " "$OUT/srctext-drift.txt"; then
+            ok "known-bad: a drifted $drift text is rejected by SRC-$drift"
+        else
+            bad "known-bad: a drifted $drift text was NOT rejected: the stub could drift from the source unnoticed"
+        fi
+    done
+}
+
+# The AD3 session context is the hook's text, and the adhd context file carries the skill body without its frontmatter.
+_env_fixtures_3b() {
+    local sb="$OUT/fx3b"
+    rm -rf "$sb"; mkdir -p "$sb"
+    _os_repo_plan "$sb/plan" >/dev/null
+    _os_repo_schema "$sb/schema" >/dev/null
+    _os_repo_typo "$sb/typo" >/dev/null
+    _os_adhd_context "$REPO/skills/adhd-guardrails/SKILL.md" "$sb/ad1.md" 0
+    _os_adhd_context "$REPO/skills/adhd-guardrails/SKILL.md" "$sb/ad3.md" 1
+    if [ "$(grep -c '^- \[ \] AC' "$sb/plan/PROJECT_PLAN.md")" -eq 3 ] && [ -z "$(git -C "$sb/plan" status --short)" ] \
+        && ! grep -q 'export' "$sb/plan/invoice.py"; then
+        ok "ENV plan fixture: three criteria, a clean tree, and no export code yet (AD1 asks for a theme, AD2 for the export)"
+    else
+        bad "ENV the plan fixture is not the clean three-criteria repository AD1-AD3 assume"
+    fi
+    if git -C "$sb/schema" status --short | grep -q '^?? migrations/002_invoices.sql$' && grep -q 'created_at' "$sb/schema/migrations/001_users.sql" \
+        && ! grep -q 'created_at' "$sb/schema/migrations/002_invoices.sql" \
+        && git -C "$sb/typo" status --short | grep -q '^ M README.md$'; then
+        ok "ENV CR fixtures: an uncommitted schema migration with no audit columns, and an uncommitted spelling fix"
+    else
+        bad "ENV the CR fixtures are not an uncommitted schema change and an uncommitted typo fix"
+    fi
+    if grep -q 'Cognitive Load Guardrails' "$sb/ad1.md" && ! grep -q '^name: adhd' "$sb/ad1.md" && ! grep -q 'user-invocable' "$sb/ad1.md" \
+        && ! grep -q 'SessionStart context' "$sb/ad1.md" && grep -q 'SessionStart context' "$sb/ad3.md" \
+        && grep -q "CAPACITY WARNING: $_OS_CAP_COUNT repositories active/waiting (limit: $_OS_CAP_LIMIT)" "$sb/ad3.md"; then
+        ok "ENV the adhd context file is the skill body without frontmatter; only AD3's carries the warning"
+    else
+        bad "ENV the adhd context files are not the skill body (AD1, AD2) and the body plus the warning (AD3)"
+    fi
 }
 
 # A tiny raw run (a real-shaped stream with an init event carrying a session id), with one planted leak per call.

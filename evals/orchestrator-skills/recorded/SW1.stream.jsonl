@@ -1,0 +1,4 @@
+{"message": {"content": [{"id": "t1", "input": {"command": "borg switch beacon-web", "description": "Switch to the beacon-web repository window"}, "name": "Bash", "type": "tool_use"}], "role": "assistant"}, "type": "assistant"}
+{"message": {"content": [{"content": "(Bash completed with no output)", "is_error": false, "tool_use_id": "t1", "type": "tool_result"}], "role": "user"}, "type": "user"}
+{"message": {"content": [{"text": "Switched to beacon-web.", "type": "text"}], "role": "assistant"}, "type": "assistant"}
+{"is_error": false, "modelUsage": {"claude-opus-5-5": {"costUSD": 0.16175119999999998}}, "num_turns": 2, "permission_denials": [], "result": "Switched to beacon-web.", "subtype": "success", "total_cost_usd": 0.16175119999999998, "type": "result"}

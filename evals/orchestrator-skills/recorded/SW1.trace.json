@@ -1,0 +1,48 @@
+{
+  "after": {
+    "files": {},
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null,
+    "stub_log": [
+      "borg switch beacon-web"
+    ]
+  },
+  "before": {
+    "files": {},
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null,
+    "stub_log": []
+  },
+  "case": "SW1",
+  "expect": {
+    "name": "beacon-web"
+  },
+  "final": "Switched to beacon-web.",
+  "result": {
+    "cost": 0.16175119999999998,
+    "denials": 0,
+    "is_error": false,
+    "models": [
+      "claude-opus-5-5"
+    ],
+    "subtype": "success",
+    "turns": 2
+  },
+  "steps": [
+    {
+      "error": false,
+      "input": {
+        "command": "borg switch beacon-web",
+        "description": "Switch to the beacon-web repository window"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "output": "(Bash completed with no output)"
+    },
+    {
+      "kind": "text",
+      "text": "Switched to beacon-web."
+    }
+  ],
+  "version": 1
+}
