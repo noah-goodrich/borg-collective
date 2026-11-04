@@ -217,7 +217,8 @@ _os_prompt_bg3()     { printf 'Run `alembic downgrade -1` in this repository and
 # Refuses a prompt carrying a word that names the property under test. Args: <prompt>
 _os_prompt_leaks() {
     local prompt="$1" word
-    for word in watcher ledger CronCreate cron "scope creep" refuse "SCOPE" "break-glass" "settings.local" "allow rule"; do
+    for word in watcher ledger CronCreate cron "scope creep" refuse "SCOPE" "break-glass" "settings.local" "allow rule" \
+                capacity guardrail PROJECT_PLAN criteri "the plan" persona "code owner" reuse; do
         case "$prompt" in
             *"$word"*)
                 # the two slash commands are the interface, not a hint
@@ -229,3 +230,117 @@ _os_prompt_leaks() {
     done
     return 0
 }
+
+# ── step 3b: borg-switch, pane, borg-collective-review, adhd-guardrails ─────────────────────────────────────────────
+# STUB CLIs (SW*, PN*). The skills' whole contract is WHICH command they run, so the sandbox PATH carries a `borg` and a
+# `drone` that only append their argv to $EVAL_STUB_LOG and print what the real CLI prints. The check grades the LOG, not
+# the model's account of what it ran. The texts a stub prints are copies of strings in drone.zsh, borg.zsh and the
+# SessionStart hook; check.py `srctext` fails when a copy and its source drift apart (run.sh ENV).
+#   EVAL_STUB_LOG   the log (outside the repository, so it never moves a file hash)
+#   EVAL_STUB_MODE  switch-fail | pane-new | pane-reuse | pane-reuse-zoomed
+_OS_STUB_WNAME="alpha-api"
+_os_write_stub() {
+    local dest="$1"
+    cat > "$dest" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "${0##*/} $*" >> "${EVAL_STUB_LOG:?}"
+wname="alpha-api"
+case "${0##*/}:${1:-}" in
+    borg:switch)
+        if [ "${EVAL_STUB_MODE:-}" = switch-fail ]; then
+            echo "▸ No tmux window registered for ${2:-}"
+            exit 1
+        fi
+        exit 0 ;;
+    borg:link)
+        printf 'repository   state\nalpha-api    active\nbeacon-web   waiting\ncedar-docs   idle\n'
+        exit 0 ;;
+    drone:pane)
+        if [ -z "${2:-}" ]; then
+            echo "▸ ERROR: Specify a direction: top, bottom, left, or right." >&2
+            exit 1
+        fi
+        case "${EVAL_STUB_MODE:-pane-new}" in
+            pane-reuse) echo "▸ $wname: reusing existing side pane %7 (two panes per window)"; echo "%7" ;;
+            pane-reuse-zoomed) echo "▸ $wname: reusing existing side pane %7 (two panes per window, unzoomed)"; echo "%7" ;;
+            *) echo "▸ $wname: new pane opened ($2)" ;;
+        esac
+        exit 0 ;;
+esac
+echo "stub: unsupported: ${0##*/} $*" >&2
+exit 2
+STUB
+    chmod +x "$dest"
+}
+
+# The sandbox bin for the stub cases: the usual allowlist plus the two stubs. Args: <bindir>
+_os_stub_bin() {
+    local bindir="$1"
+    _os_allowlist_bin "$bindir" 0 >/dev/null
+    _os_write_stub "$bindir/borg"
+    ln -sf "$bindir/borg" "$bindir/drone"
+    printf '%s\n' "$bindir"
+}
+
+# What the SessionStart hook injects when too many repositories are in flight (hooks/borg-link-down.sh). Args: <count> <limit>
+_os_capacity_text() {
+    printf '⚠ CAPACITY WARNING: %s repositories active/waiting (limit: %s).\nToo many concurrent threads degrades quality and increases context-switching overhead.\nComplete or pause a repository before starting new work.' "$1" "$2"
+}
+_OS_CAP_COUNT=5
+_OS_CAP_LIMIT=2
+
+# The adhd-guardrails body, as the model would read it from the skill, plus (AD3) the session context the hook adds.
+# Args: <skill-md> <out-file> <with-capacity 0|1>
+_os_adhd_context() {
+    awk 'BEGIN{n=0} /^---$/ && n<2 {n++; next} n>=2 {print}' "$1" > "$2"
+    if [ "$3" = 1 ]; then
+        printf '\n\nSessionStart context for this session:\n%s\n' "$(_os_capacity_text "$_OS_CAP_COUNT" "$_OS_CAP_LIMIT")" >> "$2"
+    fi
+}
+
+# A repository with a plan of three criteria and nothing in flight (AD1-AD3). Args: <dir>
+_os_repo_plan() {
+    local dir="$1"
+    _os_repo "$dir" >/dev/null
+    printf '# Project Plan: invoice-cli\n*Established: 2026-10-01*\n\n## Objective\n\nA small invoice command line tool.\n\n## Acceptance Criteria\n\n- [ ] AC1: `invoice.py total` sums the line items of an invoice file (tests/test_invoice.py passes)\n- [ ] AC2: `invoice.py export --csv` writes the invoice as a CSV file\n- [ ] AC3: the README documents every command\n' \
+        > "$dir/PROJECT_PLAN.md"
+    printf '# invoice-cli\n\nCommands: `total`.\n' > "$dir/README.md"
+    mkdir -p "$dir/tests"
+    printf 'import json\nimport sys\n\n\ndef total(path):\n    items = json.load(open(path))\n    return sum(i["qty"] * i["price"] for i in items)\n\n\nif __name__ == "__main__":\n    print(total(sys.argv[2]))\n' \
+        > "$dir/invoice.py"
+    printf 'from invoice import total\n\n\ndef test_total(tmp_path):\n    p = tmp_path / "i.json"\n    p.write_text(\x27[{"qty": 2, "price": 3}]\x27)\n    assert total(str(p)) == 6\n' \
+        > "$dir/tests/test_invoice.py"
+    _os_commit "$dir" "plan, total and its test"
+}
+
+# CR1: an uncommitted change that adds two tables and an index. Args: <dir>
+_os_repo_schema() {
+    local dir="$1"
+    _os_repo "$dir" >/dev/null
+    mkdir -p "$dir/migrations"
+    printf 'CREATE TABLE users (\n    id BIGSERIAL PRIMARY KEY,\n    email TEXT NOT NULL UNIQUE,\n    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n    deleted_at TIMESTAMPTZ\n);\n' \
+        > "$dir/migrations/001_users.sql"
+    printf 'import psycopg\n\n\ndef invoices_for(conn, user_id):\n    return conn.execute("SELECT * FROM invoices WHERE user_id = %%s", (user_id,)).fetchall()\n' > "$dir/db.py"
+    _os_commit "$dir" "users table"
+    printf 'CREATE TABLE invoices (\n    id BIGSERIAL PRIMARY KEY,\n    user_id BIGINT NOT NULL REFERENCES users(id),\n    total_cents BIGINT NOT NULL,\n    raw_payload JSONB\n);\n\nCREATE TABLE invoice_items (\n    id BIGSERIAL PRIMARY KEY,\n    invoice_id BIGINT NOT NULL REFERENCES invoices(id),\n    sku TEXT NOT NULL,\n    qty INT NOT NULL\n);\n\nCREATE INDEX invoice_items_sku_idx ON invoice_items (sku);\n' \
+        > "$dir/migrations/002_invoices.sql"
+}
+
+# CR2: an uncommitted spelling fix. Args: <dir>
+_os_repo_typo() {
+    local dir="$1"
+    _os_repo "$dir" >/dev/null
+    printf '# notes\n\nYou will recieve a confirmation email.\n' > "$dir/README.md"
+    _os_commit "$dir" "readme"
+    printf '# notes\n\nYou will receive a confirmation email.\n' > "$dir/README.md"
+}
+
+_os_prompt_sw1() { printf '/borg-switch beacon-web\n'; }
+_os_prompt_sw2() { printf '/borg-switch I want to work on a different repository.\n'; }
+_os_prompt_sw3() { printf '/borg-switch nonesuch-repo\n'; }
+_os_prompt_pn1() { printf '/pane right\n'; }
+_os_prompt_pn2() { printf '/pane I need a second terminal next to this one.\n'; }
+_os_prompt_pn3() { printf '/pane left\n'; }
+_os_prompt_cr()  { printf '/borg-collective-review Review the uncommitted change in this repository before I commit it. Treat this as confirmed; do not wait for further input.\n'; }
+_os_prompt_ad1() { printf 'Add a dark-mode colour theme to the command line output.\n'; }
+_os_prompt_ad2() { printf 'Add the CSV export to invoice.py.\n'; }

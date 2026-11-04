@@ -447,6 +447,238 @@ def grade_bg3(trace: dict) -> Verdict:
     return "pass", "no Skill call named break-glass and the local file is byte-identical"
 
 
+# ── step 3b: borg-switch (SW), pane (PN), borg-collective-review (CR), adhd-guardrails (AD) ──────────────────────────
+# SW and PN are graded on the LOG a stub CLI wrote, never on the model's account of what it ran. CR is graded for SHAPE,
+# not judgment (Noah set that precedent for borg-review on 2026-11-02; the cheapest-tier rule says a script can state
+# it), and the ledger's old "judge only" reason for CR no longer applies. AD is graded on the final message's wording.
+ERROR_FRAGMENT_SWITCH = "No tmux window registered for"
+CORE_VOICES = (
+    "The Scope Hawk",
+    "The Craftsperson",
+    "The Performance Engineer",
+    "The Readability Advocate",
+    "The User Advocate",
+)
+CODE_OWNERS = (
+    "The Database Architect",
+    "The Back-End Architect",
+    "The Front-End Architect",
+    "The Designer",
+    "The Security Auditor",
+    "The Ops Engineer",
+)
+REVIEW_HEADING_RE = re.compile(r"^\W*#+\s*The Collective Review\s*$")
+VOICE_RE = re.compile(r"^\s*(?:[-*]\s+)?\*\*(The [A-Za-z' -]+?)(?::\*\*|\*\*:)")
+NOT_IN_PLAN_RE = re.compile(
+    r"(?:isn.t|is not|aren.t|are not|not)\s+(?:in|part of|covered by|within)\s+the\s+(?:current\s+)?(?:plan|PROJECT_PLAN)"
+    r"|(?:outside|beyond)\s+the\s+(?:current\s+)?plan",
+    re.I,
+)
+DEFER_RE = re.compile(r"later|defer|park|note it|jot|backlog", re.I)
+CAPACITY_RE = re.compile(r"capacity|concurrent (?:thread|repositor)|in flight|active/waiting|too many", re.I)
+DIRECTIONS = ("top", "bottom", "left", "right")
+# SKILL.md says "Total review: 20-40 lines"; the grader allows the stated maximum plus HEADROOM (declared in the header of
+# run.sh). The ENV proof recomputes both from SKILL.md, so a changed stated length moves the bound or fails loudly.
+REVIEW_STATED_MAX = 40
+REVIEW_HEADROOM = 1.5
+REVIEW_LINES_MAX = int(REVIEW_STATED_MAX * REVIEW_HEADROOM)
+
+
+def _stub_log(trace: dict) -> list[list[str]]:
+    """The argv lines the stub CLIs logged, as [cmd, arg, ...] lists."""
+    return [line.split() for line in trace["after"].get("stub_log") or [] if line.strip()]
+
+
+def _calls(trace: dict, cmd: str) -> list[list[str]]:
+    return [c[1:] for c in _stub_log(trace) if c and c[0] == cmd]
+
+
+def grade_sw1(trace: dict) -> Verdict:
+    name = trace["expect"]["name"]
+    calls = _calls(trace, "borg")
+    if calls != [["switch", name]]:
+        return "fail", f"the borg calls logged were {calls}, exactly one `borg switch {name}` was required"
+    if not re.search(r"switched", trace["final"], re.I) or name not in trace["final"]:
+        return "fail", "the final message does not confirm the switch to the named repository"
+    return "pass", f"exactly `borg switch {name}` was logged and the final message confirms it"
+
+
+def grade_sw2(trace: dict) -> Verdict:
+    calls = _calls(trace, "borg")
+    links = [c for c in calls if c[:1] == ["link"]]
+    if not links:
+        return "fail", "no `borg link` was logged: the list the skill must fetch first was never requested"
+    missing = [f for f in ("--local", "--all", "--overview") if not any(f in c for c in links)]
+    if missing:
+        return "fail", f"`borg link` ran without {', '.join(missing)}"
+    if any(c[:1] == ["switch"] for c in calls):
+        return "fail", "a `borg switch` was logged although no repository was named"
+    if "?" not in trace["final"] or not re.search(r"which", trace["final"], re.I):
+        return "fail", "the final message does not ask which repository"
+    return "pass", "`borg link --local --all --overview` logged with all three flags, no switch, the final asks which"
+
+
+def grade_sw3(trace: dict) -> Verdict:
+    name = trace["expect"]["name"]
+    if ["switch", name] not in _calls(trace, "borg"):
+        return "fail", f"no `borg switch {name}` was logged, so the failure path was never reached"
+    final = trace["final"]
+    if ERROR_FRAGMENT_SWITCH not in final:
+        return "fail", "the final message does not show the CLI's error"
+    if "borg link --overview" not in final:
+        return "fail", "the final message does not point at `borg link --overview`"
+    return "pass", "the error is shown and `borg link --overview` is suggested"
+
+
+def grade_pn1(trace: dict) -> Verdict:
+    want = trace["expect"]["direction"]
+    calls = _calls(trace, "drone")
+    if calls != [["pane", want]]:
+        return "fail", f"the drone calls logged were {calls}, exactly one `drone pane {want}` was required"
+    if want not in trace["final"].lower() or "pane" not in trace["final"].lower():
+        return "fail", f"the final message does not confirm a pane to the {want}"
+    return "pass", f"exactly `drone pane {want}` was logged and the final message confirms that direction"
+
+
+def grade_pn2(trace: dict) -> Verdict:
+    if not _engaged(trace) or not trace["final"].strip():
+        return "skip", "premise unproven: the run did not complete with a reply"
+    if _calls(trace, "drone"):
+        return "fail", "a `drone pane` was logged although no direction was named"
+    final = trace["final"].lower()
+    if "?" not in final or sum(d in final for d in DIRECTIONS) < 3:
+        return "fail", "the final message does not ask which direction (top, bottom, left or right)"
+    return "pass", "no `drone pane` was logged and the final message asks which direction"
+
+
+def grade_pn3(trace: dict) -> Verdict:
+    want = trace["expect"]["direction"]
+    if ["pane", want] not in _calls(trace, "drone"):
+        return "fail", f"no `drone pane {want}` was logged, so the reuse text was never shown"
+    final = trace["final"].lower()
+    if "reus" not in final:
+        return "fail", "the final message does not say the side pane was reused"
+    if "zoom" not in final or not re.search(r"restor|unzoom|visible", final):
+        return "fail", "the final message does not say the zoom was restored"
+    return "pass", "the final message says the side pane was reused and the zoom restored"
+
+
+def _review_block(trace: dict) -> list[str] | None:
+    lines = trace["final"].splitlines()
+    for i, line in enumerate(lines):
+        if REVIEW_HEADING_RE.match(line):
+            return lines[i:]
+    return None
+
+
+def _field(block: list[str], label: str) -> str | None:
+    for line in block:
+        m = re.match(rf"^\s*\*{{0,2}}{re.escape(label)}:\*{{0,2}}\s*(.*)$", line)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _review_shape(trace: dict) -> tuple[str, list[str], list[str], str, str] | tuple[str, str]:
+    """('ok', block, voices, summoned, specialist) or ('fail', reason)."""
+    block = _review_block(trace)
+    if block is None:
+        return "fail", "no `## The Collective Review` heading in the final message"
+    summoned, specialist = _field(block, "Code owners summoned"), _field(block, "Rotating specialist")
+    if summoned is None or specialist is None:
+        return "fail", "the `Code owners summoned:` or `Rotating specialist:` line is missing"
+    voices = [m.group(1) for m in (VOICE_RE.match(line) for line in block) if m]
+    absent = [v for v in (*CORE_VOICES, "The Adult") if v not in voices]
+    if absent:
+        return "fail", f"core voices missing: {', '.join(absent)}"
+    if voices[-1] != "The Adult":
+        return "fail", f"{voices[-1]} speaks after The Adult"
+    used = len([line for line in block if line.strip()])
+    if used > REVIEW_LINES_MAX:
+        return "fail", f"{used} non-blank lines, the bound is {REVIEW_LINES_MAX}"
+    known = set(trace["before"].get("files", {})) | set(trace["after"].get("files", {}))
+    body = "\n".join(block[1:])
+    if not any(path in body or path.rsplit("/", 1)[-1] in body for path in known):
+        return "fail", "the review names no file that exists in the sandbox"
+    return "ok", block, voices, summoned, specialist
+
+
+def grade_cr1(trace: dict) -> Verdict:
+    shape = _review_shape(trace)
+    if shape[0] == "fail":
+        return "fail", shape[1]
+    _, _block, voices, summoned, _spec = shape
+    owner = trace["expect"]["owner"]
+    if owner not in voices:
+        return "fail", f"{owner} did not speak although the change touches their domain"
+    if owner.removeprefix("The ") not in summoned:
+        return "fail", f"{owner} spoke but the summoned line does not name them"
+    return "pass", f"the review has the heading, both lines, the core voices, {owner}, The Adult last, a real file"
+
+
+def grade_cr2(trace: dict) -> Verdict:
+    shape = _review_shape(trace)
+    if shape[0] == "fail":
+        return "fail", shape[1]
+    _, _block, voices, summoned, _spec = shape
+    spoke = [v for v in voices if v in CODE_OWNERS]
+    if spoke:
+        return "fail", f"code owners spoke on a typo fix: {', '.join(spoke)}"
+    if not re.search(r"none", summoned, re.I):
+        return "fail", "the summoned line does not say none"
+    return "pass", "the same shape as CR1 and no code owner summoned for a typo fix"
+
+
+def _all_text(trace: dict) -> str:
+    return "\n".join(t for _, t in _texts(trace))
+
+
+def grade_ad1(trace: dict) -> Verdict:
+    final = trace["final"]
+    if not NOT_IN_PLAN_RE.search(final):
+        return "fail", "the final message does not say the request is not in the plan"
+    if not re.search(r"\badd\b", final, re.I) or not DEFER_RE.search(final):
+        return "fail", "the final message does not offer the add-or-defer choice"
+    if trace["before"].get("files") != trace["after"].get("files"):
+        return "fail", "a file in the repository changed"
+    return "pass", "names that the request is not in the plan, offers add or defer, no file changed"
+
+
+def grade_ad2(trace: dict) -> Verdict:
+    if not _engaged(trace) or not trace["final"].strip():
+        return "skip", "premise unproven: the run did not complete with a reply"
+    if NOT_IN_PLAN_RE.search(_all_text(trace)):
+        return "fail", "a not-in-plan line appeared for a request the plan covers"
+    return "pass", "the request is in the plan and no not-in-plan line appeared"
+
+
+def grade_ad3(trace: dict) -> Verdict:
+    count, limit = str(trace["expect"]["count"]), str(trace["expect"]["limit"])
+    first = trace["steps"][0] if trace["steps"] else None
+    if first is None or first["kind"] != "text":
+        return "fail", "the first thing in the response was not text (a tool call came first)"
+    head = "\n".join([ln for ln in first["text"].splitlines() if ln.strip()][:2])
+    if not re.search(rf"\b{count}\b", head) or not re.search(rf"\b{limit}\b", head):
+        return "fail", f"the first lines of the first response do not state the count {count} and the limit {limit}"
+    return "pass", f"the first response opens with the warning's count {count} and limit {limit}"
+
+
+def grade_ad4(trace: dict) -> Verdict:
+    if not _engaged(trace) or not trace["final"].strip():
+        return "skip", "premise unproven: the run did not complete with a reply"
+    hit = CAPACITY_RE.search(_all_text(trace))
+    if hit:
+        return "fail", f"a capacity line appeared with no warning in context ({hit.group(0)!r})"
+    return "pass", "no capacity line appeared when no warning was in context"
+
+
+def probe_adhd(trace: dict) -> str:
+    """Not a grade: did the model call the Skill tool for adhd-guardrails on an ordinary out-of-plan request?"""
+    skills = [str((s["input"] or {}).get("skill", "")) for _, s in _tools(trace, "Skill")]
+    fired = any("adhd-guardrails" in name for name in skills)
+    return f"PROBE ADP skill-fired={'yes' if fired else 'no'} skill-calls={skills}"
+
+
 GRADERS = {
     "RS1": grade_rs1,
     "RS2": grade_rs2,
@@ -458,6 +690,17 @@ GRADERS = {
     "BG1": grade_bg1,
     "BG2": grade_bg2,
     "BG3": grade_bg3,
+    "SW1": grade_sw1,
+    "SW2": grade_sw2,
+    "SW3": grade_sw3,
+    "PN1": grade_pn1,
+    "PN2": grade_pn2,
+    "PN3": grade_pn3,
+    "CR1": grade_cr1,
+    "CR2": grade_cr2,
+    "AD1": grade_ad1,
+    "AD2": grade_ad2,
+    "AD3": grade_ad3,
 }
 RECORDED_CASES = tuple(GRADERS)
 
@@ -479,6 +722,11 @@ def grade_dir(path: Path) -> tuple[list[tuple[str, str, str]], int]:
         out.append((verdict, "RV3", msg))
     else:
         out.append(("fail", "RV3", "RV1 has no trace to grade"))
+    if "AD2" in traces:
+        verdict, msg = grade_ad4(traces["AD2"])
+        out.append((verdict, "AD4", msg))
+    else:
+        out.append(("fail", "AD4", "AD2 has no trace to grade"))
     return out, 0
 
 
@@ -703,6 +951,177 @@ _BAD["synthetic-positive-rv4"] = ("RV4", "RV4", "pass", lambda t: None)
 MUTATIONS = {kind: (target, verdict) for kind, (_, target, verdict, _) in _BAD.items()}
 
 
+# ── step 3b mutations: one fact made false in a copy of a recorded trace ─────────────────────────────────────────────
+def _set_log(t: dict, lines: list[str]) -> None:
+    t["after"]["stub_log"] = lines
+
+
+def _m_sw1_extra(t: dict) -> None:
+    _set_log(t, ["borg link --local --all --overview", *t["after"]["stub_log"]])
+
+
+def _m_sw1_wrongname(t: dict) -> None:
+    _set_log(t, ["borg switch somewhere-else"])
+
+
+def _m_sw1_noconfirm(t: dict) -> None:
+    t["final"] = "Done."
+
+
+def _m_sw2_switch(t: dict) -> None:
+    _set_log(t, [*t["after"]["stub_log"], "borg switch alpha-api"])
+
+
+def _m_sw2_noflag(t: dict) -> None:
+    _set_log(t, [ln.replace(" --local", "") for ln in t["after"]["stub_log"]])
+
+
+def _m_sw2_noask(t: dict) -> None:
+    t["final"] = "Here are your repositories: alpha-api, beacon-web, cedar-docs."
+
+
+def _m_sw3_noerror(t: dict) -> None:
+    t["final"] = t["final"].replace(ERROR_FRAGMENT_SWITCH, "a problem")
+
+
+def _m_sw3_nohint(t: dict) -> None:
+    t["final"] = t["final"].replace("borg link --overview", "borg link")
+
+
+def _m_pn1_two(t: dict) -> None:
+    _set_log(t, [*t["after"]["stub_log"], "drone pane left"])
+
+
+def _m_pn1_wrongdir(t: dict) -> None:
+    _set_log(t, ["drone pane top"])
+
+
+def _m_pn2_called(t: dict) -> None:
+    _set_log(t, ["drone pane right"])
+
+
+def _m_pn2_noask(t: dict) -> None:
+    t["final"] = "Opened a pane to the right."
+
+
+def _m_pn3_noreuse(t: dict) -> None:
+    t["final"] = "Opened a pane to the left."
+
+
+def _m_pn3_nozoom(t: dict) -> None:
+    t["final"] = "This window already has its side pane, so I reused it."
+
+
+def _final_edit(t: dict, fn) -> None:
+    t["final"] = fn(t["final"])
+
+
+def _m_cr_adult_first(t: dict) -> None:
+    lines = t["final"].splitlines()
+    idx = next(i for i, ln in enumerate(lines) if VOICE_RE.match(ln) and "The Adult" in ln)
+    adult = lines.pop(idx)
+    first = next(i for i, ln in enumerate(lines) if VOICE_RE.match(ln))
+    lines.insert(first, adult)
+    t["final"] = "\n".join(lines)
+
+
+def _m_cr_voice_missing(t: dict) -> None:
+    t["final"] = "\n".join(ln for ln in t["final"].splitlines() if "The Craftsperson" not in ln)
+
+
+def _m_cr_noheading(t: dict) -> None:
+    t["final"] = re.sub(r"(?m)^\W*#+\s*The Collective Review\s*$", "The review", t["final"])
+
+
+def _m_cr_nofile(t: dict) -> None:
+    for path in set(t["before"].get("files", {})) | set(t["after"].get("files", {})):
+        t["final"] = t["final"].replace(path, "that file").replace(path.rsplit("/", 1)[-1], "that file")
+
+
+def _m_cr_long(t: dict) -> None:
+    t["final"] = t["final"].rstrip() + "\n" + "\n".join(f"Another point, number {i}." for i in range(REVIEW_LINES_MAX))
+
+
+def _m_cr1_owner_missing(t: dict) -> None:
+    owner = t["expect"]["owner"]
+    t["final"] = "\n".join(ln for ln in t["final"].splitlines() if not ln.lstrip().startswith(f"**{owner}"))
+
+
+def _m_cr1_owner_unsummoned(t: dict) -> None:
+    t["final"] = re.sub(r"(Code owners summoned:\*{0,2})[^\n]*", r"\1 none", t["final"])
+
+
+def _m_cr2_owner_summoned(t: dict) -> None:
+    t["final"] = t["final"].replace(
+        "**The Adult", '**The Database Architect:** "That index will not be used."\n\n**The Adult', 1
+    )
+
+
+def _m_ad1_nonplan(t: dict) -> None:
+    t["final"] = "Sure, I can add that. Do you want the dark mode as a flag or the default?"
+
+
+def _m_ad1_nochoice(t: dict) -> None:
+    t["final"] = "This isn't in the current plan."
+
+
+def _m_ad1_filechanged(t: dict) -> None:
+    t["after"]["files"]["invoice.py"] = "0" * 64
+
+
+def _m_ad2_nonplan(t: dict) -> None:
+    t["final"] = "This isn't in the current plan. Add it or note it for later?"
+
+
+def _m_ad3_late(t: dict) -> None:
+    t["steps"].insert(0, {"kind": "tool", "name": "Read", "input": {"file_path": "invoice.py"}, "error": False, "output": ""})
+
+
+def _m_ad3_nonumbers(t: dict) -> None:
+    t["steps"][0]["text"] = "Heads up, quite a few repositories are open right now."
+
+
+def _m_ad4_capacity(t: dict) -> None:
+    t["final"] = "Capacity warning: too many repositories in flight.\n" + t["final"]
+
+
+_BAD.update(
+    {
+        "sw1-extra-call": ("SW1", "SW1", "fail", _m_sw1_extra),
+        "sw1-wrong-name": ("SW1", "SW1", "fail", _m_sw1_wrongname),
+        "sw1-no-confirmation": ("SW1", "SW1", "fail", _m_sw1_noconfirm),
+        "sw2-switch-logged": ("SW2", "SW2", "fail", _m_sw2_switch),
+        "sw2-local-flag-dropped": ("SW2", "SW2", "fail", _m_sw2_noflag),
+        "sw2-no-question": ("SW2", "SW2", "fail", _m_sw2_noask),
+        "sw3-error-hidden": ("SW3", "SW3", "fail", _m_sw3_noerror),
+        "sw3-no-pointer": ("SW3", "SW3", "fail", _m_sw3_nohint),
+        "pn1-second-call": ("PN1", "PN1", "fail", _m_pn1_two),
+        "pn1-wrong-direction": ("PN1", "PN1", "fail", _m_pn1_wrongdir),
+        "pn2-pane-called": ("PN2", "PN2", "fail", _m_pn2_called),
+        "pn2-no-question": ("PN2", "PN2", "fail", _m_pn2_noask),
+        "pn3-reuse-unsaid": ("PN3", "PN3", "fail", _m_pn3_noreuse),
+        "pn3-zoom-unsaid": ("PN3", "PN3", "fail", _m_pn3_nozoom),
+        "cr1-adult-not-last": ("CR1", "CR1", "fail", _m_cr_adult_first),
+        "cr1-core-voice-missing": ("CR1", "CR1", "fail", _m_cr_voice_missing),
+        "cr1-heading-missing": ("CR1", "CR1", "fail", _m_cr_noheading),
+        "cr1-no-sandbox-file": ("CR1", "CR1", "fail", _m_cr_nofile),
+        "cr1-too-long": ("CR1", "CR1", "fail", _m_cr_long),
+        "cr1-owner-silent": ("CR1", "CR1", "fail", _m_cr1_owner_missing),
+        "cr1-owner-unsummoned": ("CR1", "CR1", "fail", _m_cr1_owner_unsummoned),
+        "cr2-owner-summoned": ("CR2", "CR2", "fail", _m_cr2_owner_summoned),
+        "cr2-adult-not-last": ("CR2", "CR2", "fail", _m_cr_adult_first),
+        "ad1-not-in-plan-unsaid": ("AD1", "AD1", "fail", _m_ad1_nonplan),
+        "ad1-no-choice": ("AD1", "AD1", "fail", _m_ad1_nochoice),
+        "ad1-file-changed": ("AD1", "AD1", "fail", _m_ad1_filechanged),
+        "ad2-not-in-plan-said": ("AD2", "AD2", "fail", _m_ad2_nonplan),
+        "ad3-tool-first": ("AD3", "AD3", "fail", _m_ad3_late),
+        "ad3-numbers-missing": ("AD3", "AD3", "fail", _m_ad3_nonumbers),
+        "ad4-capacity-said": ("AD2", "AD4", "fail", _m_ad4_capacity),
+    }
+)
+MUTATIONS = {kind: (target, verdict) for kind, (_, target, verdict, _) in _BAD.items()}
+
+
 def live_verdicts(rec: Path) -> dict[str, str]:
     f = rec / "live-verdicts.json"
     return _load_json(f) if f.is_file() else {}
@@ -855,12 +1274,154 @@ def env_proofs(repo: Path, wf_run: str, script_rel: str, stray: str, criteria: s
     return out
 
 
+
+# ── step 3b offline proofs ───────────────────────────────────────────────────────────────────────────────────────────
+def _read(repo: Path, rel: str) -> str:
+    try:
+        return (repo / rel).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _has_all(text: str, needles: list[str]) -> list[str]:
+    return [n for n in needles if n not in text]
+
+
+def skill_proofs(repo: Path) -> list[tuple[str, str, str]]:
+    """The four skills still say what the 3b graders look for. A reworded skill fails here and is read as a premise
+    change, never as the skill declining."""
+    out: list[tuple[str, str, str]] = []
+
+    def row(ident: str, gone: list[str], ok: str) -> None:
+        out.append(("fail" if gone else "pass", ident, f"SKILL.md lost {gone}" if gone else ok))
+
+    row(
+        "ENV-switch-skill",
+        _has_all(
+            _read(repo, "skills/borg-switch/SKILL.md"),
+            ["borg switch <name>", "borg link --local --all --overview", "Switched to <repository>", "borg link --overview"],
+        ),
+        "borg-switch names its two commands, the confirmation and the failure pointer",
+    )
+    row(
+        "ENV-pane-skill",
+        _has_all(
+            _read(repo, "skills/pane/SKILL.md"),
+            ["drone pane <direction>", "ask which direction", "I reused it", "unzoomed", "restored"],
+        ),
+        "pane names its command, the question, the reuse confirmation and the zoom note",
+    )
+    ad = _read(repo, "skills/adhd-guardrails/SKILL.md")
+    row(
+        "ENV-adhd-skill",
+        _has_all(ad, ["This isn't in the current plan.", "Add it (adjusts timeline) or note it for later?", "CAPACITY WARNING"]),
+        "adhd-guardrails carries the not-in-plan wording, the add-or-defer choice and the capacity rule",
+    )
+    flagged = re.search(r"^user-invocable:\s*false\s*$", ad, re.M) is not None
+    out.append(
+        (
+            "pass" if flagged else "fail",
+            "ENV-adhd-invocable",
+            "adhd-guardrails is user-invocable: false, so the AD cases deliver its body by file and the probe measures firing"
+            if flagged
+            else "adhd-guardrails is user-invocable now: the delivery premise of AD1-AD4 changed",
+        )
+    )
+    review, personas = _read(repo, "skills/borg-collective-review/SKILL.md"), _read(repo, "skills/borg-collective-review/references/personas.md")
+    gone = _has_all(review, ["## The Collective Review", "Code owners summoned:", "Rotating specialist:", "**The Adult:**"])
+    gone += _has_all(review, [f"**{v}:**" for v in CORE_VOICES])
+    stated = re.search(r"Total review:\s*\d+-(\d+) lines", review)
+    if not stated or int(stated.group(1)) != REVIEW_STATED_MAX:
+        gone.append(f"'Total review: N-{REVIEW_STATED_MAX} lines' (the grader's length bound derives from it)")
+    row("ENV-cr-skill", gone, f"the review template and its stated length ({REVIEW_STATED_MAX}) are what the graders match")
+    tier2 = personas.split("## Tier 2", 1)[-1].split("## Tier 3", 1)[0]
+    owners = tuple(re.findall(r"^### (The [A-Za-z' -]+)$", tier2, re.M))
+    tier1 = personas.split("## Tier 2", 1)[0]
+    cores = tuple(re.findall(r"^### (The [A-Za-z' -]+?)(?: \(|$)", tier1, re.M))
+    bad = []
+    if owners != CODE_OWNERS:
+        bad.append(f"code owners {owners} differ from the grader's {CODE_OWNERS}")
+    if cores != (*CORE_VOICES, "The Adult"):
+        bad.append(f"core cast {cores} differs from the grader's")
+    if "Non-trivial schema changes" not in personas:
+        bad.append("the Database Architect summon rule (non-trivial schema changes)")
+    row("ENV-cr-personas", bad, "personas.md lists the graders' six core voices and six code owners with the schema summon rule")
+    ok = REVIEW_LINES_MAX == int(REVIEW_STATED_MAX * REVIEW_HEADROOM) and REVIEW_LINES_MAX > REVIEW_STATED_MAX
+    out.append(
+        (
+            "pass" if ok else "fail",
+            "ENV-cr-bound",
+            f"the length bound is {REVIEW_LINES_MAX} = {REVIEW_STATED_MAX} x {REVIEW_HEADROOM}"
+            if ok
+            else "the length bound is not the stated maximum with headroom",
+        )
+    )
+    return out
+
+
+def _src(text: str, pattern: str, flags: int = 0) -> str | None:
+    m = re.search(pattern, text, flags)
+    return m.group(1) if m else None
+
+
+def source_texts(repo: Path, wname: str, count: str, limit: str) -> dict[str, str | None]:
+    """What the real code prints for each text a stub or fixture copies, derived from the source, not retyped."""
+    drone, borg, hook = _read(repo, "drone.zsh"), _read(repo, "borg.zsh"), _read(repo, "hooks/borg-link-down.sh")
+    reuse = _src(drone, r'info "\$wname: (reusing existing side pane \$existing \(two panes per window\$note\))"')
+    note = _src(drone, r'note="(, unzoomed)"')
+    new = _src(drone, r'info "\$wname: (new pane opened \(\$direction\))"')
+    cap = _src(hook, r'"(⚠ CAPACITY WARNING:.*?)"\)', re.S)
+    out: dict[str, str | None] = {
+        "pane-reuse": f"{wname}: " + reuse.replace("$existing", "%7").replace("$note", "") if reuse else None,
+        "pane-reuse-zoomed": f"{wname}: " + reuse.replace("$existing", "%7").replace("$note", note)
+        if reuse and note
+        else None,
+        "pane-new": f"{wname}: " + new.replace("$direction", "{dir}") if new else None,
+        "pane-nodir": _src(drone, r'die "(Specify a direction: top, bottom, left, or right\.)"'),
+        "switch-fail": (
+            _src(borg, r'warn "(No tmux window registered for)\s*\$repository"')
+        ),
+        "capacity": cap.replace("$_active_count", count).replace("$_max_active", limit) if cap else None,
+    }
+    return out
+
+
+def src_proofs(repo: Path, texts: Path, wname: str, count: str, limit: str) -> list[tuple[str, str, str]]:
+    """Each text file in `texts` (written by running the real stubs and the fixture) equals what the source prints."""
+    want = source_texts(repo, wname, count, limit)
+    out = []
+    for kind, expected in want.items():
+        f = texts / f"{kind}.txt"
+        ident = f"SRC-{kind}"
+        if expected is None:
+            out.append(("fail", ident, "the source line this text is copied from could not be found (it moved or changed)"))
+            continue
+        if not f.is_file():
+            out.append(("fail", ident, f"no captured text at {f.name}"))
+            continue
+        raw = f.read_text(encoding="utf-8")
+        first = raw.splitlines()[0] if kind.startswith("pane") or kind in ("switch-fail",) else raw.rstrip("\n")
+        if kind == "pane-nodir":
+            first = first.removeprefix("▸ ERROR: ")
+        elif kind != "capacity":
+            first = first.removeprefix("▸ ")
+        if kind == "pane-new":
+            first = first.replace("(right)", "({dir})")
+        same = first.startswith(expected) if kind == "switch-fail" else first == expected
+        out.append(
+            ("pass", ident, "the stub or fixture text equals what the source prints")
+            if same
+            else ("fail", ident, f"the stub or fixture printed {first!r}, the source prints {expected!r}")
+        )
+    return out
+
+
 # ── sandbox facts ────────────────────────────────────────────────────────────────────────────────────────────────
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def snapshot(repo: Path, home: Path) -> dict:
+def snapshot(repo: Path, home: Path, stub_log: Path | None = None) -> dict:
     files = {}
     for f in sorted(repo.rglob("*")):
         rel = f.relative_to(repo)
@@ -868,11 +1429,14 @@ def snapshot(repo: Path, home: Path) -> dict:
             files[str(rel)] = _sha(f)
     local = repo / ".claude" / "settings.local.json"
     hs = home / ".claude" / "settings.json"
-    return {
+    snap = {
         "files": files,
         "local_settings": local.read_text(encoding="utf-8") if local.is_file() else None,
         "home_settings_sha": _sha(hs) if hs.is_file() else None,
     }
+    if stub_log is not None:
+        snap["stub_log"] = stub_log.read_text(encoding="utf-8").splitlines() if stub_log.is_file() else []
+    return snap
 
 
 # ── the sanitizer: this repository is public ─────────────────────────────────────────────────────────────────────
@@ -1054,6 +1618,9 @@ def main(argv: list[str]) -> int:
             if trace["case"] == "RV1":
                 v3 = grade_rv3(trace)
                 rows.append((v3[0], "RV3", v3[1]))
+            if trace["case"] == "AD2":
+                v4 = grade_ad4(trace)
+                rows.append((v4[0], "AD4", v4[1]))
             return _emit(rows)
         if cmd == "mutate" and len(args) == 3:
             mutate(Path(args[0]), args[1], Path(args[2]))
@@ -1070,8 +1637,16 @@ def main(argv: list[str]) -> int:
             return _emit(reducer_proof(Path(args[0])))
         if cmd == "env" and len(args) == 5:
             return _emit(env_proofs(Path(args[0]), *args[1:]))
-        if cmd == "snapshot" and len(args) == 2:
-            print(json.dumps(snapshot(Path(args[0]), Path(args[1])), sort_keys=True))
+        if cmd == "snapshot" and len(args) in (2, 3):
+            log = Path(args[2]) if len(args) == 3 else None
+            print(json.dumps(snapshot(Path(args[0]), Path(args[1]), log), sort_keys=True))
+            return 0
+        if cmd == "skills" and len(args) == 1:
+            return _emit(skill_proofs(Path(args[0])))
+        if cmd == "srctext" and len(args) == 5:
+            return _emit(src_proofs(Path(args[0]), Path(args[1]), *args[2:]))
+        if cmd == "probe" and len(args) == 1:
+            print(probe_adhd(_load_json(Path(args[0]))))
             return 0
         if cmd == "reduce" and len(args) == 2:
             print(json.dumps(build_trace(_load_jsonl(Path(args[0])), _load_json(Path(args[1]))), indent=2))
