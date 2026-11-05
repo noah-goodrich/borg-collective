@@ -38,8 +38,7 @@ criteria. If a request doesn't map to any criterion:
 
 ## Capacity Management
 - If a `⚠ CAPACITY WARNING` appears in session context, surface it at the top of your first
-  response before anything else: state the count, the limit, and name the active/waiting repositories.
-  Write that text before your first tool call and before any edit; the count and limit are in the warning
+  response before anything else: state the count, the limit, and name the active/waiting repositories
 - Actively discourage starting new work threads when at or above capacity
 - Suggest completing or pausing an existing repository before taking on anything new
 - "More repositories in flight = less done on each one" — enforce this framing
