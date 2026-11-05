@@ -45,7 +45,7 @@ sweep() {
     [ -f "$SUMMARY" ]
     [ "$(jq -r .schema "$SUMMARY")" = 1 ]
     [ "$(jq -r .model "$SUMMARY")" = claude-opus-5-5 ]
-    [ "$(jq -r '.cases | length' "$SUMMARY")" = 29 ]
+    [ "$(jq -r '.cases | length' "$SUMMARY")" = 49 ]
     [ "$(jq -r '[.cases[] | select(.harness=="link-next" and .verdict=="pass")] | length' "$SUMMARY")" = 4 ]
     grep -q -- '--model claude-opus-5-5' "$STUB_LOG"
     grep -q -- '--max-budget-usd 1.50' "$STUB_LOG"
@@ -59,7 +59,7 @@ sweep() {
 @test "sweep: agent-gates runs with NO --model (its agents' pins are under test), every other harness keeps it" {
     sweep
     jq -e '.cap_usd == 15' "$SUMMARY"
-    [ "$(jq -r '[.cases[] | select(.harness=="agent-gates")] | length' "$SUMMARY")" = 8 ]
+    [ "$(jq -r '[.cases[] | select(.harness=="agent-gates")] | length' "$SUMMARY")" = 16 ]
     [ "$(jq -r '[.cases[] | select(.harness=="agent-gates" and .model!="agent-frontmatter")] | length' "$SUMMARY")" = 0 ]
     grep -q -- '--agent borg-collective:borg-nanoprobe' "$STUB_LOG"
     ! grep -- '--agent' "$STUB_LOG" | grep -q -- '--model '
@@ -93,7 +93,7 @@ sweep() {
     [ "$status" -eq 1 ]
     [ ! -s "$STUB_LOG" ]
     [ "$(jq -r '.halted' "$SUMMARY")" != "" ]
-    [ "$(jq -r .counts.skip "$SUMMARY")" = 29 ]
+    [ "$(jq -r .counts.skip "$SUMMARY")" = 49 ]
 }
 
 @test "sweep: no claude is an error for every case, not a silent pass" {
@@ -101,7 +101,7 @@ sweep() {
     export BORG_CLAUDE_SEARCH_DIRS="$BATS_TEST_TMPDIR/empty"
     run env PATH="/usr/bin:/bin" PYTHONPATH="$BORG_HOME" python3 -m borg_core.evals.sweep.cli --repo "$SANDBOX"
     [ "$status" -eq 1 ]
-    [ "$(jq -r .counts.error "$SUMMARY")" = 29 ]
+    [ "$(jq -r .counts.error "$SUMMARY")" = 49 ]
 }
 
 @test "run.sh: still defaults to opus and xhigh, and EVAL_MODEL overrides the model" {

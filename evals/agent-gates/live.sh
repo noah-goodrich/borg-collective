@@ -23,8 +23,8 @@
 # in the session; graders read only the reduced trace, and the recorder commits nothing but a whitelisted subset of the
 # stream (see check.py).
 #
-# GRUNT CASES RUN WITH BORG_NO_SESSION_HOOKS=1 (GR1, GR2). `claude -p --agent` runs the agent as the MAIN session, so the
-# SessionStart nudge fires there, but a real grunt is a spawned subagent and does not meet it: in
+# GRUNT CASES RUN WITH BORG_NO_SESSION_HOOKS=1 (GR1, GR2). `claude -p --agent` runs the agent as the MAIN session, so
+# the SessionStart nudge fires there, but a real grunt is a spawned subagent and does not meet it: in
 # ~/.local/state/borg/agents.jsonl 0 of 5 logged grunt runs mention a plan gate. With the nudge on, GR1 failed by
 # BLOCKing on the plan gate, and GR2's `BLOCKED:` could pass because of the gate, not the ambiguous spec. The same log
 # shows real grunts DO overrun the 300-char cap (lengths 295, 300, 448 and two at the log's 500 limit): that is an
@@ -59,7 +59,10 @@ done
 # shellcheck disable=SC2206
 [ ${#WANT[@]} -gt 0 ] || WANT=(${EVAL_CASES:-NP1 NP2 NP3 NP4 V1 V2 V3 V4})
 for c in "${WANT[@]}"; do
-    case " NP1 NP2 NP3 NP4 V1 V2 V3 V4 GR1 GR2 SC1 SC2 RW1 RW2 RE1 RE2 " in *" $c "*) ;; *) echo "unknown case: $c" >&2; exit 2 ;; esac
+    case "$c" in
+        NP1|NP2|NP3|NP4|V1|V2|V3|V4|GR1|GR2|SC1|SC2|RW1|RW2|RE1|RE2) ;;
+        *) echo "unknown case: $c" >&2; exit 2 ;;
+    esac
 done
 
 _rec() {
@@ -100,7 +103,8 @@ _attempt() {
         REASON="sandbox setup failed: $(head -1 "$d/setup.err")"; return
     fi
     agent="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["agent"])' "$root/case.json")"
-    dmodel="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("default_model", "haiku"))' "$root/case.json")"
+    dmodel="$("$PYTHON" -c \
+        'import json,sys; print(json.load(open(sys.argv[1])).get("default_model", "haiku"))' "$root/case.json")"
     case "$agent" in
         borg-nanoprobe) tools="$NP_TOOLS" ;;
         borg-grunt) tools="$GR_TOOLS" ;;
@@ -110,8 +114,10 @@ _attempt() {
         *) tools="$V_TOOLS" ;;
     esac
     nohooks=""; [ "$agent" = borg-grunt ] && nohooks=1
-    ( cd "$root/repo" && BORG_NO_SESSION_HOOKS="$nohooks" claude -p "$(cat "$root/prompt.txt")" --agent "borg-collective:$agent" \
-        --settings "{\"model\":\"$dmodel\"}" --plugin-dir "$PLUGIN" --permission-mode acceptEdits --allowedTools "$tools" \
+    ( cd "$root/repo" && BORG_NO_SESSION_HOOKS="$nohooks" claude -p "$(cat "$root/prompt.txt")" \
+        --agent "borg-collective:$agent" \
+        --settings "{\"model\":\"$dmodel\"}" --plugin-dir "$PLUGIN" \
+        --permission-mode acceptEdits --allowedTools "$tools" \
         --output-format stream-json --verbose --max-budget-usd "$BUDGET" > "$d/raw.jsonl" 2> "$d/err.txt" )
     crc=$?
     result="$(grep '"type":"result"' "$d/raw.jsonl" | tail -n 1)"

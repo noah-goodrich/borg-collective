@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Offline harness (Tier 1) for the agent gates: borg-nanoprobe's scope gate, borg-verifier (the engine of
-# /borg-verify), and the four leaf workers borg-grunt, borg-scout, borg-reviewer and borg-researcher (GR*, SC*, RW*, RE*). THIS FILE NEVER REACHES A MODEL, THE WIRE OR A CREDENTIAL. The live half is live.sh (headless
+# /borg-verify), and the four leaf workers borg-grunt, borg-scout, borg-reviewer and borg-researcher (GR*, SC*, RW*,
+# RE*).
+# THIS FILE NEVER REACHES A MODEL, THE WIRE OR A CREDENTIAL. The live half is live.sh (headless
 # `claude -p --agent`, a developer command that spends money, never CI); it records each case as a sanitized,
 # content-stripped stream plus sandbox facts under recorded/, and this harness grades those recordings with the same
 # check.py that grades a live run:

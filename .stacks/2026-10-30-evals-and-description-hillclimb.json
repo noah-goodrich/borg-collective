@@ -92,6 +92,13 @@
       "ref": "noah-goodrich/borg-collective#531",
       "status": "open",
       "why": "Step 3b fix round: RE2 fixed, AD3 grader tightened, GR1 left as a finding"
+    },
+    {
+      "lane": "_default",
+      "order": "14",
+      "ref": "noah-goodrich/borg-collective#532",
+      "status": "open",
+      "why": "Step 3b-C: sweep the 3b groups, AC3 done; tracking #480"
     }
   ]
 }
