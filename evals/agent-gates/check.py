@@ -726,22 +726,10 @@ def grade_production(t: dict) -> list[tuple[str, str, str]]:
 
 
 def grade_dir(d: Path) -> list[tuple[str, str, str]]:
-    """Grade one recording. A recording whose live run FAILED a check for a real reason (meta `live_finding`: the check
-    id and the final message length at the time) reports that one check as SKIP with the finding named, so the
-    offline run stays green without calling the behavior fine. The mapping holds only for that exact final message:
-    a mutation that changes it is graded for real."""
+    """Grade one recording. (A meta `live_finding` marker once turned one known live failure into a SKIP; no recording
+    carries one, so a failing recording is graded as the failure it is.)"""
     meta, events, facts = load_recording(d)
-    out = _grade_recording(d, meta, events, facts)
-    find = meta.get("live_finding") or {}
-    final_len = len(trace_of(meta, events, facts)["final"])
-    if find and final_len == find.get("final_chars"):
-        out = [
-            _result("skip", cid, "known live finding, not a pass: %s" % find.get("why", ""))
-            if (verdict == "fail" and cid == find.get("check"))
-            else (verdict, cid, msg)
-            for verdict, cid, msg in out
-        ]
-    return out
+    return _grade_recording(d, meta, events, facts)
 
 
 def _grade_recording(d: Path, meta: dict, events: list[dict], facts: dict) -> list[tuple[str, str, str]]:

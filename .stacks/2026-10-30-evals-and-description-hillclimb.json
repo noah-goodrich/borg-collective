@@ -85,6 +85,13 @@
       "ref": "noah-goodrich/borg-collective#530",
       "status": "open",
       "why": "Step 3b-B: orchestrator-skills evals for borg-switch, pane, borg-collective-review, adhd-guardrails (AC3); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "13",
+      "ref": "noah-goodrich/borg-collective#531",
+      "status": "open",
+      "why": "Step 3b fix round: RE2 fixed, AD3 grader tightened, GR1 left as a finding"
     }
   ]
 }

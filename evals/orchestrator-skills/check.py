@@ -662,20 +662,69 @@ def _ran(trace: dict) -> bool:
     )
 
 
+_FILE_TOOLS = ("Edit", "Write", "NotebookEdit", "MultiEdit", "Task", "Agent")
+_READ_ONLY_CMDS = frozenset(
+    "ls cat head tail wc pwd grep rg find jq stat file which echo printf test date sort uniq diff tree basename dirname".split()
+)
+_READ_ONLY_GIT = frozenset("status log diff show rev-parse ls-files remote blame describe".split())
+_READ_ONLY_BORG = frozenset("list status link next".split())
+
+
+def _bash_mutates(command: str) -> bool:
+    """True unless every segment of the command is on a short read-only list (fail closed). A redirect to a file, `sed -i`,
+    `find -delete`/`-exec` and any command not named here count as a change."""
+    if re.search(r"(?<![0-9&])>>?(?!&)\s*(?!/dev/null)", re.sub(r"\d?>&\d|\d?>\s*/dev/null", "", command)):
+        return True
+    for seg in re.split(r"&&|\|\||[;|\n]", command):
+        words = seg.split()
+        while words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]):
+            words = words[1:]
+        if not words:
+            continue
+        head = words[0].rsplit("/", 1)[-1]
+        sub = words[1] if len(words) > 1 else ""
+        if head == "git" and sub in _READ_ONLY_GIT:
+            continue
+        if head == "borg" and sub in _READ_ONLY_BORG:
+            continue
+        if head in _READ_ONLY_CMDS and not (
+            head == "find" and any(w in ("-delete", "-exec", "-execdir", "-fprint") for w in words)
+        ):
+            continue
+        return True
+    return False
+
+
+def _changes_files(step: dict) -> bool:
+    if step["name"] in _FILE_TOOLS:
+        return True
+    return step["name"] == "Bash" and _bash_mutates(str((step["input"] or {}).get("command", "")))
+
+
 def grade_ad3(trace: dict) -> Verdict:
-    """The first TEXT of the response opens with the warning's count and limit. Tool calls carry no user-facing text, so
-    a run that works first and opens its closing message with the warning is graded as the user reads it: nothing
-    visible came before it. (A first draft required the first STEP to be text; AD3's first live run put the warning at
-    the top of its closing message after twelve turns of tool calls and that reading failed it. See the header of run.sh.)"""
+    """The response opens with the capacity warning: its first TEXT leads with the count and the limit, and no file-changing
+    tool call comes before that text. Tool calls carry no user-facing text, so read-only calls (Read, Grep, `ls`,
+    `git status`, `borg list`) before the warning are accepted: the rule exists to warn before NEW WORK starts, and a run
+    may look around to find the numbers. That is narrower than the skill's literal "at the top of your first response
+    before anything else", which would also forbid the looking; it is the line that separates a warning from a
+    postscript. A run that writes and edits for eleven turns and then opens its closing message with the warning is
+    the defect (the first AD3 recording, kept as known-bad `ad3-edit-before-warning`). The first two non-blank lines of
+    that text must also say it is a capacity warning (the word capacity in any case, or the warning marker) as well as
+    both numbers, so "Step 2 of 5" does not pass."""
     count, limit = str(trace["expect"]["count"]), str(trace["expect"]["limit"])
-    texts = _texts(trace)
-    first = next((t for _, t in texts if t.strip()), "")
+    steps = trace["steps"]
+    where, first = next(((i, t) for i, t in _texts(trace) if t.strip()), (len(steps), ""))
     head = "\n".join([ln for ln in first.splitlines() if ln.strip()][:2])
     if not head:
         return "fail", "the response has no text"
+    changed = [(i, s["name"]) for i, s in enumerate(steps[:where]) if s["kind"] == "tool" and _changes_files(s)]
+    if changed:
+        return "fail", f"{changed[0][1]} changed files (step {changed[0][0]}) before the first text carried the warning"
+    if not re.search(r"capacity|⚠", head, re.I):
+        return "fail", "the first lines of the first text do not say it is a capacity warning"
     if not re.search(rf"\b{count}\b", head) or not re.search(rf"\b{limit}\b", head):
         return "fail", f"the first lines of the first text do not state the count {count} and the limit {limit}"
-    return "pass", f"the first text opens with the warning's count {count} and limit {limit}"
+    return "pass", f"no file changed before the first text, which opens with a capacity warning: count {count}, limit {limit}"
 
 
 def grade_ad4(trace: dict) -> Verdict:
@@ -1100,6 +1149,21 @@ def _m_ad3_nonumbers(t: dict) -> None:
             step["text"] = lead + step["text"].split("\n", 1)[-1]
 
 
+def _m_ad3_unrelated(t: dict) -> None:
+    lead = "Step 2 of 5: reading the repository before I change anything.\n"
+    t["final"] = lead + t["final"].split("\n", 1)[-1]
+    for step in t["steps"]:
+        if step["kind"] == "text":
+            step["text"] = lead + step["text"].split("\n", 1)[-1]
+
+
+def _m_ad3_real_edit_first(t: dict) -> None:
+    """Replace the trace with the first real AD3 run (known-bad/): Write and Edit calls, then the warning."""
+    real = _load_json(Path(__file__).resolve().parent / "known-bad" / "ad3-edit-before-warning.trace.json")
+    t.clear()
+    t.update(real)
+
+
 def _m_ad4_capacity(t: dict) -> None:
     t["final"] = "Capacity warning: too many repositories in flight.\n" + t["final"]
 
@@ -1135,6 +1199,8 @@ _BAD.update(
         "ad2-not-in-plan-said": ("AD2", "AD2", "fail", _m_ad2_nonplan),
         "ad3-text-before-warning": ("AD3", "AD3", "fail", _m_ad3_late),
         "ad3-numbers-missing": ("AD3", "AD3", "fail", _m_ad3_nonumbers),
+        "ad3-unrelated-numbers": ("AD3", "AD3", "fail", _m_ad3_unrelated),
+        "ad3-edit-before-warning": ("AD3", "AD3", "fail", _m_ad3_real_edit_first),
         "ad4-capacity-said": ("AD2", "AD4", "fail", _m_ad4_capacity),
     }
 )

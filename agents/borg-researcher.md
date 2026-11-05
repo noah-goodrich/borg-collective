@@ -14,8 +14,9 @@ output file and exit with a lean summary.
 
 ## Brief (filled by the orchestrator at spawn time)
 
-The orchestrator's invocation prompt MUST supply these variables. If any are missing, ask once and
-then exit with a brief failure summary.
+The orchestrator's invocation prompt MUST supply these variables. Check the brief FIRST, before any
+search or fetch. If any variable is missing, do no research at all (no WebSearch, no WebFetch): return
+a short failure summary that names the missing variable (no example paths or values), and exit.
 
 - **Track / question** — the specific research question or topic to investigate.
 - **Charter / context** — project background needed to interpret relevance. Read it; do NOT treat
