@@ -48,8 +48,13 @@ LINK_NEXT_HARNESS = "link-next"
 AGENT_GATES_HARNESS = "agent-gates"
 AGENT_GATES_CASES = ("NP1", "NP2", "NP3", "NP4", "V1", "V2", "V3", "V4")
 AGENT_GATES_CEILING_USD = 0.5
+AGENT_GATES_3B_CASES = ("GR1", "GR2", "SC1", "SC2", "RW1", "RW2", "RE1", "RE2")
+AGENT_GATES_3B_CEILING_USD = 0.15
 ORCH_SKILLS_HARNESS = "orchestrator-skills"
 ORCH_SKILLS_CEILING_USD = 0.75
+SWITCH_PANE_CEILING_USD = 0.4
+COLLECTIVE_REVIEW_CEILING_USD = 0.75
+ADHD_CEILING_USD = 0.75
 AGENT_PIN_MODEL = "agent-frontmatter"
 VERDICTS = ("pass", "fail", "skip", "error")
 SUMMARY_KEYS = (
@@ -116,7 +121,15 @@ def plan_groups(link_next_cases: list[str]) -> list[Group]:
     because an unrecorded case counts at its full ceiling and a null-cost group run early inflates `spent` against the
     groups behind it. Ceilings come from recorded costs with headroom: agent-gates 8 cases for $1.52 is $0.19 each,
     ceiling $0.50 per attempt; orchestrator-skills 11 cases for $3.33 is $0.30 each (runs $0.22 to $0.33), ceiling
-    $0.75 per run."""
+    $0.75 per run.
+
+    Then the step-3b groups, last: new groups go after the existing ones. Their ceilings come from the recorded costs
+    and from the per-case cap evals/orchestrator-skills/live.sh applies (the sweep passes its ceiling as
+    EVAL_MAX_BUDGET_USD, which overrides that cap, so a ceiling below the cap would cut a run off under what live.sh
+    allows): GR and SC under $0.01 a run, RE about $0.02, RW $0.03 to $0.05, so the 8 agent cases get $0.15 per attempt;
+    SW and PN ran $0.10 to $0.18, live.sh cap $0.40, ceiling $0.40; CR ran $0.25 to $0.48, cap $0.75, ceiling $0.75; AD
+    ran $0.20 to $0.52, cap $0.50, ceiling $0.75 so the top run is not cut off.
+    AD4 is graded on AD2's run (`shared`)."""
     groups = [Group(LIFECYCLE_HARNESS, LIFECYCLE_CASES)]
     groups.extend(Group(LINK_NEXT_HARNESS, (name,)) for name in sorted(link_next_cases))
     skills = ORCH_SKILLS_CEILING_USD
@@ -126,6 +139,21 @@ def plan_groups(link_next_cases: list[str]) -> list[Group]:
     groups.append(Group(AGENT_GATES_HARNESS, AGENT_GATES_CASES, AGENT_GATES_CEILING_USD, agent_pinned=True))
     groups.append(Group(ORCH_SKILLS_HARNESS, ("RS1", "RS2", "RS3", "RS4"), skills, selector="resume"))
     groups.append(Group(ORCH_SKILLS_HARNESS, ("BG1", "BG2", "BG3"), skills, selector="break-glass"))
+    groups.append(Group(AGENT_GATES_HARNESS, AGENT_GATES_3B_CASES, AGENT_GATES_3B_CEILING_USD, agent_pinned=True))
+    groups.append(Group(ORCH_SKILLS_HARNESS, ("SW1", "SW2", "SW3"), SWITCH_PANE_CEILING_USD, selector="switch"))
+    groups.append(Group(ORCH_SKILLS_HARNESS, ("PN1", "PN2", "PN3"), SWITCH_PANE_CEILING_USD, selector="pane"))
+    groups.append(
+        Group(ORCH_SKILLS_HARNESS, ("CR1", "CR2"), COLLECTIVE_REVIEW_CEILING_USD, selector="collective-review")
+    )
+    groups.append(
+        Group(
+            ORCH_SKILLS_HARNESS,
+            ("AD1", "AD2", "AD3", "AD4"),
+            ADHD_CEILING_USD,
+            selector="adhd",
+            shared=("AD4",),
+        )
+    )
     return groups
 
 

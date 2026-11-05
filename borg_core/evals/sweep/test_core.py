@@ -65,16 +65,19 @@ def test_plan_puts_lifecycle_first_then_link_next_one_case_each_sorted():
 
 def test_plan_orders_known_cost_before_null_cost_after_the_existing_groups():
     groups = core.plan_groups(["a"])
-    assert [(g.harness, g.selector) for g in groups[2:]] == [
+    assert [(g.harness, g.selector) for g in groups[2:8]] == [
         ("orchestrator-skills", "review"),
         ("agent-gates", ""),
         ("orchestrator-skills", "resume"),
         ("orchestrator-skills", "break-glass"),
+        ("agent-gates", ""),
+        ("orchestrator-skills", "switch"),
     ]
+    assert [g.selector for g in groups[8:]] == ["pane", "collective-review", "adhd"]
 
 
 def test_step_3a_groups_cover_every_case_with_realistic_ceilings():
-    plan = {(g.harness, g.selector): g for g in core.plan_groups([])}
+    plan = {(g.harness, g.selector): g for g in core.plan_groups([])[:5]}
     gates = plan[("agent-gates", "")]
     assert gates.cases == core.AGENT_GATES_CASES and len(gates.cases) == 8 and gates.agent_pinned
     assert gates.reserve_usd == pytest.approx(4.0)  # at the 1.50 default 8 cases reserve 12 and never ran
@@ -238,3 +241,95 @@ def test_with_recorded_costs_all_four_link_next_cases_fit_after_a_typical_lifecy
         assert run  # decide() reserves the ceiling before the run; the recorded 0.4 is what is then charged
         spent += core.group_spend(group, [rec(group.cases[0], 0.4, harness=core.LINK_NEXT_HARNESS)])
     assert spent == pytest.approx(4.2 + 4 * 0.4)
+
+
+# Recorded cost per run (USD) of each existing and step-3b case, from the runs that set the ceilings.
+RECORDED = {
+    "lifecycle-manifests": 0.7,
+    "link-next": 0.3,
+    "RV": 0.3,
+    "NP": 0.19,
+    "RS": 0.3,
+    "BG": 0.3,
+    "GR": 0.01,
+    "SC": 0.01,
+    "RW": 0.05,
+    "RE": 0.02,
+    "SW": 0.18,
+    "PN": 0.18,
+    "CR": 0.48,
+    "AD": 0.52,
+}
+
+
+def _recorded_cost(group: core.Group, case: str) -> float:
+    key = group.harness if group.harness in RECORDED else case[:2] if case[:2] in RECORDED else "NP"
+    return RECORDED[key]
+
+
+def _sweep(cap: float) -> dict[tuple[str, str], bool]:
+    """Walk the plan the way the CLI does: each group runs if its reserve fits, then adds its recorded spend."""
+    spent = 0.0
+    ran: dict[tuple[str, str], bool] = {}
+    for group in core.plan_groups(["a", "b", "c", "d"]):
+        ok, _reason = core.decide(group, spent, cap)
+        ran[(group.harness, group.cases[0])] = ok
+        if ok:
+            spent += sum(_recorded_cost(group, c) for c in group.runs)
+    return ran
+
+
+def _step_3b_groups() -> dict[str, core.Group]:
+    groups = core.plan_groups([])
+    gates = next(g for g in groups[-5:] if g.harness == "agent-gates")
+    return {"gates": gates, **{g.selector: g for g in groups[-5:] if g.selector}}
+
+
+def test_step_3b_groups_cover_every_case_after_the_existing_ones():
+    plan = _step_3b_groups()
+    assert plan["gates"].cases == core.AGENT_GATES_3B_CASES and plan["gates"].agent_pinned
+    assert plan["gates"].ceiling_usd == pytest.approx(0.15) and plan["gates"].reserve_usd == pytest.approx(1.2)
+    assert plan["switch"].cases == ("SW1", "SW2", "SW3") and plan["pane"].cases == ("PN1", "PN2", "PN3")
+    assert plan["collective-review"].cases == ("CR1", "CR2")
+    assert plan["adhd"].cases == ("AD1", "AD2", "AD3", "AD4")
+    assert not any(g.agent_pinned for k, g in plan.items() if k != "gates")
+    assert "ADP" not in {c for g in core.plan_groups([]) for c in g.cases}
+
+
+def test_ad4_rides_ad2s_run_so_it_reserves_and_spends_nothing():
+    adhd = _step_3b_groups()["adhd"]
+    assert adhd.shared == ("AD4",) and adhd.runs == ("AD1", "AD2", "AD3")
+    assert adhd.reserve_usd == pytest.approx(3 * core.ADHD_CEILING_USD)
+    records = [rec(c, 0.3, harness="orchestrator-skills") for c in adhd.cases]
+    assert core.group_spend(adhd, records) == pytest.approx(0.9)
+
+
+def test_step_3b_ceilings_sit_at_or_above_the_live_sh_per_case_caps_and_the_recorded_maxima():
+    plan = _step_3b_groups()
+    assert plan["switch"].ceiling_usd >= 0.40 and plan["pane"].ceiling_usd >= 0.40
+    assert plan["adhd"].ceiling_usd >= 0.50 and plan["collective-review"].ceiling_usd >= 0.75
+    assert plan["gates"].ceiling_usd >= 0.05 and plan["adhd"].ceiling_usd >= 0.52
+
+
+def test_the_existing_groups_keep_their_cases_order_and_ceilings():
+    groups = core.plan_groups(["a"])
+    assert [(g.harness, g.selector, g.cases, g.ceiling_usd) for g in groups[:8]] == [
+        ("lifecycle-manifests", "", core.LIFECYCLE_CASES, 1.5),
+        ("link-next", "", ("a",), 1.5),
+        ("orchestrator-skills", "review", ("RV1", "RV2", "RV3", "RV4"), 0.75),
+        ("agent-gates", "", core.AGENT_GATES_CASES, 0.5),
+        ("orchestrator-skills", "resume", ("RS1", "RS2", "RS3", "RS4"), 0.75),
+        ("orchestrator-skills", "break-glass", ("BG1", "BG2", "BG3"), 0.75),
+        ("agent-gates", "", core.AGENT_GATES_3B_CASES, 0.15),
+        ("orchestrator-skills", "switch", ("SW1", "SW2", "SW3"), 0.4),
+    ]
+
+
+@pytest.mark.parametrize("today", ["2026-11-03", "2026-11-10", "2026-12-02"])
+def test_on_a_raised_cap_date_recorded_costs_plus_reserves_skip_no_group(today):
+    assert all(_sweep(core.sweep_cap_usd(today)).values())
+
+
+def test_at_the_ten_dollar_cap_the_late_groups_skip_without_a_cap_reset():
+    ran = _sweep(core.sweep_cap_usd("2026-12-03"))
+    assert not all(ran.values()) and ran[("lifecycle-manifests", "P1")] is True

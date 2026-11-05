@@ -15,8 +15,16 @@ from borg_core.evals.sweep import cli, core, shell
 
 IN_WINDOW = "2026-11-10"
 AFTER_WINDOW = "2026-12-06"
-GROUPS = ["lifecycle-manifests"] + ["link-next"] * 4 + ["orchestrator-skills", "agent-gates"] + ["orchestrator-skills"] * 2
-N_CASES = 6 + 4 + 4 + 8 + 4 + 3
+GROUPS = (
+    ["lifecycle-manifests"]
+    + ["link-next"] * 4
+    + ["orchestrator-skills", "agent-gates"]
+    + ["orchestrator-skills"] * 2
+    + ["agent-gates"]
+    + ["orchestrator-skills"] * 4
+)
+N_CASES = 6 + 4 + 4 + 8 + 4 + 3 + 8 + 3 + 3 + 2 + 4
+N_RUNS = N_CASES - 2  # RV3 and AD4 ride another case's run
 
 
 @pytest.fixture(name="sandbox")
@@ -69,31 +77,34 @@ def summary() -> dict:
 
 
 def test_full_sweep_runs_every_group_and_writes_the_summary(sandbox, monkeypatch):
-    calls = fake_harness(monkeypatch, 0.5)
+    calls = fake_harness(monkeypatch, 0.2)
     assert cli.main(["--repo", str(sandbox)]) == 0
     assert [c[0] for c in calls] == GROUPS
     doc = summary()
     assert tuple(doc) == tuple(sorted(core.SUMMARY_KEYS))  # sort_keys on disk
     assert doc["model"] == "claude-opus-5-5" and doc["git_sha"] == "deadbeef"
     assert doc["cap_usd"] == 15.0
-    # 28 runs at 0.5: RV3 shares RV1's run, so its (duplicate) recorded cost must not be counted a second time
-    assert doc["spend_usd"] == pytest.approx(28 * 0.5)
+    # RV3 and AD4 share another case's run, so their (duplicate) recorded cost must not be counted a second time
+    assert doc["spend_usd"] == pytest.approx(N_RUNS * 0.2)
     assert doc["counts"]["pass"] == N_CASES and doc["needs_attention"] is False
 
 
 def test_each_row_names_its_model_and_agent_gates_reports_the_agents_own_pin(sandbox, monkeypatch):
-    fake_harness(monkeypatch, 0.5)
+    fake_harness(monkeypatch, 0.2)
     cli.main(["--repo", str(sandbox)])
     by = {(c["harness"], c["case"]): c for c in summary()["cases"]}
     assert by[("agent-gates", "V1")]["model"] == "agent-frontmatter"
     assert by[("lifecycle-manifests", "P1")]["model"] == "claude-opus-5-5"
     assert by[("orchestrator-skills", "RS1")]["model"] == "claude-opus-5-5"
     assert by[("orchestrator-skills", "RV3")]["cost_usd"] is None  # graded on RV1's run: no cost of its own
-    assert by[("orchestrator-skills", "RV1")]["cost_usd"] == 0.5
+    assert by[("orchestrator-skills", "RV1")]["cost_usd"] == 0.2
+    assert by[("orchestrator-skills", "AD4")]["cost_usd"] is None and by[("agent-gates", "GR1")]["model"] == (
+        "agent-frontmatter"
+    )
 
 
 def test_the_raise_has_expired_after_the_window_and_the_sweep_runs_on_the_old_cap(sandbox, monkeypatch):
-    fake_harness(monkeypatch, 0.5)
+    fake_harness(monkeypatch, 0.2)
     monkeypatch.setattr(shell, "today_utc", lambda: AFTER_WINDOW)
     assert cli.main(["--repo", str(sandbox)]) == 1
     doc = summary()
