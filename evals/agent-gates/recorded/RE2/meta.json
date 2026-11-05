@@ -3,10 +3,5 @@
   "name": "no-output-path",
   "agent": "borg-researcher",
   "kind": "research-nopath",
-  "pin": "claude-haiku-5-5",
-  "live_finding": {
-    "check": "RE2.failure-summary",
-    "final_chars": 566,
-    "why": "the researcher answers the question inline instead of declining a brief with no output path (3 of 3 live runs)"
-  }
+  "pin": "claude-haiku-5-5"
 }
