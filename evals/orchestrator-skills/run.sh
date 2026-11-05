@@ -18,7 +18,7 @@
 #   CR1 collective review, summons: the review's shape with a code owner for a schema change
 #   CR2 collective review, negative: the same shape for a typo fix, no code owner
 #   AD1 out of plan: says so, offers add or defer, changes nothing   AD2 in plan (negative): no not-in-plan line
-#   AD3 capacity: the warning's count and limit open the first text      AD4 no warning (negative): no capacity line
+#   AD3 capacity: no file change before a first text that opens with the warning      AD4 no warning (negative): no capacity line
 #
 # STEP 3b NOTES (borg-switch, pane, borg-collective-review, adhd-guardrails; tracking issue 480):
 #   * These cases grade what a skill DOES ONCE IT RUNS. Whether it fires on its own is the trigger suite (AC4), not here.
@@ -35,8 +35,11 @@
 #     depend on it firing: the skill BODY is delivered through --append-system-prompt-file and no plugin is loaded, and the
 #     result says what the rules do when the model has read them. Whether the Skill tool fires is measured separately by
 #     live.sh --case ADP (a measurement, never a graded case, never in a group). AD3 puts the SessionStart text the hook
-#     produces into the same file. AD3 grades the first TEXT, because a run that works for twelve turns and then opens its
-#     closing message with the warning has put nothing visible before it (a stricter first draft failed that run).
+#     produces into the same file. AD3 fails any file-changing call (Edit, Write, a mutating Bash command) before the first
+#     text, and needs the word capacity or the warning marker with both numbers in that text's first two lines. Read-only
+#     calls before it are accepted: narrower than the skill's literal "before anything else", because the rule exists to
+#     warn before new work starts. The first AD3 recording (eleven calls incl. Write and Edit, then the warning) is kept
+#     as known-bad ad3-edit-before-warning (known-bad/); ad3-unrelated-numbers is "Step 2 of 5".
 #   * AD4 is graded on AD2's run (no warning in context, an in-plan request), as RV3 is on RV1's.
 #   * NOT GRADED, on purpose: adhd-guardrails' two-hour break rule, its low-energy rule and its shame-language rule (they need
 #     a two-hour session, a drifting user and a judgment about tone), and its scope-expansion, perfectionism and done-criteria
