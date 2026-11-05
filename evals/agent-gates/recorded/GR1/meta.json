@@ -3,10 +3,5 @@
   "name": "exact-spec",
   "agent": "borg-grunt",
   "kind": "grunt-edit",
-  "pin": "claude-haiku-5-5",
-  "live_finding": {
-    "check": "GR1.lean",
-    "final_chars": 331,
-    "why": "the grunt's final message exceeds its 300-char contract: it carries a note about a session-start hook gate and a cost line (2 of 2 live runs, 453 and 331 chars)"
-  }
+  "pin": "claude-haiku-5-5"
 }

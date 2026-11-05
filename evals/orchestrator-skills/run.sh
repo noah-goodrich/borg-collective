@@ -187,6 +187,12 @@ run_cases() {
     fi
     # THE SWEEP'S GROUPS DO NOT MOVE: the weekly sweep calls live.sh with one of these selectors (borg_core/evals/sweep/shell.py)
     # and reserves budget from fixed case lists, so each must still select exactly the cases it did before step 3b.
+    live_out="$(env -u EVAL_OUT bash -c 'BORG_EVAL_REPO="$1" bash "$2/live.sh" --dry-run --case AD1' _ "$REPO" "$HERE" 2>/dev/null | awk '$1 == "OUT" {print $2}')"
+    case "$live_out" in
+        "") bad "ENV live.sh --dry-run does not print its default run directory (OUT line)" ;;
+        "$REPO"|"$REPO"/*) bad "ENV live.sh's default run directory $live_out sits inside the repository: a live session could read this repo's CLAUDE.md" ;;
+        *) ok "ENV live.sh's default run directory is outside the repository" ;;
+    esac
     if live_dry --case review 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'RV1 RV2 RV4 ' \
         && live_dry --case break-glass 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'BG1 BG2 BG3 ' \
         && live_dry --case resume 2>/dev/null | grep '^CASE ' | awk '{print $2}' | tr '\n' ' ' | grep -qx 'RS1 RS2 RS3 RS4 '; then

@@ -26,7 +26,9 @@
 #                          and an explicit value here overrides every case)
 #   EVAL_TOTAL_BUDGET_USD  stop before a case whose cap could take the invocation's recorded spend past this (default: none)
 #   EVAL_PLUGIN_DIR        a built plugin directory; default: this checkout, built to <run dir>/plugin
-#   EVAL_OUT               the run directory (default <repo>/evals/orchestrator-skills/out)
+#   EVAL_OUT               the run directory (default ${TMPDIR:-/tmp}/borg-eval-orchestrator-skills: OUTSIDE the repository,
+#                          because a sandbox inside it lets the live session read this repo's CLAUDE.md and docs, and keeps
+#                          sandboxes out of `borg scan`; the stream stays there for diagnosis and --record-only)
 #   BORG_EVAL_HISTORY      the run-history file (borg_core/evals/history.py)
 #
 # WHAT IS GRADED, AND WHAT IS NOT. Every case is a Tier 2 SCRIPT grader over the reduced trace and the sandbox files. No
@@ -75,7 +77,7 @@ EVAL_MODEL="${EVAL_MODEL:-claude-opus-5-5}"
 EVAL_EFFORT="${EVAL_EFFORT:-xhigh}"
 CAP_EXPLICIT="${EVAL_MAX_BUDGET_USD:+1}"
 EVAL_MAX_BUDGET_USD="${EVAL_MAX_BUDGET_USD:-1.00}"
-OUT="${EVAL_OUT:-$REPO/evals/orchestrator-skills/out}"
+OUT="${EVAL_OUT:-${TMPDIR:-/tmp}/borg-eval-orchestrator-skills}"
 PYTHON="$(_os_python "$REPO")"
 
 ALL_CASES="RS1 RS2 RS3 RS4 RV1 RV2 RV4 BG1 BG2 BG3 SW1 SW2 SW3 PN1 PN2 PN3 CR1 CR2 AD1 AD3 AD2"
@@ -317,6 +319,7 @@ if [ "$RECORD_ONLY" -eq 1 ]; then
 fi
 
 if [ "$DRY" -eq 1 ]; then
+    echo "OUT $OUT"
     for c in $CASES; do
         prompt="$(_prompt "$c" /sandbox/repo)"
         _os_prompt_leaks "$prompt" || { echo "DRY-RUN REFUSED $c: the prompt leaks a hint" >&2; exit 2; }

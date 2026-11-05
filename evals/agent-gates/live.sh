@@ -23,6 +23,13 @@
 # in the session; graders read only the reduced trace, and the recorder commits nothing but a whitelisted subset of the
 # stream (see check.py).
 #
+# GRUNT CASES RUN WITH BORG_NO_SESSION_HOOKS=1 (GR1, GR2). `claude -p --agent` runs the agent as the MAIN session, so the
+# SessionStart nudge fires there, but a real grunt is a spawned subagent and does not meet it: in
+# ~/.local/state/borg/agents.jsonl 0 of 5 logged grunt runs mention a plan gate. With the nudge on, GR1 failed by
+# BLOCKing on the plan gate, and GR2's `BLOCKED:` could pass because of the gate, not the ambiguous spec. The same log
+# shows real grunts DO overrun the 300-char cap (lengths 295, 300, 448 and two at the log's 500 limit): that is an
+# open finding the sandbox does not reproduce.
+#
 # NP3 IS A CAPABILITY CASE (pass@3): exactly three deliverables is the boundary of the agent's scope rule and the count
 # is the model's own judgment, so NP3 gets up to three attempts and passes if any attempt refuses. Every other case
 # gets one. The attempts used are in the reason and the cost is summed over all of them.
@@ -102,7 +109,8 @@ _attempt() {
         borg-researcher) tools="$RE_TOOLS" ;;
         *) tools="$V_TOOLS" ;;
     esac
-    ( cd "$root/repo" && claude -p "$(cat "$root/prompt.txt")" --agent "borg-collective:$agent" \
+    nohooks=""; [ "$agent" = borg-grunt ] && nohooks=1
+    ( cd "$root/repo" && BORG_NO_SESSION_HOOKS="$nohooks" claude -p "$(cat "$root/prompt.txt")" --agent "borg-collective:$agent" \
         --settings "{\"model\":\"$dmodel\"}" --plugin-dir "$PLUGIN" --permission-mode acceptEdits --allowedTools "$tools" \
         --output-format stream-json --verbose --max-budget-usd "$BUDGET" > "$d/raw.jsonl" 2> "$d/err.txt" )
     crc=$?
