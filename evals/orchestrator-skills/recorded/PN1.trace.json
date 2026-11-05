@@ -1,0 +1,48 @@
+{
+  "after": {
+    "files": {},
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null,
+    "stub_log": [
+      "drone pane right"
+    ]
+  },
+  "before": {
+    "files": {},
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null,
+    "stub_log": []
+  },
+  "case": "PN1",
+  "expect": {
+    "direction": "right"
+  },
+  "final": "Opened a pane to the right.",
+  "result": {
+    "cost": 0.16458899999999999,
+    "denials": 0,
+    "is_error": false,
+    "models": [
+      "claude-opus-5-5"
+    ],
+    "subtype": "success",
+    "turns": 2
+  },
+  "steps": [
+    {
+      "error": false,
+      "input": {
+        "command": "drone pane right",
+        "description": "Split a tmux pane to the right"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "output": "\u25b8 alpha-api: new pane opened (right)"
+    },
+    {
+      "kind": "text",
+      "text": "Opened a pane to the right."
+    }
+  ],
+  "version": 1
+}

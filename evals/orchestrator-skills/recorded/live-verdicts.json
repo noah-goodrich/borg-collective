@@ -1,7 +1,16 @@
 {
+  "AD1": "pass",
+  "AD2": "pass",
+  "AD3": "pass",
+  "AD4": "pass",
   "BG1": "pass",
   "BG2": "pass",
   "BG3": "pass",
+  "CR1": "pass",
+  "CR2": "pass",
+  "PN1": "pass",
+  "PN2": "pass",
+  "PN3": "pass",
   "RS1": "pass",
   "RS2": "pass",
   "RS3": "pass",
@@ -9,5 +18,8 @@
   "RV1": "pass",
   "RV2": "fail",
   "RV3": "pass",
-  "RV4": "fail"
+  "RV4": "fail",
+  "SW1": "pass",
+  "SW2": "pass",
+  "SW3": "pass"
 }

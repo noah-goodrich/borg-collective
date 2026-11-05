@@ -1,0 +1,48 @@
+{
+  "after": {
+    "files": {},
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null,
+    "stub_log": [
+      "borg switch nonesuch-repo"
+    ]
+  },
+  "before": {
+    "files": {},
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null,
+    "stub_log": []
+  },
+  "case": "SW3",
+  "expect": {
+    "name": "nonesuch-repo"
+  },
+  "final": "The switch failed:\n\n```\n\u25b8 No tmux window registered for nonesuch-repo\n```\n\nTo see the available repositories, run:\n\n```\nborg link --overview\n```",
+  "result": {
+    "cost": 0.16726440000000004,
+    "denials": 0,
+    "is_error": false,
+    "models": [
+      "claude-opus-5-5"
+    ],
+    "subtype": "success",
+    "turns": 2
+  },
+  "steps": [
+    {
+      "error": true,
+      "input": {
+        "command": "borg switch nonesuch-repo",
+        "description": "Switch to the named repository"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "output": "Exit code 1\n\u25b8 No tmux window registered for nonesuch-repo"
+    },
+    {
+      "kind": "text",
+      "text": "The switch failed:\n\n```\n\u25b8 No tmux window registered for nonesuch-repo\n```\n\nTo see the available repositories, run:\n\n```\nborg link --overview\n```"
+    }
+  ],
+  "version": 1
+}

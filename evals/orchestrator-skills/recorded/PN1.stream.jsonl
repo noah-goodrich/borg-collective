@@ -1,0 +1,4 @@
+{"message": {"content": [{"id": "t1", "input": {"command": "drone pane right", "description": "Split a tmux pane to the right"}, "name": "Bash", "type": "tool_use"}], "role": "assistant"}, "type": "assistant"}
+{"message": {"content": [{"content": "\u25b8 alpha-api: new pane opened (right)", "is_error": false, "tool_use_id": "t1", "type": "tool_result"}], "role": "user"}, "type": "user"}
+{"message": {"content": [{"text": "Opened a pane to the right.", "type": "text"}], "role": "assistant"}, "type": "assistant"}
+{"is_error": false, "modelUsage": {"claude-opus-5-5": {"costUSD": 0.16458899999999999}}, "num_turns": 2, "permission_denials": [], "result": "Opened a pane to the right.", "subtype": "success", "total_cost_usd": 0.16458899999999999, "type": "result"}

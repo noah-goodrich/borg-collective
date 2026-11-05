@@ -1,0 +1,2 @@
+{"message": {"content": [{"text": "Which direction should the new pane open: top, bottom, left, or right?", "type": "text"}], "role": "assistant"}, "type": "assistant"}
+{"is_error": false, "modelUsage": {"claude-opus-5-5": {"costUSD": 0.0989556}}, "num_turns": 1, "permission_denials": [], "result": "Which direction should the new pane open: top, bottom, left, or right?", "subtype": "success", "total_cost_usd": 0.0989556, "type": "result"}

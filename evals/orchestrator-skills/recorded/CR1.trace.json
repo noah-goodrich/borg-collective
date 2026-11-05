@@ -1,0 +1,99 @@
+{
+  "after": {
+    "files": {
+      "README.md": "faa5b4816800b8cbe1595e5533fe36c53f396c0c26a3a876dd3e4085232348a1",
+      "db.py": "3f67d004064d1c1cede016c33bd9aeeada931bc131c75f45dc31db218c81e8e5",
+      "migrations/001_users.sql": "0d060772055c7905c5c33b65f0728449ec01b02c22610df70252ae470e62f9b3",
+      "migrations/002_invoices.sql": "cc19aec884e1dc436a69089bc8444345fc6c6f8606d80c4f676b24c80c5f79c3"
+    },
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null
+  },
+  "before": {
+    "files": {
+      "README.md": "faa5b4816800b8cbe1595e5533fe36c53f396c0c26a3a876dd3e4085232348a1",
+      "db.py": "3f67d004064d1c1cede016c33bd9aeeada931bc131c75f45dc31db218c81e8e5",
+      "migrations/001_users.sql": "0d060772055c7905c5c33b65f0728449ec01b02c22610df70252ae470e62f9b3",
+      "migrations/002_invoices.sql": "cc19aec884e1dc436a69089bc8444345fc6c6f8606d80c4f676b24c80c5f79c3"
+    },
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null
+  },
+  "case": "CR1",
+  "expect": {
+    "owner": "The Database Architect"
+  },
+  "final": "## The Collective Review\n\n**Code owners summoned:** The Database Architect (two new financial tables)\n**Rotating specialist:** none (one code owner fired, and a two-commit repo has little history to weigh)\n\n**The Scope Hawk:** \"The fixes below add about 20 lines to a 15-line file, which is still one commit. Cut `invoice_items_sku_idx` unless a query for it is coming, because `invoices_for` at `db.py:5` is the only query in the repo and never touches `sku`. Skip a products table, status enum, tax fields and down migration, since nothing needs them yet. The unused `import psycopg` and missing type hints in `db.py` belong in another commit.\"\n\n**The Craftsperson:** \"Nothing verifies this migration: the repo has no tests or migration runner, only `README.md`, `db.py` and `001_users.sql`. `qty INT NOT NULL` accepts `0` and `-5`, so add `CHECK (qty > 0)`. `total_cents` accepts negatives too, so decide whether credit notes make those legal. The file has three statements and no `BEGIN`, so under plain `psql -f` a failure on the last one leaves both tables behind and a rerun fails on `already exists`.\"\n\n**The Performance Engineer:** \"`invoices_for` filters on `user_id`, and Postgres doesn't index foreign keys automatically, so every call scans all of `invoices`. Loading an invoice's items has the same problem because `invoice_items.invoice_id` has no index. The one index this file does add serves no current query. `SELECT *` at `db.py:5` also pulls `raw_payload` on every list call: at an assumed 10 KB per payload, a user with 100 invoices costs 1 MB per call.\"\n\n**The Readability Advocate:** \"The names mostly work: `total_cents` carries its unit, and the style matches `001_users.sql`. `raw_payload` is the exception, because it doesn't say which system sent it or whether `NULL` is normal. A `COMMENT ON COLUMN` would answer both.\"\n\n**The User Advocate:** \"A user can't get a useful invoice list from this. `invoices` has no date of any kind and `invoices_for` has no `ORDER BY`, so nothing says when an invoice was created or how to sort the list. Line items show `sku` and `qty` with no price, so nobody can see how `total_cents` was reached.\"\n\n**The Database Architect:** \"Neither table has `created_at`, `updated_at` or `deleted_at`, which breaks the audit-column rule; `001_users.sql` has all three. No `updated_at` trigger exists anywhere in the repo, so this migration has to create the function. Once `deleted_at` exists, `db.py:5` needs `AND deleted_at IS NULL`, or soft-deleted invoices keep coming back. Add `unit_price_cents` to `invoice_items`, because without it `total_cents` can't be reconciled and a later price change can't be reconstructed. `raw_payload` suggests invoices come from an API. If so, make it `NOT NULL` so a payload can't go missing, and add `external_id TEXT NOT NULL UNIQUE` so a retried delivery can't create a duplicate invoice. The default `NO ACTION` foreign keys are right, since they block hard-deleting a user who has invoices.\"\n\n**The Adult:** \"Don't commit this yet. The basic shape is fine, and the 80/20 is three changes:\n\n1. **Audit columns (required):** Add all three columns to both tables, plus the `updated_at` trigger. Update `db.py:5` to filter on `deleted_at IS NULL`, add `ORDER BY created_at DESC`, and list its columns explicitly so it stops fetching `raw_payload`.\n2. **Indexes (required):** Add indexes on `invoices (user_id)` and `invoice_items (invoice_id)`, and drop the `sku` index unless a query for it is coming.\n3. **Data you can't easily recover later (before the first real rows):** Add `unit_price_cents`. If invoices come from an external API, also make `raw_payload` `NOT NULL` and add `external_id`.\n\nThe Hawk wins on products, status and tax; the Architect wins on anything unrecoverable. `CHECK (qty > 0)` and `BEGIN`/`COMMIT` are cheap enough to include, though skip the `BEGIN`/`COMMIT` if your runner already wraps each migration. Currency can wait if you only bill in one, since adding a column with a default later is cheap. Attach the trigger to `users` in a follow-up `003` rather than editing the committed `001`. There's no need to split this up.\"\n\nI didn't change or run anything, so this SQL hasn't been applied to Postgres. Once the fixes are in, this checks the migrations against a scratch database (it needs local Postgres, and I haven't run it):\n\n```sh\ncreatedb mig_check && { psql -v ON_ERROR_STOP=1 -d mig_check -f migrations/001_users.sql -f migrations/002_invoices.sql; dropdb mig_check; }\n```\n\nRough cost: at least $0.21, from the session budget meter before this reply.",
+  "result": {
+    "cost": 0.477201,
+    "denials": 0,
+    "is_error": false,
+    "models": [
+      "claude-opus-5-5"
+    ],
+    "subtype": "success",
+    "turns": 7
+  },
+  "steps": [
+    {
+      "error": false,
+      "input": {
+        "file_path": "/plugin/skills/borg-collective-review/references/personas.md"
+      },
+      "kind": "tool",
+      "name": "Read",
+      "output": "1\t## Tier 1 \u2014 Core Cast (Always Present)\n2\t\n3\t### The Scope Hawk (80/20 Enforcer)\n4\t**Priority:** Maximum value for minimum effort. Cuts anything that doesn't directly serve the\n5\tobjective.\n6\t**Voice:** Direct, numbers-oriented. \"What's the minimum viable version of this?\"\n7\t**Asks:** What can we cut? What's gold-plating? What ships in one session instead of three?\n8\t\n9\t### The Craftsperson (Quality/Testing)\n10\t**Priority:** Nothing half-assed. Well-structured, test-driven, no silent failures.\n11\t**Voice:** Precise, evidence-based. \"Where's the test for that?\"\n12\t**Asks:** What breaks if this fails? Where are the gaps in verification? What's untested?\n13\t\n14\t### The Performance Engineer\n15\t**Priority:** Efficiency \u2014 runtime, token cost, unnecessary work.\n16\t**Voice:** Quantitative. \"How many times does this call jq per repository?\"\n17\t**Asks:** What's O(n\u00b2) that should be O(n)? What's making network calls that could be cached?\n18\tWhat work is being done that nobody asked for?\n19\t\n20\t### The Readability Advocate\n21\t**Priority:** Code understandable by a non-brilliant engineer tomorrow.\n22\t**Voice:** Empathetic, practical. \"What does this variable name tell a new reader?\"\n23\t**Asks:** Are there magic numbers? Unclear names? Missing comments on non-obvious logic? Will the\n24\tperson maintaining this at 2am understand what's happening?\n25\t\n26\t### The User Advocate (UX/Dogfooding)\n27\t**Priority:** Will someone actually enjoy using this?\n28\t**Voice:** Pragmatic, user-focused. \"I tr"
+    },
+    {
+      "error": false,
+      "input": {
+        "file_path": "/sandbox/repo/migrations/002_invoices.sql"
+      },
+      "kind": "tool",
+      "name": "Read",
+      "output": "1\tCREATE TABLE invoices (\n2\t    id BIGSERIAL PRIMARY KEY,\n3\t    user_id BIGINT NOT NULL REFERENCES users(id),\n4\t    total_cents BIGINT NOT NULL,\n5\t    raw_payload JSONB\n6\t);\n7\t\n8\tCREATE TABLE invoice_items (\n9\t    id BIGSERIAL PRIMARY KEY,\n10\t    invoice_id BIGINT NOT NULL REFERENCES invoices(id),\n11\t    sku TEXT NOT NULL,\n12\t    qty INT NOT NULL\n13\t);\n14\t\n15\tCREATE INDEX invoice_items_sku_idx ON invoice_items (sku);\n16\t"
+    },
+    {
+      "error": false,
+      "input": {
+        "command": "git status --short && git log --stat --format='%h %s' && git ls-files",
+        "description": "Show status, commit history with files, and tracked files"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "output": "?? migrations/002_invoices.sql\nd34b5b8 users table\n\n db.py                    | 5 +++++\n migrations/001_users.sql | 7 +++++++\n 2 files changed, 12 insertions(+)\n41b739b fixture\n\n README.md | 1 +\n 1 file changed, 1 insertion(+)\nREADME.md\ndb.py\nmigrations/001_users.sql"
+    },
+    {
+      "error": false,
+      "input": {
+        "file_path": "/sandbox/repo/migrations/001_users.sql"
+      },
+      "kind": "tool",
+      "name": "Read",
+      "output": "1\tCREATE TABLE users (\n2\t    id BIGSERIAL PRIMARY KEY,\n3\t    email TEXT NOT NULL UNIQUE,\n4\t    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n5\t    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n6\t    deleted_at TIMESTAMPTZ\n7\t);\n8\t"
+    },
+    {
+      "error": false,
+      "input": {
+        "file_path": "/sandbox/repo/db.py"
+      },
+      "kind": "tool",
+      "name": "Read",
+      "output": "1\timport psycopg\n2\t\n3\t\n4\tdef invoices_for(conn, user_id):\n5\t    return conn.execute(\"SELECT * FROM invoices WHERE user_id = %s\", (user_id,)).fetchall()\n6\t"
+    },
+    {
+      "error": false,
+      "input": {
+        "file_path": "/sandbox/repo/README.md"
+      },
+      "kind": "tool",
+      "name": "Read",
+      "output": "1\t# fixture\n2\t"
+    },
+    {
+      "kind": "text",
+      "text": "## The Collective Review\n\n**Code owners summoned:** The Database Architect (two new financial tables)\n**Rotating specialist:** none (one code owner fired, and a two-commit repo has little history to weigh)\n\n**The Scope Hawk:** \"The fixes below add about 20 lines to a 15-line file, which is still one commit. Cut `invoice_items_sku_idx` unless a query for it is coming, because `invoices_for` at `db.py:5` is the only query in the repo and never touches `sku`. Skip a products table, status enum, tax fields and down migration, since nothing needs them yet. The unused `import psycopg` and missing type hints in `db.py` belong in another commit.\"\n\n**The Craftsperson:** \"Nothing verifies this migration: the repo has no tests or migration runner, only `README.md`, `db.py` and `001_users.sql`. `qty INT NOT NULL` accepts `0` and `-5`, so add `CHECK (qty > 0)`. `total_cents` accepts negatives too, so decide whether credit notes make those legal. The file has three statements and no `BEGIN`, so under plain `psql -f` a failure on the last one leaves both tables behind and a rerun fails on `already exists`.\"\n\n**The Performance Engineer:** \"`invoices_for` filters on `user_id`, and Postgres doesn't index foreign keys automatically, so every call scans all of `invoices`. Loading an invoice's items has the same problem because `invoice_items.invoice_id` has no index. The one index this file does add serves no current query. `SELECT *` at `db.py:5` also pulls `raw_payload` on every list call: at an assumed 10 KB per payload, a user with 100 invoices costs 1 MB per call.\"\n\n**The Readability Advocate:** \"The names mostly work: `total_cents` carries its unit, and the style matches `001_users.sql`. `raw_payload` is the exception, because it doesn't say which system sent it or whether `NULL` is normal. A `COMMENT ON COLUMN` would answer both.\"\n\n**The User Advocate:** \"A user can't get a useful invoice list from this. `invoices` has no date of any kind and `invoices_for` has no `ORDER BY`, so nothing says when an invoice was created or how to sort the list. Line items show `sku` and `qty` with no price, so nobody can see how `total_cents` was reached.\"\n\n**The Database Architect:** \"Neither table has `created_at`, `updated_at` or `deleted_at`, which breaks the audit-column rule; `001_users.sql` has all three. No `updated_at` trigger exists anywhere in the repo, so this migration has to create the function. Once `deleted_at` exists, `db.py:5` needs `AND deleted_at IS NULL`, or soft-deleted invoices keep coming back. Add `unit_price_cents` to `invoice_items`, because without it `total_cents` can't be reconciled and a later price change can't be reconstructed. `raw_payload` suggests invoices come from an API. If so, make it `NOT NULL` so a payload can't go missing, and add `external_id TEXT NOT NULL UNIQUE` so a retried delivery can't create a duplicate invoice. The default `NO ACTION` foreign keys are right, since they block hard-deleting a user who has invoices.\"\n\n**The Adult:** \"Don't commit this yet. The basic shape is fine, and the 80/20 is three changes:\n\n1. **Audit columns (required):** Add all three columns to both tables, plus the `updated_at` trigger. Update `db.py:5` to filter on `deleted_at IS NULL`, add `ORDER BY created_at DESC`, and list its columns explicitly so it stops fetching `raw_payload`.\n2. **Indexes (required):** Add indexes on `invoices (user_id)` and `invoice_items (invoice_id)`, and drop the `sku` index unless a query for it is coming.\n3. **Data you can't easily recover later (before the first real rows):** Add `unit_price_cents`. If invoices come from an external API, also make `raw_payload` `NOT NULL` and add `external_id`.\n\nThe Hawk wins on products, status and tax; the Architect wins on anything unrecoverable. `CHECK (qty > 0)` and `BEGIN`/`COMMIT` are cheap enough to include, though skip the `BEGIN`/`COMMIT` if your runner already wraps each migration. Currency can wait if you only bill in one, since adding a column with a default later is cheap. Attach the trigger to `users` in a follow-up `003` rather than editing the committed `001`. There's no need to split this up.\"\n\nI didn't change or run anything, so this SQL hasn't been applied to Postgres. Once the fixes are in, this checks the migrations against a scratch database (it needs local Postgres, and I haven't run it):\n\n```sh\ncreatedb mig_check && { psql -v ON_ERROR_STOP=1 -d mig_check -f migrations/001_users.sql -f migrations/002_invoices.sql; dropdb mig_check; }\n```\n\nRough cost: at least $0.21, from the session budget meter before this reply."
+    }
+  ],
+  "version": 1
+}

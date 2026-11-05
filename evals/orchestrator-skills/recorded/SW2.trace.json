@@ -1,0 +1,46 @@
+{
+  "after": {
+    "files": {},
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null,
+    "stub_log": [
+      "borg link --local --all --overview"
+    ]
+  },
+  "before": {
+    "files": {},
+    "home_settings_sha": "ee6d1034985be06dde6005c06f88905313a86b286452e8756a977a6cdf55fcbb",
+    "local_settings": null,
+    "stub_log": []
+  },
+  "case": "SW2",
+  "expect": {},
+  "final": "Which repository do you want to switch to?\n\n| Repository | State |\n|---|---|\n| `alpha-api` | active |\n| `beacon-web` | waiting |\n| `cedar-docs` | idle |",
+  "result": {
+    "cost": 0.16758119999999999,
+    "denials": 0,
+    "is_error": false,
+    "models": [
+      "claude-opus-5-5"
+    ],
+    "subtype": "success",
+    "turns": 2
+  },
+  "steps": [
+    {
+      "error": false,
+      "input": {
+        "command": "borg link --local --all --overview",
+        "description": "List registered repositories from the local registry"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "output": "repository   state\nalpha-api    active\nbeacon-web   waiting\ncedar-docs   idle"
+    },
+    {
+      "kind": "text",
+      "text": "Which repository do you want to switch to?\n\n| Repository | State |\n|---|---|\n| `alpha-api` | active |\n| `beacon-web` | waiting |\n| `cedar-docs` | idle |"
+    }
+  ],
+  "version": 1
+}

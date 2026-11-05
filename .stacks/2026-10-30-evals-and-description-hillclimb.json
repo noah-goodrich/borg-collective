@@ -78,6 +78,13 @@
       "ref": "noah-goodrich/borg-collective#529",
       "status": "open",
       "why": "Step 3b-A: agent-gates evals for borg-grunt, scout, reviewer, researcher (AC3); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "12",
+      "ref": "noah-goodrich/borg-collective#530",
+      "status": "open",
+      "why": "Step 3b-B: orchestrator-skills evals for borg-switch, pane, borg-collective-review, adhd-guardrails (AC3); tracking #480"
     }
   ]
 }
