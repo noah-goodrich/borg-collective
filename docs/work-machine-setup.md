@@ -1,6 +1,7 @@
 # Fresh macOS Work Machine — Borg Setup Runbook
 
-> **This is THE canonical work-machine reference** — fresh setup AND ongoing updates. The
+> **This is THE canonical work-machine reference for fresh setup.** Updating an already-set-up machine is
+> `docs/upgrading.md`, section 4. The
 > similarly-named `~/.config/dotfiles/docs/work-machine-setup.md` covers ONLY the dotfiles
 > identity/config-sync slice (git email, Keychain-backed secrets, layered config) and points back here
 > for everything else.
@@ -28,69 +29,10 @@ failure (dependent sequences).
 
 ## Updating an existing machine (incremental sync)
 
-Already set up? Skip the phases below and run this **one-block update flow** instead — it pulls dotfiles
-and all three repos, redeploys borg, and finishes with `borg doctor` so you know the machine is actually
-healthy, not just "pulled."
-
-```zsh
-# 1. Pull dotfiles first and re-run its installer (config sync
-#    only; it registers no LaunchAgents - see bullets below).
-git -C ~/.config/dotfiles pull --ff-only && bash ~/.config/dotfiles/install.sh
-
-# 2. Pull all three remaining repos on main, fast-forward only
-git -C ~/dev/borg-collective pull --ff-only && git -C ~/dev/claude-plugins pull --ff-only && \
-  git -C ~/dev/claude-plugins-private pull --ff-only
-
-# 3. Redeploy borg (REQUIRED — see note). install.sh is interactive ("Install plugin now?"); either answer is fine.
-cd ~/dev/borg-collective && ./install.sh        # or: borg setup
-
-# 4. Verify borg CLI and plugin report the SAME version, then run the full health check
-borg version && claude plugin list | grep borg-collective && borg doctor
-```
-
-- **Step 3 is required:** borg's CLI/libs run from the source clone (a pull refreshes those live), but hooks and
-  bin utilities are **copied** into `~/.claude` and only refresh on `install.sh` / `borg setup`. `borg setup` also
-  builds the plugin that carries the skills, agents and hook registration; `claude-plugins` is a live directory
-  source, so keep its checkout on `main`.
-- **Claude Code plugins are *supposed to* update automatically:** `code-governance`, `research-tools`, etc. should
-  auto-update from the pulled `~/dev/claude-plugins` via the `noah-local` marketplace (`autoUpdate: true`). Same for
-  `noah-personal` from `~/dev/claude-plugins-private` via `noah-private` (`autoUpdate: true`). **But `autoUpdate` is
-  best-effort, not guaranteed** — it has been observed to silently not fire, leaving a plugin stuck on an old
-  version. **Step 4's version-parity check is the gate, not a formality:**
-  ```zsh
-  borg version && claude plugin list | grep borg-collective
-  ```
-  If the CLI and plugin versions don't match, force it: `claude plugin update borg-collective@noah-local`
-  (substitute the relevant plugin/marketplace pair for `code-governance`/`research-tools`/`noah-personal`). This
-  works regardless of how `install.sh`'s "Install plugin now?" prompt was answered in Step 3 — it isn't gated on
-  having answered `y`. **A Claude Code restart is required for the update to take effect** — an already-running
-  session can report the new version while its hooks/skills are still the old code loaded at session start.
-- **`claude-plugins` mirror can drift behind `borg-collective` source:** the plugin is built from a synced mirror,
-  not the canonical source repo. If the mirror lags a merge to `borg-collective`, `claude plugin list` can report a
-  version that *looks* like parity while the plugin is actually missing a newly shipped hook/skill/agent. When in
-  doubt, verify parity by checking that the installed plugin contains `hooks/borg-agent-model-guard.sh`, not the
-  version string alone.
-- **`borg setup` rebuilds that mirror on every run** (`scripts/build-plugin.sh` writes into
-  `~/dev/claude-plugins/borg-collective/`). A `DRIFT` warning means the committed mirror is behind source; the
-  local rebuild is correct but uncommitted. After the install, check `git -C ~/dev/claude-plugins status`, and
-  restore or stash that directory before the next pull if the machine must not diverge.
-- **Step 4's `borg doctor` is the real health verification step** — it checks the launchd agents for
-  registration, exit status, and output freshness, plus a live headless `claude -p` call (log in to `claude`
-  first), per-container clock skew, and a version-floor table that fails when `gh` is older than 2.97.0 (run
-  `brew upgrade gh`). It can exit 1. A clean pull + `install.sh` with no `borg doctor` check is an unverified
-  update; always finish with it.
-- **Step 1 (dotfiles) syncs config only.** Its `install.sh` no longer registers LaunchAgents. The optional agents
-  (dev-postgres auto-start, `claude-tcc-heal`) ship as `.plist.tmpl` templates: symlink the ones you want into
-  `~/.config/borg/extensions/launchd/` before running borg's `./install.sh`, which renders and installs them.
-
-> **2026-07-08:** additions picked up by a plain pull + setup = the `code-governance` plugin (capability-index +
-> reconcile-req) and the distilled `research` skill.
-> **2026-07-08 (later):** the private marketplace exists now — `claude-plugins-private` repo → `noah-private`
-> marketplace → `noah-personal` plugin (employer-specific skills, e.g. `noah-weekly-status`). Clone + register per
-> Phases 1 / 3c / 3e below.
-> **2026-07-09:** `install.sh` installs the `borg-usage-watch` LaunchAgent by default (opt out with
-> `BORG_USAGE_WATCH=0 ./install.sh`) and verifies it produces a fresh sample after bootstrap. `borg doctor`
-> checks the launchd agents plus the rows described above — run it any time an agent seems blind or unhealthy.
+Already set up? Skip the phases below and follow [`docs/upgrading.md`](upgrading.md), section 4. That page is the one
+update runbook: it pulls dotfiles first, then the borg and plugin checkouts (including the private marketplace
+checkout), updates every plugin, redeploys with `borg setup`, and ends with the `borg doctor` and version-parity
+checks. This page keeps only the fresh-machine phases and the setup-specific notes below.
 
 ### What's new (setup-relevant, as of 2026-10-12)
 
@@ -223,8 +165,7 @@ borg itself — Homebrew is used only for the prerequisite tooling installed bac
 ```zsh
 # 3a. Install borg + drone CLIs (also runs `borg setup` automatically).
 # NOTE: install.sh is INTERACTIVE — it ends with "Install plugin now? [y/N]".
-#   Answer y  -> it installs the Claude Code plugin for you; then SKIP Phase 3d.
-#   Answer N  -> install the plugin manually in Phase 3d.
+#   Answer N: the marketplace is not registered yet (Phase 3c), so install the plugin in Phase 3d.
 cd ~/dev/borg-collective && ./install.sh
 
 # Ensure BOTH ~/.local/bin AND ~/.claude/bin are on PATH (the installer wants both).
@@ -275,7 +216,7 @@ also removes an already-bootstrapped agent so the flag takes effect on re-run).
 # If Claude Code does not expand $HOME in settings.json, use the literal absolute path
 # (e.g. /Users/<user>/dev/claude-plugins).
 
-# 3d. Install the plugin — ONLY if you answered N to install.sh's "Install plugin now?" prompt in 3a.
+# 3d. Install the plugin (after the marketplace is registered in 3c).
 # (the plugin owns hook registration — hooks don't fire without it)
 # borg setup (already run in 3a) publishes the plugin package automatically, so this should succeed.
 claude plugin install borg-collective@noah-local
