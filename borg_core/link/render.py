@@ -2204,13 +2204,15 @@ def _sections_for(doc: dict, full: bool = False) -> tuple[tuple[tuple[str, Build
     return (FULL_SECTIONS, _FIT_NONE) if full else (SECTIONS, _FIT_PAGE)
 
 
-def stacks_page(doc: dict, include_merged: bool = False) -> str:
+def _stacks_page(doc: dict) -> str:
     """`borg link --stacks`: every open stack in the full form `--overview --full` prints (title, objective, repos,
-    glance, picture, one card per ref); merged stacks are folded into the header's count, and `--all` draws them too.
+    glance, picture, one card per ref); merged stacks are folded into the header's count, and `--all` (`show_all`) draws
+    them too.
 
     Fitted to `PAGE_COLUMNS` like every page the skill paints verbatim, so a picture wider than the screen is cut with
     `…` rather than wrapped by the terminal.
     """
+    include_merged = bool(doc.get("show_all"))
     grid_block = doc.get("grid") or {}
     manifests = grid_block.get("manifests") or []
     if not manifests:
@@ -2243,7 +2245,7 @@ def _repository_chunk(title: str, build: Builder, doc: dict) -> str:
     return _fit_text(chunk, keep=_UNCUT_LABELS) if title in ("IN FOCUS", "STACKS") else chunk
 
 
-def document(doc: dict, full: bool = False) -> str:
+def document(doc: dict, full: bool = False, stacks: bool = False) -> str:
     """THE ONE HUMAN ENTRY POINT. Prints the section list its scope names and joins; no branch inside a section.
 
     The choice of list is made once, in `_sections_for`. Every branch that used to pick a renderer lives
@@ -2255,13 +2257,15 @@ def document(doc: dict, full: bool = False) -> str:
 
     THE QUEEN'S COMPACT PAGE IS FITTED TO `PAGE_COLUMNS` WHOLE: each of its lines is cut to that many visible columns
     (`_fit_line`), because free text the renderer does not control (a summary, a directive title, a warning) must not
-    be able to push the screen wider. `--full` is not fitted: a stack's picture is its own width. A directory's page
+    be able to push the screen wider. `stacks` prints `borg link --stacks` instead. `--full` is not fitted: a stack's picture is its own width. A directory's page
     is fitted in IN FOCUS only (`_repository_chunk`), because `/borg-link` paints it verbatim too.
 
     THE COMPACT PAGE ENDS ON ITS LAST LINE, NOT ON A BLANK: the section separator after WAITING ON YOU was a row of
     the screen that held nothing, and link-unification L3 wants the next action to be the last thing the eye lands
     on. One line is the difference between 51 and 50 on the live registry.
     """
+    if stacks:
+        return _stacks_page(doc)
     sections, fit = _sections_for(doc, full)
     if fit == _FIT_FOCUS:
         return "".join(_repository_chunk(title, build, doc) for title, build in sections)

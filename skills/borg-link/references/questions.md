@@ -51,7 +51,7 @@ Scope is the engine's `scope.kind`, never the `.borg-project` marker or your gue
 
 This page is about exactly ONE directory: `.entry.path`, the directory the engine resolved. Say what is true of THIS directory and stop.
 
-**Never render:** the registry-wide board (`order`, `projects`, capacity), any other worktree or repository, and every repo-level section: plan, QUEUED/SHIPPED, stacks and `grid`, repository PRs.
+**Never render:** the registry-wide board (`order`, `projects`, capacity), any other worktree or repository, and every repo-level section: plan, QUEUED/SHIPPED, `grid` and repository PRs. A question about the graph, dependencies, a stack, train or chain is not answered from `--json`: take SKILL.md's "A graph" path (`borg link --stacks`).
 
 **Read in this order, then write the page.**
 

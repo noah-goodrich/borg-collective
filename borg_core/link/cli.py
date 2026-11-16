@@ -535,8 +535,8 @@ def _run(
         return _emit(jsonlib.dumps(doc) + "\n")
     if mode == "porcelain":
         return _emit(render.porcelain(doc))
-    # `--stacks` answers with the stacks page; `--all` there means "draw the merged stacks too".
-    return _emit(_page(render.stacks_page(doc, show_all) if stacks else render.document(doc, full), color))
+    # `--stacks` picks the stacks page; `--all` there means "draw the merged stacks too" (the document's `show_all`).
+    return _emit(_page(render.document(doc, full, stacks), color))
 
 
 def _render_document_from_stdin(stream, color: bool = True) -> int:
