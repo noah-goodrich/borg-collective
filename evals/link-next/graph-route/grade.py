@@ -11,7 +11,7 @@ import json
 import re
 import sys
 
-STACKS_CALL = re.compile(r"^\s*(NO_COLOR=1\s+)?borg\s+link\s+--stacks(\s+--all)?(\s+[A-Za-z0-9._-]+)?(\s+--all)?\s*$")
+STACKS_CALL = re.compile(r"^\s*(NO_COLOR=1\s+)?borg\s+link\s+--stacks((\s+--all)|(\s+[A-Za-z0-9._-]+))*\s*$")
 
 
 def grade(trace: dict) -> tuple[bool, str]:

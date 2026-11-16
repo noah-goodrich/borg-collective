@@ -528,8 +528,7 @@ def _run(
     test_render.py asserts that on the source text: a second call site is how "one front door" decays
     back into two modes of one command answering the same question with different data.
     """
-    # `--stacks` with no repository is the whole registry from any directory, like `--overview`.
-    doc = _document(repository, show_all, mode, local, overview or (stacks and not repository))
+    doc = _document(repository, show_all, mode, local, overview)
     _record_glance(doc, local)
     if mode == "json":
         return _emit(jsonlib.dumps(doc) + "\n")
@@ -706,6 +705,8 @@ def main(argv: list[str] | None = None) -> None:
     # precedence.
     if args.render_document and (args.json_only or args.porcelain):
         parser.error("--render-document is not a mode; it cannot be combined with --json or --porcelain")
+    # `--stacks` with no repository is the whole registry from any directory, like `--overview`.
+    args.overview = args.overview or (args.stacks and not args.repository)
     mode = _mode(args)
     color = _color_enabled(os.environ)
     die = _die_json if mode == "json" else functools.partial(_die_human, color=color)
