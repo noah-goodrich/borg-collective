@@ -12,6 +12,7 @@ borg link [repository]       Front door: the Queen's overview at the
                              anywhere else
 borg link --overview         Force the Queen's overview from any directory
 borg link --overview --full  Same page, no budget (every stack)
+borg link --stacks [repo]    Every open stack drawn (--all adds merged)
 borg next                    Single recommendation: what to work on now
 borg next --switch           Recommend AND switch to that repository
 borg switch                  fzf picker → jump to tmux window

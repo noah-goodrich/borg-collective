@@ -12,6 +12,10 @@
 #            replies reproduce the 2026-10-20 shape (a reply saying nothing waits above a page that lists items;
 #            a reply saying "declined") with invented names. A grader that passes everything, or one whose pattern
 #            was blanked, turns a known-bad red here.
+#   TRACE    graph-route (#534, Tier 2): "show me the dependency graph" is graded over a reduced TRACE of tool calls, not the
+#            reply text. traces/good.trace.json (one `borg link --stacks` Bash call) must pass graph-route/grade.py, and each
+#            traces/bad-*.trace.json (an Artifact call, a diagram-design Skill call, an .html Write, no stacks call) must
+#            fail it. The traces are hand-authored, like the transcripts above; the live half is not wired (#480 AC4).
 #   FLOORS   a case with no regex grader, no known-good or no known-bad transcript is a failure, not a skip.
 #
 # Flags (shared by every harness `make eval` globs; an unknown flag exits 2):
@@ -142,6 +146,29 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
     skip "interpreter '$PYTHON' not found -- set BORG_EVAL_PYTHON; the regex graders cannot run"
 else
     run_cases
+fi
+
+run_graph_route() {
+    local dir="$DIR/graph-route" trace
+    if "$PYTHON" -I "$dir/grade.py" "$dir/traces/good.trace.json" >/dev/null; then
+        ok "graph-route: the known-good trace passes (a borg link --stacks call, no Artifact, diagram-design or HTML)"
+    else
+        bad "graph-route: the known-good trace fails the grader"
+    fi
+    local n=0
+    for trace in "$dir"/traces/bad-*.trace.json; do
+        n=$((n+1))
+        if "$PYTHON" -I "$dir/grade.py" "$trace" >/dev/null; then
+            bad "graph-route: ${trace##*/} PASSED; the grader no longer discriminates"
+        else
+            ok "graph-route: ${trace##*/} is graded FAIL"
+        fi
+    done
+    [ "$n" -ge 3 ] || bad "graph-route: needs a known-bad trace for an Artifact call, a diagram-design call and an html Write"
+}
+
+if command -v "$PYTHON" >/dev/null 2>&1; then
+    run_graph_route
 fi
 
 echo

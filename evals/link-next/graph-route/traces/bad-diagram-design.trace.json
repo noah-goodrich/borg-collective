@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "case": "graph-route",
+  "prompt": "show me the dependency graph",
+  "steps": [
+    {
+      "kind": "tool",
+      "name": "Skill",
+      "input": {
+        "skill": "diagram-design:diagram-design"
+      }
+    },
+    {
+      "kind": "text",
+      "text": "```\n\u25b8 OPEN STACKS  1 open \u00b7 3 merged folded (borg link --stacks --all)\n```"
+    }
+  ],
+  "final": "Drew an HTML diagram."
+}

@@ -27,6 +27,10 @@ The user asked to see the board, so show it:
 
 Use this when the markers hold the unexpanded injection line (Cortex Code expands no dynamic injection) or hold `BORG-LINK-UNAVAILABLE`. Make ONE Bash call, `NO_COLOR=1 borg link [<repository>]`, then paint its output by the rules above. If that call fails too (non-zero exit, `borg` missing), Read `references/fallback.md` (relative to this skill's base directory) and follow it. Read it only then.
 
+## A graph
+
+When the user asks to SEE a graph, dependencies, a stack, a train or a chain, skip the page: make ONE Bash call, `NO_COLOR=1 borg link --stacks [<repository>]` (`--all` adds merged stacks), and paint its output in one fenced block by the paint rules above. Borg board data is never rendered through the Artifact tool, the diagram-design skill or an HTML file: the terminal picture is the answer.
+
 ## Since a mark
 
 When the user asks what changed since a mark ("morning link-up", "what changed", "catch me up", "recon"), skip the paint: Read `references/recon.md` (relative to this skill's base directory) and follow it. It runs `borg recon --json`, a different read from the page. Asking to see the board, status or overview stays on the paint path above.

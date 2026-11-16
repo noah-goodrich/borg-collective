@@ -7,6 +7,20 @@
 
   [2mLast time:[0m Scope rotation lives on the feature branch.
 
+[1m▸ STACKS[0m  [2m1 open in platform-feat[0m
+  [1mauth-hardening[0m
+    [0;32m✔[0m n1   ]8;;https://github.com/acme/platform/issues/400\platform#400]8;;\
+    [2m│[0m
+[2m    ├────────────────────┬────────────────────┐[0m
+    [2m│[0m                    [2m│[0m                    [2m│[0m
+    [1;33m●[0m n2   ]8;;https://github.com/acme/platform/issues/420\platform#420]8;;\  [1;33m●[0m n3   ]8;;https://github.com/acme/warehouse/issues/87\warehouse#87]8;;\  [1;33m●[0m n4   ]8;;https://github.com/acme/infra/issues/12\infra#12]8;;\
+    [2m│[0m                    [2m│[0m                    [2m│[0m
+    [1;33m○[0m n5   ]8;;https://github.com/acme/platform/issues/431\platform#431]8;;\  [1;33m○[0m n6   ]8;;https://github.com/acme/warehouse/issues/93\warehouse#93]8;;\  [2m│[0m
+    [2m│[0m                    [2m│[0m                    [2m│[0m
+[2m    └────────────────────┼────────────────────┘[0m
+                         [2m│[0m
+                         [1;33m○[0m n7   ]8;;https://github.com/acme/infra/issues/77\infra#77]8;;\
+
   [2mEvery repository and worktree:[0m [0;36mborg link --overview[0m  [2m(the Queen view)[0m
 
 [1m▸ WAITING ON YOU[0m  [2m1 item[0m

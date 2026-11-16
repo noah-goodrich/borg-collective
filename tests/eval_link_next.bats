@@ -133,3 +133,19 @@ harness() {
     run grep -cF 'The reply to the user never contains the word "declined"' "$sb/skills/borg-next/SKILL.md"
     [ "$output" = "1" ]
 }
+
+@test "link-next: graph-route grades the Artifact, diagram-design and html-write traces FAIL and the stacks call PASS" {
+    harness
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"graph-route: the known-good trace passes"* ]] || false
+    [[ "$output" == *"graph-route: bad-artifact.trace.json is graded FAIL"* ]] || false
+    [[ "$output" == *"graph-route: bad-diagram-design.trace.json is graded FAIL"* ]] || false
+    [[ "$output" == *"graph-route: bad-html-write.trace.json is graded FAIL"* ]] || false
+}
+
+@test "link-next: a graph-route known-bad trace that is actually the good one turns the harness red" {
+    cp "$COPY/graph-route/traces/good.trace.json" "$COPY/graph-route/traces/bad-artifact.trace.json"
+    harness
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"graph-route: bad-artifact.trace.json PASSED"* ]] || false
+}

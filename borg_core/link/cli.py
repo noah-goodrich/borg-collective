@@ -512,6 +512,7 @@ def _run(
     overview: bool = False,
     color: bool = True,
     full: bool = False,
+    stacks: bool = False,
 ) -> int:
     """Dispatch one `borg link` invocation; returns the process exit code.
 
@@ -533,7 +534,8 @@ def _run(
         return _emit(jsonlib.dumps(doc) + "\n")
     if mode == "porcelain":
         return _emit(render.porcelain(doc))
-    return _emit(_page(render.document(doc, full), color))
+    # `--stacks` picks the stacks page; `--all` there means "draw the merged stacks too" (the document's `show_all`).
+    return _emit(_page(render.document(doc, full, stacks), color))
 
 
 def _render_document_from_stdin(stream, color: bool = True) -> int:
@@ -642,6 +644,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # directory's page has no budgeted section, so it means nothing there. `--all` was checked first and is not
     # this: it only un-hides archived repositories on the board.
     parser.add_argument("--full", dest="full", action="store_true")
+    # EVERY OPEN STACK, DRAWN (#534): the command the pages' STACKS lines point at, and the one `/borg-link` runs for
+    # a graph, dependency or chain question. `[repository]` narrows it to the stacks that include that repository.
+    parser.add_argument("--stacks", dest="stacks", action="store_true")
     # NOT A MODE. Reads a document off stdin and renders it; builds nothing, sweeps nothing, reads no
     # clock. Its one caller is `_borg_print_briefing`'s fallback (borg.zsh), and `_render_document_from_stdin`
     # carries the reasoning. It is gated in `main()` ABOVE `_run` rather than inside `_mode` so the
@@ -700,6 +705,8 @@ def main(argv: list[str] | None = None) -> None:
     # precedence.
     if args.render_document and (args.json_only or args.porcelain):
         parser.error("--render-document is not a mode; it cannot be combined with --json or --porcelain")
+    # `--stacks` with no repository is the whole registry from any directory, like `--overview`.
+    args.overview = args.overview or (args.stacks and not args.repository)
     mode = _mode(args)
     color = _color_enabled(os.environ)
     die = _die_json if mode == "json" else functools.partial(_die_human, color=color)
@@ -707,7 +714,9 @@ def main(argv: list[str] | None = None) -> None:
         if args.render_document:
             exit_code = _render_document_from_stdin(sys.stdin, color)
         else:
-            exit_code = _run(args.repository, args.show_all, mode, args.local, args.overview, color, args.full)
+            exit_code = _run(
+                args.repository, args.show_all, mode, args.local, args.overview, color, args.full, args.stacks
+            )
     except RepositoryNotFound as exc:
         die(_not_found_message(exc))
     # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.
