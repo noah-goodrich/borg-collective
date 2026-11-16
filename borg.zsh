@@ -3881,6 +3881,7 @@ cmd_help() {
     link [repository]   The Queen's overview at the workspace root; ONE directory's page anywhere else
                           --overview Force the Queen's cross-repository overview from any directory
                           --full    With --overview: no page budget (every stack, directive, signal)
+                          --stacks  Draw every open stack (with a repository: its stacks); --all adds merged ones
                           --local   Skip the source sweep — registry + manifests only, no network
                           --brief   Same document, same sweep, as prose — falls back to the page
                           --refresh Regenerate summaries
@@ -4294,7 +4295,7 @@ _borg_recon_retired() {
 # and cmd_link's own order was porcelain > repository > brief > overview.
 _borg_link_dispatch() {
     typeset _link_json=0 _link_porcelain=0 _link_brief=0 _link_refresh=0 _link_all=0 _link_local=0
-    typeset _link_overview=0 _link_full=0
+    typeset _link_overview=0 _link_full=0 _link_stacks=0
     typeset _link_help=0
     typeset _link_repository="" _link_arg
     typeset -a _link_py_args
@@ -4308,6 +4309,7 @@ _borg_link_dispatch() {
             --local)       _link_local=1 ;;
             --overview)    _link_overview=1 ;;
             --full)        _link_full=1 ;;
+            --stacks)      _link_stacks=1 ;;
             -h|--help)     _link_help=1 ;;                # MUST precede `-*)`: zsh case is first-match
             -*)            ;;                            # lenient, matching cmd_link's `-*) shift`
             *)             _link_repository="$_link_arg" ;;  # last-wins, matching cmd_link
@@ -4350,10 +4352,11 @@ _borg_link_dispatch() {
     # cli_contract twin) was re-pointed at `borg link --local` when this arm landed, because an
     # early `return` here means `--help` no longer reaches any dispatch arm to prove alive.
     if (( _link_help )); then
-        echo "usage: borg link [repository] [--local] [--all] [--overview] [--full] [--refresh] [--brief|--llm] [--json] [--porcelain]"
+        echo "usage: borg link [repository] [--local] [--all] [--overview] [--full] [--stacks] [--refresh] [--brief|--llm] [--json] [--porcelain]"
         echo "       --local skips the source sweep (registry + manifests only, no network)"
         echo "       --overview shows the Queen's cross-repository view from any directory"
         echo "       --full prints the Queen's view with no page budget (every stack, directive and signal)"
+        echo "       --stacks draws every open stack (borg link --stacks <repository> narrows it); --all adds merged ones"
         return 0
     fi
 
@@ -4406,6 +4409,16 @@ _borg_link_dispatch() {
         _link_py_args=(--porcelain)
         (( _link_all )) && _link_py_args+=(--all)
         (( _link_local )) && _link_py_args+=(--local)
+        _borg_py borg_core.link.cli "${_link_py_args[@]}"
+        return 0
+    fi
+
+    if (( _link_stacks )); then
+        borg_desktop_scan 2>/dev/null || true
+        _link_py_args=(--stacks)
+        (( _link_all )) && _link_py_args+=(--all)
+        (( _link_local )) && _link_py_args+=(--local)
+        [[ -n "$_link_repository" ]] && _link_py_args+=(-- "$_link_repository")
         _borg_py borg_core.link.cli "${_link_py_args[@]}"
         return 0
     fi

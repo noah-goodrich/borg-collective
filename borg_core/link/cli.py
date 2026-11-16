@@ -512,6 +512,7 @@ def _run(
     overview: bool = False,
     color: bool = True,
     full: bool = False,
+    stacks: bool = False,
 ) -> int:
     """Dispatch one `borg link` invocation; returns the process exit code.
 
@@ -527,13 +528,15 @@ def _run(
     test_render.py asserts that on the source text: a second call site is how "one front door" decays
     back into two modes of one command answering the same question with different data.
     """
-    doc = _document(repository, show_all, mode, local, overview)
+    # `--stacks` with no repository is the whole registry from any directory, like `--overview`.
+    doc = _document(repository, show_all, mode, local, overview or (stacks and not repository))
     _record_glance(doc, local)
     if mode == "json":
         return _emit(jsonlib.dumps(doc) + "\n")
     if mode == "porcelain":
         return _emit(render.porcelain(doc))
-    return _emit(_page(render.document(doc, full), color))
+    # `--stacks` answers with the stacks page; `--all` there means "draw the merged stacks too".
+    return _emit(_page(render.stacks_page(doc, show_all) if stacks else render.document(doc, full), color))
 
 
 def _render_document_from_stdin(stream, color: bool = True) -> int:
@@ -642,6 +645,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # directory's page has no budgeted section, so it means nothing there. `--all` was checked first and is not
     # this: it only un-hides archived repositories on the board.
     parser.add_argument("--full", dest="full", action="store_true")
+    # EVERY OPEN STACK, DRAWN (#534): the command the pages' STACKS lines point at, and the one `/borg-link` runs for
+    # a graph, dependency or chain question. `[repository]` narrows it to the stacks that include that repository.
+    parser.add_argument("--stacks", dest="stacks", action="store_true")
     # NOT A MODE. Reads a document off stdin and renders it; builds nothing, sweeps nothing, reads no
     # clock. Its one caller is `_borg_print_briefing`'s fallback (borg.zsh), and `_render_document_from_stdin`
     # carries the reasoning. It is gated in `main()` ABOVE `_run` rather than inside `_mode` so the
@@ -707,7 +713,7 @@ def main(argv: list[str] | None = None) -> None:
         if args.render_document:
             exit_code = _render_document_from_stdin(sys.stdin, color)
         else:
-            exit_code = _run(args.repository, args.show_all, mode, args.local, args.overview, color, args.full)
+            exit_code = _run(args.repository, args.show_all, mode, args.local, args.overview, color, args.full, args.stacks)
     except RepositoryNotFound as exc:
         die(_not_found_message(exc))
     # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.

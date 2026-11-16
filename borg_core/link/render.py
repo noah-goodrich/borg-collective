@@ -151,7 +151,12 @@ SECTION_MARK = "▸ "
 # registered repository stays on the board (idle collapse, L4, was rejected), so it is the one section whose
 # length is the registry's and not the page's. `PAGE_COLUMNS` bounds EVERY line, board rows included, in VISIBLE
 # columns (`picture.visible_len`, never `len`: the rows carry SGR and OSC-8 bytes).
-PAGE_LINES = 30
+# Doorways AC2 said STACKS renders as a count, which cut the open stacks along with the merged history (#534). It now
+# draws the open stacks inside its own budget: `STACKS_LINES` lines of picture (headings and separators included),
+# whole stacks only, then the `+N more` line and the pointer line. `PAGE_LINES` is the old 30 plus that budget and nothing else.
+STACKS_LINES = 12
+# The `+1` is the pointer line that replaces the old count line: it stays under the drawn stacks on the Queen's page.
+PAGE_LINES = 30 + STACKS_LINES + 1
 # 98, not 100: the TUI's code block has a 2-column gutter, so a painted page must be 2 columns narrower than the pane.
 PAGE_COLUMNS = 98
 
@@ -159,6 +164,8 @@ PAGE_COLUMNS = 98
 # signal and waiting row. `--all` was checked and does not mean this: it only un-hides archived repositories.
 FULL_FLAG = "--full"
 EXPAND_COMMAND = f"borg link --overview {FULL_FLAG}"
+# The command that draws every open stack (`--all` adds the merged ones). A directory's page appends its repository.
+STACKS_COMMAND = "borg link --stacks"
 
 # The glyphs the page uses and the words that name them, in legend order. The five state glyphs are the
 # ratified set from `picture.py` (merged, ready, open, draft, closed); the rest are the page's own marks.
@@ -1098,8 +1105,13 @@ def _grid_placeholder(grid_block: dict) -> str:
     return f"no stack manifest declares work in {grid_block['slug']}. Run /borg-plan to scaffold one."
 
 
-def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str, int]) -> list[str]:
+def _manifest_lines(
+    manifest_grid: dict, ids: dict[str, str], columns: dict[str, int], details: bool = True, suffix: bool = False
+) -> list[str]:
     """One stack's STACKS block: its heading, the picture, then one detail block per node.
+
+    `details=False` is the picture alone under its heading, with no leading blank: what the pages draw. `suffix` adds
+    the short names of the stack's repositories to that heading (the Queen's page; a directory's page is about one).
 
     THE DETAIL BLOCKS ARE IN NODE-ID ORDER, which is picture reading order (manifest, level, column)
     and NOT the wire's `(seq, ref)`. A reader moving between the picture and the details must never
@@ -1107,7 +1119,15 @@ def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str,
     glance strip and this loop go through it.
     """
     nodes = manifest_grid.get("nodes") or {}
-    out = ["\n", f"  {BOLD}{manifest_grid.get('id', '')}{NC}\n"]
+    heading = f"  {BOLD}{manifest_grid.get('id', '')}{NC}"
+    shorts = [str(repo).rsplit("/", 1)[-1] for repo in manifest_grid.get("repos") or []]
+    if suffix and shorts:
+        heading += f"  {' · '.join(shorts)}"
+    heading += "\n"
+    picture_rows = [f"{row}\n" for row in picture.picture(manifest_grid, ids, columns)]
+    if not details:
+        return [heading, *picture_rows]
+    out = ["\n", heading]
     desc = manifest_grid.get("desc") or ""
     if desc:
         out.append(f"  {DIM}{desc}{NC}\n")
@@ -1117,12 +1137,63 @@ def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str,
     out.append(f"  {DIM}glance:{NC} {picture.glance_row(manifest_grid, ids)}\n")
 
     out.append("\n")
-    out.extend(f"{row}\n" for row in picture.picture(manifest_grid, ids, columns))
+    out.extend(picture_rows)
 
     for ref in picture.reading_order(manifest_grid, ids):
         out.append("\n")
         out.extend(f"{line}\n" for line in picture.detail_block(nodes[ref], ids.get(ref, ""), nodes, ids))
     return out
+
+
+# A ref is settled once its pull request or issue is merged or closed; anything else (open, draft, unknown) keeps its
+# stack open. A stack with no refs has nothing left to do and counts as settled.
+_SETTLED_STATES = ("merged", "closed")
+
+
+def _open_stacks(manifests: list[dict]) -> list[dict]:
+    """The stacks with at least one ref that is not merged or closed, newest first.
+
+    NEWEST BY MANIFEST ID, because that is the only recency the wire carries: node states come from the sweep and the
+    fetch with no timestamp, and a manifest file's mtime is the checkout time after a `git clone`. Manifest ids lead
+    with their date (`2026-11-14-...`), so the descending sort is "most recently declared first".
+    """
+    live = [m for m in manifests if any(n.get("state") not in _SETTLED_STATES for n in (m.get("nodes") or {}).values())]
+    return sorted(live, key=lambda m: str(m.get("id") or ""), reverse=True)
+
+
+def _draw_stacks(manifests: list[dict], budget: int, suffix: bool) -> tuple[list[str], int]:
+    """`(lines, drawn)`: each stack as heading plus picture, a blank between.
+
+    Whole stacks only: with a `budget`, the first stack that would pass it stops the walk, so the order stays the
+    reading order and no picture is ever cut mid-way. Node ids are global over `manifests`, so `*` still pairs them.
+    """
+    columns_by_manifest = [picture.assign_columns(manifest) for manifest in manifests]
+    ids = picture.node_ids(manifests, columns_by_manifest)
+    lines: list[str] = []
+    drawn = 0
+    for manifest, columns in zip(manifests, columns_by_manifest):
+        block = _manifest_lines(manifest, ids, columns, details=False, suffix=suffix)
+        if len(lines) + len(block) + (1 if lines else 0) > budget:
+            break
+        lines.extend(["\n", *block] if lines else block)
+        drawn += 1
+    return lines, drawn
+
+
+def _stacks_tail(text: str, command: str) -> str:
+    """The one line under the drawn stacks: what was left out, and the command that draws it."""
+    return f"  {DIM}{text}{NC}  {CYAN}{command}{NC}\n"
+
+
+def _stacks_repository(doc: dict) -> str:
+    """The repository a directory's page is about ("" on the Queen's)."""
+    return str((doc.get("scope") or {}).get("repository") or "") if _is_repository_scope(doc) else ""
+
+
+def _stacks_command(doc: dict) -> str:
+    """`borg link --stacks`, plus the repository on a directory's page, so the command answers the same question."""
+    repository = _stacks_repository(doc)
+    return f"{STACKS_COMMAND} {repository}" if repository else STACKS_COMMAND
 
 
 def _expand_line(what: str) -> str:
@@ -1133,14 +1204,29 @@ def _expand_line(what: str) -> str:
     return f"  {DIM}— {what}:{NC} {CYAN}{EXPAND_COMMAND}{NC}\n"
 
 
+def _compact_stacks(doc: dict, manifests: list[dict]) -> list[str]:
+    """The budgeted STACKS body: the open stacks that fit `STACKS_LINES`, `+N more` when some did not, and on the
+    Queen's page one pointer line (a directory's page is about one repository and ends at `+N more`).
+    """
+    live = _open_stacks(manifests)
+    command = _stacks_command(doc)
+    queen = not _is_repository_scope(doc)
+    lines, drawn = _draw_stacks(live, STACKS_LINES, suffix=queen)
+    if len(live) > drawn:
+        lines.append(_stacks_tail(f"+{_plural(len(live) - drawn, 'more open stack', 'more open stacks')}", command))
+    if queen:
+        lines.append(f"  {DIM}— open stacks in detail:{NC} {CYAN}{command}{NC} {DIM}· with merged:{NC} {CYAN}--stacks --all{NC}\n")
+    return lines
+
+
 def _grid_section(doc: dict, compact: bool = False) -> tuple[str, list[str]]:
     """STACKS: the declared cross-repository topology, one picture and one detail block set per
     chain, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
 
-    `compact` (the Queen's page, doorways S2) renders the same header note and then ONE line, the command that
-    draws every stack -- a count and the way to expand it, because 20 stacks drew 650 lines. The note carries the
-    counts, including `unresolved`, so the three-state honesty of the full section is not lost: an empty or
-    refused grid still prints its own diagnosis, and only a grid with stacks to draw collapses.
+    `compact` (the Queen's page and a directory's page) renders the same header note and then the OPEN stacks that fit
+    `STACKS_LINES`, newest first, and one tail line (`_compact_stacks`): 31 stacks drew 800 lines, and most of them were
+    merged history. The note carries the counts, including `unresolved`, so the three-state honesty of the full section
+    is not lost: an empty or refused grid still prints its own diagnosis.
 
     The note is UNCONDITIONAL, even when no manifest was selected: `0 stacks · 0 refs · 0
     unresolved · swept back to <mark>` is the honest reading of a repository with nothing declared,
@@ -1174,7 +1260,12 @@ def _grid_section(doc: dict, compact: bool = False) -> tuple[str, list[str]]:
     if not manifests:
         return note, [_placeholder(_grid_placeholder(grid_block))]
     if compact:
-        return note, [_expand_line("every stack, drawn")]
+        live = len(_open_stacks(manifests))
+        count = f"{live} open" + (f" in {_stacks_repository(doc)}" if _is_repository_scope(doc) else "")
+        if not _is_repository_scope(doc):
+            count += f" · {len(manifests) - live} merged · {grid_block.get('declared', 0)} refs"
+            count += f" · {grid_block.get('unresolved', 0)} unresolved"
+        return count, _compact_stacks(doc, manifests)
 
     columns_by_manifest = [picture.assign_columns(manifest) for manifest in manifests]
     ids = picture.node_ids(manifests, columns_by_manifest)
@@ -2105,8 +2196,39 @@ def _sections_for(doc: dict, full: bool = False) -> tuple[tuple[tuple[str, Build
     if _is_unregistered(doc):
         return UNREGISTERED_SECTIONS, _FIT_NONE
     if _is_repository_scope(doc):
-        return (REPOSITORY_FULL_SECTIONS if full else REPOSITORY_SECTIONS), _FIT_FOCUS
+        spine = REPOSITORY_FULL_SECTIONS if full else REPOSITORY_SECTIONS
+        # A directory's page draws STACKS only when an open stack includes it: the section is absent, not empty.
+        if _open_stacks((doc.get("grid") or {}).get("manifests") or []):
+            spine = (spine[0], ("STACKS", partial(_grid_section, compact=True)), *spine[1:])
+        return spine, _FIT_FOCUS
     return (FULL_SECTIONS, _FIT_NONE) if full else (SECTIONS, _FIT_PAGE)
+
+
+def stacks_page(doc: dict, include_merged: bool = False) -> str:
+    """`borg link --stacks`: every open stack in the full form `--overview --full` prints (title, objective, repos,
+    glance, picture, one card per ref); merged stacks are folded into the header's count, and `--all` draws them too.
+
+    Fitted to `PAGE_COLUMNS` like every page the skill paints verbatim, so a picture wider than the screen is cut with
+    `…` rather than wrapped by the terminal.
+    """
+    grid_block = doc.get("grid") or {}
+    manifests = grid_block.get("manifests") or []
+    if not manifests:
+        return _fit_text("".join(_section("OPEN STACKS", "0 open", [_placeholder(_grid_placeholder(grid_block))])))
+    live = _open_stacks(manifests)
+    merged = sorted((m for m in manifests if m not in live), key=lambda m: str(m.get("id") or ""), reverse=True)
+    drawn = live + merged if include_merged else live
+    command = _stacks_command(doc)
+    if include_merged:
+        note = f"{len(live)} open · {len(merged)} merged"
+    else:
+        note = f"{len(live)} open · {len(merged)} merged folded ({command} --all)"
+    columns_by_manifest = [picture.assign_columns(manifest) for manifest in drawn]
+    ids = picture.node_ids(drawn, columns_by_manifest)
+    lines = [_placeholder("no open stacks.")] if not drawn else []
+    for manifest, columns in zip(drawn, columns_by_manifest):
+        lines.extend(_manifest_lines(manifest, ids, columns))
+    return _fit_text("".join(_section("OPEN STACKS", note, lines))).rstrip("\n") + "\n"
 
 
 def _repository_chunk(title: str, build: Builder, doc: dict) -> str:
@@ -2118,7 +2240,7 @@ def _repository_chunk(title: str, build: Builder, doc: dict) -> str:
     are refs too. The section content rules are the same as before: this only bounds a line's width.
     """
     chunk = "".join(_section(title, *build(doc)))
-    return _fit_text(chunk, keep=_UNCUT_LABELS) if title == "IN FOCUS" else chunk
+    return _fit_text(chunk, keep=_UNCUT_LABELS) if title in ("IN FOCUS", "STACKS") else chunk
 
 
 def document(doc: dict, full: bool = False) -> str:
