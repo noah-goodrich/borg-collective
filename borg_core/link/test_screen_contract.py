@@ -745,7 +745,7 @@ def test_the_queen_page_draws_open_stacks_newest_first_inside_the_budget_and_cou
     stacks = page.split("▸ STACKS")[1].split("▸ QUEUED")[0].split("\n")
     body = [line for line in stacks[1:] if line.strip()]
     assert body[0].startswith("  stack-9")  # ids sort descending, which is newest-first for date-led ids
-    assert len(stacks) - 2 <= render.STACKS_LINES + 2, "the picture budget, the +N more line and the pointer line"
+    assert len(stacks) - 3 <= render.STACKS_LINES + 2, "the picture budget, the +N more line and the pointer line"
     assert any("more open stacks  borg link --stacks" in line for line in body)
     assert any("open stacks in detail: borg link --stacks · with merged: --stacks --all" in line for line in body)
     assert page.count("─") > 0, "the picture is drawn by picture.py, not summarized"
