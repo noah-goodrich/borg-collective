@@ -713,7 +713,9 @@ def main(argv: list[str] | None = None) -> None:
         if args.render_document:
             exit_code = _render_document_from_stdin(sys.stdin, color)
         else:
-            exit_code = _run(args.repository, args.show_all, mode, args.local, args.overview, color, args.full, args.stacks)
+            exit_code = _run(
+                args.repository, args.show_all, mode, args.local, args.overview, color, args.full, args.stacks
+            )
     except RepositoryNotFound as exc:
         die(_not_found_message(exc))
     # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.

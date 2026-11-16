@@ -153,7 +153,7 @@ SECTION_MARK = "▸ "
 # columns (`picture.visible_len`, never `len`: the rows carry SGR and OSC-8 bytes).
 # Doorways AC2 said STACKS renders as a count, which cut the open stacks along with the merged history (#534). It now
 # draws the open stacks inside its own budget: `STACKS_LINES` lines of picture (headings and separators included),
-# whole stacks only, then the `+N more` line and the pointer line. `PAGE_LINES` is the old 30 plus that budget and nothing else.
+# whole stacks only, then the `+N more` line and the pointer line. `PAGE_LINES` is the old 30 plus that budget and one.
 STACKS_LINES = 12
 # The `+1` is the pointer line that replaces the old count line: it stays under the drawn stacks on the Queen's page.
 PAGE_LINES = 30 + STACKS_LINES + 1
@@ -1215,7 +1215,8 @@ def _compact_stacks(doc: dict, manifests: list[dict]) -> list[str]:
     if len(live) > drawn:
         lines.append(_stacks_tail(f"+{_plural(len(live) - drawn, 'more open stack', 'more open stacks')}", command))
     if queen:
-        lines.append(f"  {DIM}— open stacks in detail:{NC} {CYAN}{command}{NC} {DIM}· with merged:{NC} {CYAN}--stacks --all{NC}\n")
+        detail = f"{DIM}— open stacks in detail:{NC} {CYAN}{command}{NC}"
+        lines.append(f"  {detail} {DIM}· with merged:{NC} {CYAN}--stacks --all{NC}\n")
     return lines
 
 
@@ -2156,6 +2157,21 @@ REPOSITORY_FULL_SECTIONS: tuple[tuple[str, Builder], ...] = (
 )
 
 
+# The same page with STACKS under IN FOCUS, for a directory an open stack includes (#534). One list, written once.
+REPOSITORY_STACKS_SECTIONS: tuple[tuple[str, Builder], ...] = (
+    REPOSITORY_SECTIONS[0],
+    ("STACKS", partial(_grid_section, compact=True)),
+    *REPOSITORY_SECTIONS[1:],
+)
+
+
+def _repository_spine(full: bool, stacks: bool) -> tuple[tuple[str, Builder], ...]:
+    """The directory's section list: `--full` prints every item, `stacks` adds the STACKS section."""
+    if full:
+        return (REPOSITORY_FULL_SECTIONS[0], *REPOSITORY_STACKS_SECTIONS[1:]) if stacks else REPOSITORY_FULL_SECTIONS
+    return REPOSITORY_STACKS_SECTIONS if stacks else REPOSITORY_SECTIONS
+
+
 def _unregistered_section(_doc: dict) -> tuple[str, list[str]]:
     """The whole page of a directory that is neither the Queen root nor inside any registered path.
 
@@ -2196,11 +2212,9 @@ def _sections_for(doc: dict, full: bool = False) -> tuple[tuple[tuple[str, Build
     if _is_unregistered(doc):
         return UNREGISTERED_SECTIONS, _FIT_NONE
     if _is_repository_scope(doc):
-        spine = REPOSITORY_FULL_SECTIONS if full else REPOSITORY_SECTIONS
         # A directory's page draws STACKS only when an open stack includes it: the section is absent, not empty.
-        if _open_stacks((doc.get("grid") or {}).get("manifests") or []):
-            spine = (spine[0], ("STACKS", partial(_grid_section, compact=True)), *spine[1:])
-        return spine, _FIT_FOCUS
+        drawn = bool(_open_stacks((doc.get("grid") or {}).get("manifests") or []))
+        return _repository_spine(full, drawn), _FIT_FOCUS
     return (FULL_SECTIONS, _FIT_NONE) if full else (SECTIONS, _FIT_PAGE)
 
 
@@ -2257,7 +2271,8 @@ def document(doc: dict, full: bool = False, stacks: bool = False) -> str:
 
     THE QUEEN'S COMPACT PAGE IS FITTED TO `PAGE_COLUMNS` WHOLE: each of its lines is cut to that many visible columns
     (`_fit_line`), because free text the renderer does not control (a summary, a directive title, a warning) must not
-    be able to push the screen wider. `stacks` prints `borg link --stacks` instead. `--full` is not fitted: a stack's picture is its own width. A directory's page
+    be able to push the screen wider. `stacks` prints `borg link --stacks` instead. `--full` is not fitted: a stack's
+    picture is its own width. A directory's page
     is fitted in IN FOCUS only (`_repository_chunk`), because `/borg-link` paints it verbatim too.
 
     THE COMPACT PAGE ENDS ON ITS LAST LINE, NOT ON A BLANK: the section separator after WAITING ON YOU was a row of
