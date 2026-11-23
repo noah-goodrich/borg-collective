@@ -1,7 +1,7 @@
 """The screen contract for the Queen's page (doorways S2, AC2): it fits one screen however much exists.
 
 These read the limits and the words from `render` (`PAGE_LINES`, `PAGE_COLUMNS`, `GLYPH_LEGEND`, `STATUS_WORDS`), so
-the contract and the page cannot drift apart. The two limits are ALSO asserted as literals (30, and 98 columns, within the directive's approved 100): a constant edited to make the page pass would otherwise take the test with it.
+the contract and the page cannot drift apart. The two limits are ALSO asserted as literals (30 plus the STACKS budget of 12 and its pointer line, and 98 columns, within the directive's approved 100): a constant edited to make the page pass would otherwise take the test with it.
 
 EVERY FIXTURE IS SYNTHETIC. The live board carries private-repository titles and this repository is public.
 """
@@ -124,8 +124,9 @@ def test_the_page_outside_repositories_is_at_most_thirty_lines(stacks, directive
     """AC2. MUTATION: render STACKS (or QUEUED, NEXT, WAITING ON YOU) uncapped on the compact page and this goes red
     on the 40-stack and 200-directive rows, because every one of them grows with its input."""
     page = render.document(_queen(stacks=stacks, directives=directives, waiting=waiting))
-    assert render.PAGE_LINES == 30
-    assert len(_outside_repositories(page)) <= 30
+    assert render.STACKS_LINES == 12
+    assert render.PAGE_LINES == 30 + 12 + 1
+    assert len(_outside_repositories(page)) <= render.PAGE_LINES
 
 
 @pytest.mark.parametrize("stacks,directives", _SIZES)
@@ -133,7 +134,7 @@ def test_the_page_does_not_grow_with_its_input(stacks, directives):
     """The compact page is the same length at 1 stack as at 40, and at 3 directives as at 200: counts, not lists."""
     small = _outside_repositories(render.document(_queen(stacks=max(stacks, 1), directives=3, waiting=40)))
     this = _outside_repositories(render.document(_queen(stacks=stacks, directives=directives, waiting=40)))
-    assert abs(len(this) - len(small)) <= 3, "only the empty-section placeholders may differ"
+    assert abs(len(this) - len(small)) <= 3 + render.STACKS_LINES + 1, "only the empty placeholders and STACKS differ"
 
 
 @pytest.mark.parametrize("stacks,directives", _SIZES)
@@ -232,8 +233,8 @@ def test_every_status_word_on_the_board_is_in_the_closed_set(full):
 def test_every_glyph_the_page_prints_is_in_the_legend():
     """MUTATION: print a symbol the legend does not name (a new status mark) and it shows up here.
 
-    The unbudgeted page also draws the stacks' pictures, whose connectors are box drawing (U+2500 to U+257F): those are
-    geometry rather than vocabulary, so they are the one family exempted, on `--full` only.
+    Both pages draw the stacks' pictures (the compact one since #534), whose connectors are box drawing (U+2500 to U+257F): those are
+    geometry rather than vocabulary, so they are the one family exempted.
     """
     named = {glyph for glyph, _ in render.GLYPH_LEGEND} | _STRUCTURE
     document = _queen(stacks=3, waiting=5)
@@ -242,8 +243,7 @@ def test_every_glyph_the_page_prints_is_in_the_legend():
     document["projects"]["widgets"]["repo"] = "common"
     for full in (False, True):
         symbols = {ch for ch in plain(render.document(document, full=full)) if unicodedata.category(ch) == "So"}
-        if full:
-            symbols = {ch for ch in symbols if not "\u2500" <= ch <= "\u257f"} | (symbols & named)
+        symbols = {ch for ch in symbols if not "\u2500" <= ch <= "\u257f"} | (symbols & named)
         assert symbols <= named, symbols - named
     compact = {ch for ch in plain(render.document(document)) if unicodedata.category(ch) == "So"}
     assert {"▶", "⏸", "└"} <= compact, "the fixture exercises the page's own marks"
@@ -251,8 +251,9 @@ def test_every_glyph_the_page_prints_is_in_the_legend():
 
 def test_the_page_says_how_many_stacks_and_directives_and_how_to_see_them():
     page = plain(render.document(_queen(stacks=40, directives=200)))
-    assert "▸ STACKS  40 stacks" in page and "▸ QUEUED  200 directives" in page
-    assert page.count(render.EXPAND_COMMAND) >= 2
+    assert "▸ STACKS  40 open · 0 merged" in page and "▸ QUEUED  200 directives" in page
+    assert "more open stacks  borg link --stacks" in page
+    assert page.count(render.EXPAND_COMMAND) >= 1
     assert render.EXPAND_COMMAND == "borg link --overview --full"
 
 
@@ -305,7 +306,7 @@ def test_three_state_honesty_survives_the_compact_page():
 def test_an_empty_grid_still_says_why_rather_than_collapsing_to_a_count():
     page = plain(render.document(_queen(stacks=0)))
     assert "no stack manifests in the registry yet" in page
-    assert render.EXPAND_COMMAND not in page.split("▸ STACKS")[1].split("▸ QUEUED")[0]
+    assert render.STACKS_COMMAND not in page.split("▸ STACKS")[1].split("▸ QUEUED")[0]
 
 
 def test_signals_past_the_cap_are_counted_and_the_ladders_gap_stays_last():
@@ -320,7 +321,7 @@ def test_every_repository_stays_on_the_board_at_forty_repositories():
     """L4 (idle collapse) was rejected: the board is the one section whose length is the registry's."""
     page = plain(render.document(_queen(stacks=1, repositories=40)))
     assert len([line for line in page.split("\n") if _BOARD_ROW.match(line)]) == 40
-    assert len(_outside_repositories(render.document(_queen(stacks=1, repositories=40)))) <= 30
+    assert len(_outside_repositories(render.document(_queen(stacks=1, repositories=40)))) <= render.PAGE_LINES
 
 
 def test_the_page_ends_on_its_last_line_and_not_on_a_blank():
@@ -721,3 +722,65 @@ def test_the_queen_page_waiting_on_you_shows_queen_rows_when_one_repository_has_
         render.document(_doc(projects={"p": {**entry, "relative_activity": "3h ago", "summary": "s"}}, waiting=waiting))
     )
     assert "Rotate the invented credential" in page
+
+
+# ---- open stacks on the pages and `--stacks` (#534, amending doorways AC2) ----
+
+
+def _merge(manifest: dict) -> dict:
+    """The same stack with every ref merged: it is no longer open."""
+    merged = copy.deepcopy(manifest)
+    for node in merged["nodes"].values():
+        node["state"] = "merged"
+    return merged
+
+
+def _with_stacks(document: dict, manifests: list[dict]) -> dict:
+    document["grid"].update({"manifests": manifests, "declared": sum(len(m["nodes"]) for m in manifests)})
+    return document
+
+
+def test_the_queen_page_draws_open_stacks_newest_first_inside_the_budget_and_counts_the_rest():
+    page = plain(render.document(_queen(stacks=40)))
+    stacks = page.split("▸ STACKS")[1].split("▸ QUEUED")[0].split("\n")
+    body = [line for line in stacks[1:] if line.strip()]
+    assert body[0].startswith("  stack-9")  # ids sort descending, which is newest-first for date-led ids
+    assert len(stacks) - 3 <= render.STACKS_LINES + 2, "the picture budget, the +N more line and the pointer line"
+    assert any("more open stacks  borg link --stacks" in line for line in body)
+    assert any("open stacks in detail: borg link --stacks · with merged: --stacks --all" in line for line in body)
+    assert page.count("─") > 0, "the picture is drawn by picture.py, not summarized"
+
+
+def test_merged_stacks_stay_a_count_on_the_queen_page_and_a_page_with_none_open_says_so():
+    document = _queen(stacks=3)
+    open_one = document["grid"]["manifests"][0]
+    _with_stacks(document, [open_one, _merge(document["grid"]["manifests"][1]), _merge(document["grid"]["manifests"][2])])
+    page = plain(render.document(document))
+    assert "▸ STACKS  1 open · 2 merged" in page
+    assert "stack-1" not in page.split("▸ QUEUED")[0] and "stack-2" not in page.split("▸ QUEUED")[0]
+    none_open = _with_stacks(_queen(stacks=2), [_merge(m) for m in _queen(stacks=2)["grid"]["manifests"]])
+    quiet = plain(render.document(none_open))
+    assert "▸ STACKS  0 open · 2 merged" in quiet and "borg link --stacks" in quiet
+
+
+def test_a_directory_page_draws_its_open_stacks_and_omits_the_section_when_none_is_open():
+    document = _queen(stacks=2, scope={"kind": "repository", "repository": "repo-1", "local": False})
+    page = plain(render.document(document))
+    assert "▸ STACKS  2 open in repo-1" in page
+    assert "stack-1\n" in page and "stack-1  " not in page, "a directory's title line has no repository suffix"
+    assert max(picture.visible_len(line) for line in page.split("\n")) <= 100
+    settled = _with_stacks(document, [_merge(m) for m in document["grid"]["manifests"]])
+    assert "STACKS" not in plain(render.document(settled))
+
+
+def test_stacks_draws_every_open_stack_in_full_and_folds_the_merged_ones():
+    document = _queen(stacks=4)
+    _with_stacks(document, [*document["grid"]["manifests"][:3], _merge(document["grid"]["manifests"][3])])
+    page = plain(render.document(document, stacks=True))
+    assert "▸ OPEN STACKS  3 open · 1 merged folded (borg link --stacks --all)" in page
+    assert all(f"stack-{n}" in page for n in range(3)) and "stack-3" not in page
+    assert page.count("glance:") == 3, "the full block: title, repos, glance, picture and one card per ref"
+    document["show_all"] = True
+    everything = plain(render.document(document, stacks=True))
+    assert "stack-3" in everything and "▸ OPEN STACKS  3 open · 1 merged\n" in everything
+    assert max(picture.visible_len(line) for line in everything.split("\n")) <= render.PAGE_COLUMNS

@@ -1652,7 +1652,6 @@ def test_a_worktree_page_is_strictly_that_directory():
         "THE BORG COLLECTIVE",
         "Tip:",
         "REPOSITORIES",
-        "STACKS",
         "QUEUED",
         "SHIPPED",
         "NEXT",
@@ -1664,10 +1663,10 @@ def test_a_worktree_page_is_strictly_that_directory():
         "Elsewhere.",
         "Queued elsewhere",
         "Shipped elsewhere",
-        "auth-hardening",
         "a repository-level warning",
     ):
         assert absent not in out, absent
+    assert "▸ STACKS  1 open in door" in out, "#534: a directory draws the open stacks that include it, and only those"
 
 
 def test_a_main_checkout_page_is_labelled_a_main_checkout_and_has_no_worktree_of_line():

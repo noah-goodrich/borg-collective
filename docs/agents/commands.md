@@ -26,10 +26,11 @@ borg link [repository]   ONE renderer, TWO pages, chosen by scope.kind
                              hint (`borg add`, `borg link --overview`), exit 0
                              — and `--brief`, which prints prose instead
                            --overview Force the Queen view from any directory
+                           --stacks  Draw every open stack (`--all` adds merged ones; with a repository, its stacks)
                            --full    With the Queen view: no page budget
-                                     (default: 30 lines outside the board,
-                                     100 columns, STACKS and QUEUED as
-                                     counts). Human page only; --json same
+                                     (default: 43 lines outside the board,
+                                     100 columns, QUEUED as a count,
+                                     STACKS the open stacks, 12 lines). Human page only; --json same
                            --brief   Same document, same sweep, PROSE not the seven
                                      sections (AC1). Falls back to the real page.
                            --refresh Regenerate summaries

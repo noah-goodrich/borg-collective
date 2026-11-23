@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "case": "graph-route",
+  "prompt": "show me the dependency graph",
+  "steps": [
+    {
+      "kind": "tool",
+      "name": "Bash",
+      "input": {
+        "command": "NO_COLOR=1 borg link --stacks",
+        "description": "Draw the open stacks"
+      }
+    },
+    {
+      "kind": "text",
+      "text": "```\n\u25b8 OPEN STACKS  1 open \u00b7 3 merged folded (borg link --stacks --all)\n```"
+    }
+  ],
+  "final": "```\n\u25b8 OPEN STACKS  1 open \u00b7 3 merged folded (borg link --stacks --all)\n```"
+}

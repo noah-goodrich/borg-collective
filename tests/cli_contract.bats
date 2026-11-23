@@ -3407,7 +3407,7 @@ _link_spine_matches() {
     _link_setup_grid
     _link_grid_seams
 
-    _link_spine_matches "${BATS_TEST_TMPDIR}/ws/platform" REPOSITORY_SECTIONS
+    _link_spine_matches "${BATS_TEST_TMPDIR}/ws/platform" REPOSITORY_STACKS_SECTIONS
     _link_spine_matches "${BATS_TEST_TMPDIR}/ws" SECTIONS
 }
 
@@ -3510,7 +3510,8 @@ _link_spine_matches() {
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform" "${BATS_TEST_TMPDIR}/page.txt" link --local --all
     local p
-    for p in warehouse infra ledger atlas relay archive-tools; do
+    # warehouse and infra are NOT checked: platform's open stack declares refs in them, and its picture names them (#534).
+    for p in ledger atlas relay archive-tools; do
         run bash -c "grep -c -- '$p' '${BATS_TEST_TMPDIR}/page.txt' || true"
         [ "$output" = "0" ] || { echo "a directory's page named $p" >&2; false; }
     done
@@ -3593,7 +3594,8 @@ _link_spine_matches() {
 }
 
 # Doorways S2 (AC2): the compact Queen goldens ARE the one-screen page, so the screen contract is asserted on the
-# files themselves: at most 100 visible columns on every line and at most 30 lines outside `▸ REPOSITORIES`. The
+# files themselves: at most 100 visible columns on every line and at most 43 lines outside `▸ REPOSITORIES` (30, plus the
+# STACKS budget of 12 and its pointer line, #534). The
 # pytest contract (borg_core/link/test_screen_contract.py) covers 1 and 40 stacks; this is the end-to-end witness
 # that the page the CLI prints, not only the renderer, holds the numbers. Escapes are stripped before measuring
 # (SGR and OSC-8 are zero-width), exactly as `picture.visible_len` does.
@@ -3605,15 +3607,15 @@ _link_spine_matches() {
         widest=$(perl -CSD -ne 'chomp; print length($_), "\n"' "$plain" | sort -n | tail -1)
         [ "$widest" -le 100 ] || { echo "$g has a ${widest}-column line" >&2; false; }
         outside=$(awk '/^▸ /{inside = ($0 ~ /^▸ REPOSITORIES/)} !inside{n++} END{print n}' "$plain")
-        [ "$outside" -le 30 ] || { echo "$g has ${outside} lines outside REPOSITORIES" >&2; false; }
+        [ "$outside" -le 43 ] || { echo "$g has ${outside} lines outside REPOSITORIES" >&2; false; }
     done
 }
 
 # B14. Node ids are a JUMP TARGET: each appears exactly twice on the page — once in a picture cell,
 # once as a detail heading — so `*` in vim toggles between them with no plugin. Numbering per manifest
 # instead of globally puts four `n1`s on the orchestrator page and breaks the jump for both repositories.
-# Only the Queen's page draws a picture now (STACKS is repository-level), so the directory goldens are
-# asserted to carry NONE: a node id on a directory's page means a repository-level section came back.
+# A directory's page draws the picture of its open stacks and no detail cards (#534), so each id appears ONCE there:
+# an id twice on a directory's page means a detail block came back.
 @test "contract: every node id appears exactly twice in each Queen golden, and never on a directory's page" {
     local g
     for g in link-grid-orchestrator link-grid-queen-worktrees; do
@@ -3635,8 +3637,8 @@ _link_spine_matches() {
 
     for g in link-grid-repository link-grid-worktree; do
         run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/${g}.golden' \
-            | grep -cE '\\bn[0-9]+\\b' || true"
-        [ "$output" = "0" ] || { echo "$g carries a node id" >&2; false; }
+            | grep -oE '\\bn[0-9]+\\b' | sort | uniq -c | awk '{print \$1}' | sort -u"
+        [ "$output" = "1" ] || { echo "$g node id counts: $output" >&2; false; }
     done
 }
 
