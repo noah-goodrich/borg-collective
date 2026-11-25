@@ -22,6 +22,9 @@ RECORD SCHEMA, one JSON object per line::
     case           the case id within that harness, e.g. "P1"
     git_sha        the build under review (`git rev-parse HEAD` of the checkout), or null
     model          the model id(s) the run REPORTED (modelUsage keys, else init `model`), or null
+    cli_version    the Claude Code CLI version (init `claude_code_version`, else `claude --version`), or null. Optional:
+                   records written before 2026-11-25 lack it. A CLI update changes live eval behavior, so a trend
+                   across a version change is not one population.
     cost_usd       result.total_cost_usd, or null
     turns          result.num_turns, or null
     input_tokens   result.usage.input_tokens (else summed modelUsage inputTokens), or null
@@ -82,6 +85,16 @@ def read_records(path: Path | str | None = None) -> tuple[list[dict[str, Any]], 
     return parse_lines(target.read_text(encoding="utf-8", errors="replace"))
 
 
+def _cli_version() -> str | None:
+    """`claude --version` first token (e.g. "2.1.300"), or None when the CLI is absent or answers oddly."""
+    try:
+        proc = subprocess.run(["claude", "--version"], capture_output=True, text=True, check=False, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    words = proc.stdout.split() if proc.returncode == 0 else []
+    return words[0] if words and words[0][:1].isdigit() else None
+
+
 def _git_sha(repo: str | None) -> str | None:
     try:
         proc = subprocess.run(
@@ -138,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
         result_text=text,
         ts=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
+    if record.get("cli_version") is None and record["verdict"] != "skip":
+        record["cli_version"] = _cli_version()
     if args.plugin_eval_result:
         try:
             cost, _reason = parse_plugin_eval(Path(args.plugin_eval_result).read_text(encoding="utf-8"))

@@ -163,3 +163,33 @@ def test_record_with_plugin_eval_result_stores_its_cost_and_a_bad_file_stores_nu
     assert history.main([*base, "--plugin-eval-result", str(bad)]) == 0
     assert history.main([*base, "--plugin-eval-result", str(tmp_path / "missing.json")]) == 0
     assert [r["cost_usd"] for r in history.read_records(path)[0]] == [0.31, None, None]
+
+
+def _record_args(store, verdict, *extra):
+    return ["--record", "--harness", "h", "--case", "P1", "--verdict", verdict, "--sha", "abc", "--path", str(store), *extra]
+
+
+def test_record_falls_back_to_the_cli_version_when_the_stream_has_no_init(tmp_path, monkeypatch):
+    monkeypatch.setattr(history, "_cli_version", lambda: "2.1.326")
+    store = tmp_path / "h.jsonl"
+    history.main(_record_args(store, "pass"))
+    assert json.loads(store.read_text())["cli_version"] == "2.1.326"
+
+
+def test_record_prefers_the_version_the_run_reported_over_the_installed_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(history, "_cli_version", lambda: "9.9.9")
+    stream = tmp_path / "s.jsonl"
+    stream.write_text(json.dumps({"type": "system", "subtype": "init", "claude_code_version": "2.1.300"}) + "\n")
+    store = tmp_path / "h.jsonl"
+    history.main(_record_args(store, "pass", "--result", str(stream)))
+    assert json.loads(store.read_text())["cli_version"] == "2.1.300"
+
+
+def test_a_skip_never_asks_the_cli_for_its_version(tmp_path, monkeypatch):
+    def boom():
+        raise AssertionError("a skip never ran the CLI")
+
+    monkeypatch.setattr(history, "_cli_version", boom)
+    store = tmp_path / "h.jsonl"
+    history.main(_record_args(store, "skip", "--reason", "cap"))
+    assert json.loads(store.read_text())["cli_version"] is None
