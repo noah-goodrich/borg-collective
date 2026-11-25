@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# borg-plan-promote.sh — PreToolUse hook: auto-promote in-session plan to PROJECT_PLAN.md
+# borg-plan-promote.sh — PreToolUse hook: auto-promote in-session plan to a directive linked from PROJECT_PLAN.md
 #
 # Fires on Edit, Write, NotebookEdit tool calls (and Cortex Code CLI's lowercase edit, write).
 # When Claude Code exits plan mode (ExitPlanMode) and the user proceeds to implementation, this hook captures the plan
-# and writes it to docs/plans/PROJECT_PLAN.md before the first file edit — silently,
+# and writes it to docs/plans/directives/<date>-<slug>.md, linking PROJECT_PLAN.md to it (never tracked, #538), before the first file edit — silently,
 # without blocking.
 #
 # Gates:
 #   1. Repository-mode only (not orchestrator).
 #   2. Edit target must be inside the repo working tree.
 #   3. cwd must be a git repo (used to find repo root).
-#   4. No existing PROJECT_PLAN.md at either canonical location.
+#   4. No existing PROJECT_PLAN.md (file or link) at the root, nor the legacy docs/plans/PROJECT_PLAN.md.
 #   5. Session JSONL must contain an ExitPlanMode tool call since the most recent
 #      non-meta user message (i.e. the current user turn).
 #
 # Cortex Code CLI branch (PostToolUse on ExitPlanMode): Cortex's transcript is a conversations/<id>.json file, not
 # the Claude JSONL gate 5 reads, so the branch below reads the plan from tool_input.plan instead. It applies gates 1,
-# 3 and 4, writes docs/plans/PROJECT_PLAN.md, and also overwrites the team plan file .cortex/plans/plan-<task-id>.md
+# 3 and 4, writes the directive and link as above, and also overwrites the team plan file .cortex/plans/plan-<task-id>.md
 # the response names (never the plan_<timestamp>.md files Cortex writes itself). The Claude path is unchanged.
 #
 # Always exits 0 — never blocks. On any unexpected failure, logs a debug line to
@@ -38,6 +38,35 @@ _debug() {
     # Retention: cap the log at 1 MiB, one previous generation (_borg_rotate_log, lib/borg-hooks.sh).
     { type _borg_rotate_log >/dev/null 2>&1 && _borg_rotate_log "$DEBUG_LOG"; } 2>/dev/null || true
     printf '%s [borg-plan-promote] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$DEBUG_LOG" 2>/dev/null || true
+}
+
+# Promote PLAN_TEXT (argument 2) for the repository at argument 1: write the directive docs/plans/directives/<slug>.md,
+# link PROJECT_PLAN.md to it with a relative symlink, and exclude the link through the shared info/exclude (#538).
+# PROJECT_PLAN.md is never tracked, so editing the plan edits the directive, which is what gets merged and archived.
+# Sets PLAN_DIRECTIVE to the directive's repository-relative path; returns 1 after a debug line on any failure.
+_promote_plan() {
+    local root="$1" text="$2" slug date_prefix rel exclude
+    date_prefix=$(date -u +%Y-%m-%d)
+    # shellcheck disable=SC2016  # the backtick is literal: the annotation is written `- Plan-slug: `<date>-<slug>``
+    slug=$(printf '%s\n' "$text" | sed -n 's/^[-*][[:space:]]*Plan-slug:[[:space:]]*`\{0,1\}\([A-Za-z0-9._-]*\).*/\1/p' | head -1)
+    [[ -n "$slug" ]] || slug="session-plan"
+    [[ "$slug" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}- ]] || slug="${date_prefix}-${slug}"
+    rel="docs/plans/directives/${slug}.md"
+    # Never overwrite a directive that is already there: a second promotion in a day keeps both.
+    [[ -e "${root}/${rel}" ]] && rel="docs/plans/directives/${slug}-$(date -u +%H%M%S).md"
+    mkdir -p "${root}/docs/plans/directives" 2>/dev/null || { _debug "failed to create ${root}/docs/plans/directives"; return 1; }
+    {
+        printf '<!-- auto-promoted from session plan by borg-plan-promote.sh at %s -->\n\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        printf '%s\n' "$text"
+    } > "${root}/${rel}" 2>/dev/null || { _debug "failed to write ${root}/${rel}"; return 1; }
+    ln -s "$rel" "${root}/PROJECT_PLAN.md" 2>/dev/null || { _debug "failed to link ${root}/PROJECT_PLAN.md"; return 1; }
+    exclude=$(git -C "$root" rev-parse --git-path info/exclude 2>/dev/null || true)
+    if [[ -n "$exclude" ]]; then
+        [[ "$exclude" == /* ]] || exclude="${root}/${exclude}"
+        mkdir -p "${exclude%/*}" 2>/dev/null || true
+        grep -qxF '/PROJECT_PLAN.md' "$exclude" 2>/dev/null || { printf '%s\n' '/PROJECT_PLAN.md' >> "$exclude"; } 2>/dev/null || true
+    fi
+    PLAN_DIRECTIVE="$rel"
 }
 
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
@@ -91,24 +120,13 @@ if [[ "$HOOK_EVENT" == "PostToolUse" ]]; then
     REPO_ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || true)
     [[ -z "$REPO_ROOT" ]] && exit 0
 
-    # Gate 4: no existing PROJECT_PLAN.md.
-    PLAN_PRIMARY="${REPO_ROOT}/docs/plans/PROJECT_PLAN.md"
-    if [[ -f "$PLAN_PRIMARY" || -f "${REPO_ROOT}/PROJECT_PLAN.md" ]]; then
+    # Gate 4: no existing PROJECT_PLAN.md, at the root (file or link, even a dangling one) or the legacy docs/plans/ spot.
+    if [[ -e "${REPO_ROOT}/PROJECT_PLAN.md" || -L "${REPO_ROOT}/PROJECT_PLAN.md" || -f "${REPO_ROOT}/docs/plans/PROJECT_PLAN.md" ]]; then
         exit 0
     fi
 
-    mkdir -p "${REPO_ROOT}/docs/plans" 2>/dev/null || {
-        _debug "cortex: failed to create ${REPO_ROOT}/docs/plans"
-        exit 0
-    }
-    {
-        printf '<!-- auto-promoted from session plan by borg-plan-promote.sh at %s -->\n\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-        printf '%s\n' "$PLAN_TEXT"
-    } > "$PLAN_PRIMARY" 2>/dev/null || {
-        _debug "cortex: failed to write $PLAN_PRIMARY"
-        exit 0
-    }
-    _debug "cortex: promoted plan to $PLAN_PRIMARY"
+    _promote_plan "$REPO_ROOT" "$PLAN_TEXT" || exit 0
+    _debug "cortex: promoted plan to $PLAN_DIRECTIVE"
 
     # Team mode: workers implement from .cortex/plans/plan-<task-id>.md (hyphen), which keeps Cortex's native plan.
     # The response names it after "Plan saved to" in backticks. Only a plan-*.md under <repo>/.cortex/plans/ is
@@ -188,10 +206,7 @@ esac
 
 # ── Gate 4: no existing PROJECT_PLAN.md ──────────────────────────────────────
 
-PLAN_PRIMARY="${REPO_ROOT}/docs/plans/PROJECT_PLAN.md"
-PLAN_FALLBACK="${REPO_ROOT}/PROJECT_PLAN.md"
-
-if [[ -f "$PLAN_PRIMARY" || -f "$PLAN_FALLBACK" ]]; then
+if [[ -e "${REPO_ROOT}/PROJECT_PLAN.md" || -L "${REPO_ROOT}/PROJECT_PLAN.md" || -f "${REPO_ROOT}/docs/plans/PROJECT_PLAN.md" ]]; then
     exit 0
 fi
 
@@ -254,27 +269,13 @@ fi
 
 [[ -z "$PLAN_TEXT" ]] && exit 0
 
-# ── Promote plan to docs/plans/PROJECT_PLAN.md ───────────────────────────────
+# ── Promote the plan: directive under docs/plans/directives/, PROJECT_PLAN.md linked to it ──────────────
 
-PROMO_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-DOCS_PLANS_DIR="${REPO_ROOT}/docs/plans"
-
-mkdir -p "$DOCS_PLANS_DIR" 2>/dev/null || {
-    _debug "Failed to create $DOCS_PLANS_DIR"
-    exit 0
-}
-
-{
-    printf '<!-- auto-promoted from session plan by borg-plan-promote.sh at %s -->\n\n' "$PROMO_TS"
-    printf '%s\n' "$PLAN_TEXT"
-} > "$PLAN_PRIMARY" 2>/dev/null || {
-    _debug "Failed to write $PLAN_PRIMARY"
-    exit 0
-}
+_promote_plan "$REPO_ROOT" "$PLAN_TEXT" || exit 0
 
 # PreToolUse stderr on exit 0 goes to the debug log only (https://code.claude.com/docs/en/hooks,
 # "Exit code 0"). `systemMessage` is a universal JSON field shown to the user; deliberately NO
 # permissionDecision, so tool flow is untouched. Plain text, one object, only on promotion.
-jq -n '{systemMessage: "▸ borg: auto-promoted in-session plan to docs/plans/PROJECT_PLAN.md"}' 2>/dev/null || true
+jq -n --arg rel "$PLAN_DIRECTIVE" '{systemMessage: ("▸ borg: auto-promoted in-session plan to " + $rel + " (PROJECT_PLAN.md links to it)")}' 2>/dev/null || true
 
 exit 0
