@@ -383,8 +383,11 @@ def _plan_rows(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
 
 
 def _checkpoint_row(item: dict[str, str]) -> dict[str, Any]:
-    """The row one checkpoint item earns: `next_step` is the text cut to NEXT_STEP_MAX, `detail` is all of it."""
-    return {
+    """The row one checkpoint item earns: `next_step` is the text cut to NEXT_STEP_MAX, `detail` is all of it.
+
+    A decision-card wait (`recon.core._wait_entry`) has a one-line title as its text and adds `card`, the whole card.
+    """
+    row: dict[str, Any] = {
         "item": "",
         "next_step": _truncate(item["text"]),
         "detail": item["text"],
@@ -392,6 +395,9 @@ def _checkpoint_row(item: dict[str, str]) -> dict[str, Any]:
         "ready": "",
         "ref": None,
     }
+    if item.get("card"):
+        row["card"] = item["card"]
+    return row
 
 
 def _newer(checkpoint_mtime: float | None, plan_mtime: float | None) -> bool:

@@ -887,3 +887,11 @@ def test_plan_rows_carry_the_whole_criterion_as_detail_beside_the_cut_next_step(
     free = {"name": "x", "text": "- [ ] a plain criterion that is quite a bit longer than twenty-two characters\n"}
     rows, _ = core.work_items([_rank("p")], {}, {"p": free}, {})
     assert rows[0]["next_step"].endswith("…") and rows[0]["detail"].endswith("twenty-two characters")
+
+
+def test_checkpoint_row_of_a_decision_card_keeps_the_title_as_detail_and_adds_the_card():
+    item = {"text": "Close #97?", "owner": "YOU", "card": "Close #97?\n  - Recommend: close it."}
+    row = core._checkpoint_row(item)  # pylint: disable=protected-access
+    assert row["detail"] == "Close #97?"
+    assert row["card"] == item["card"]
+    assert "card" not in core._checkpoint_row({"text": "plain", "owner": "YOU"})  # pylint: disable=protected-access

@@ -309,12 +309,12 @@ def _section_lines(text: str, heading: re.Pattern[str]) -> list[str]:
     return []
 
 
-def _collect_items(lines: list[str], start: int, stop_on_prose: bool) -> tuple[list[str], int]:
-    """Top-level list items from `lines[start:]` as `(item texts, index where the scan stopped)`.
+def _collect_item_parts(lines: list[str], start: int, stop_on_prose: bool) -> tuple[list[list[str]], int]:
+    """Top-level list items from `lines[start:]` as `(items, index where the scan stopped)`, each item its lines.
 
-    An item is its first line (marker stripped) plus the indented lines that follow it, whitespace collapsed. Blank
-    lines are skipped. A non-blank, non-indented, non-list line ends the current item; with `stop_on_prose` it also
-    ends the scan (and is NOT consumed), otherwise the scan goes on to the next list item.
+    An item is its first line (marker stripped) plus the indented lines that follow it. Blank lines are skipped. A
+    non-blank, non-indented, non-list line ends the current item; with `stop_on_prose` it also ends the scan (and is
+    NOT consumed), otherwise the scan goes on to the next list item.
     """
     items: list[list[str]] = []
     current: list[str] | None = None
@@ -340,7 +340,36 @@ def _collect_items(lines: list[str], start: int, stop_on_prose: bool) -> tuple[l
         index += 1
     if current is not None:
         items.append(current)
-    return [text for text in (" ".join(" ".join(parts).split()) for parts in items) if text], index
+    return items, index
+
+
+def _flat(parts: list[str]) -> str:
+    return " ".join(" ".join(parts).split())
+
+
+def _collect_items(lines: list[str], start: int, stop_on_prose: bool) -> tuple[list[str], int]:
+    """`_collect_item_parts` with each item's lines whitespace-collapsed into one string; empty items dropped."""
+    items, index = _collect_item_parts(lines, start, stop_on_prose)
+    return [text for text in (_flat(parts) for parts in items) if text], index
+
+
+_SUB_BULLET = re.compile(r"^\s+(?:[-*+]|\d+[.)])\s+")
+
+
+def _wait_entry(parts: list[str]) -> dict[str, str] | None:
+    """One `Waits on you` item as `{"text", "owner": "YOU"}`, plus `card` when it is a decision card.
+
+    Two forms are accepted. A one-liner (the item and any wrapped continuation lines) is collapsed whole into `text`.
+    A decision card is a first line (the title) followed by indented sub-bullets (context, options, recommendation,
+    source link): `text` is the title ALONE so the pages and the brief stay one line per item, and `card` is the
+    whole item, one line per row with the indentation of the sub-bullets kept, for the skill that asks it.
+    """
+    if len(parts) > 1 and any(_SUB_BULLET.match(line) for line in parts[1:]):
+        title = _strip_emphasis(_flat(parts[:1]))
+        card = "\n".join([_strip_emphasis(parts[0].strip()), *(_strip_emphasis(line.rstrip()) for line in parts[1:])])
+        return {"text": title, "owner": "YOU", "card": card} if title else None
+    text = _strip_emphasis(_flat(parts))
+    return {"text": text, "owner": "YOU"} if text else None
 
 
 _CODE_SPAN = re.compile(r"(`[^`]*`)")
@@ -369,6 +398,8 @@ def _strip_emphasis(text: str) -> str:
 def checkpoint_owned_items(text: str) -> list[dict[str, str]]:
     """The checkpoint's owned next items as `{"text", "owner"}`: `YOU` for waits, `AGENT` for Next Session.
 
+    A YOU item written as a decision card (`_wait_entry`) also carries `card`, its full text; `text` is its title.
+
     YOU items are the top-level list items that follow a whole-line `Waits on you:` or `These wait on <name>:`
     lead-in (case-insensitive) inside `## 4. Blockers`; `Waits on you: none`, `No blockers.` and any other prose
     yield nothing. AGENT items are every top-level list item of `## 5. Next Session`. Item text loses its emphasis
@@ -380,8 +411,8 @@ def checkpoint_owned_items(text: str) -> list[dict[str, str]]:
     index = 0
     while index < len(blockers):
         if _WAIT_LEAD_IN.search(blockers[index].strip()):
-            found, index = _collect_items(blockers, index + 1, stop_on_prose=True)
-            owned.extend({"text": _strip_emphasis(item), "owner": "YOU"} for item in found)
+            found, index = _collect_item_parts(blockers, index + 1, stop_on_prose=True)
+            owned.extend(entry for entry in (_wait_entry(parts) for parts in found) if entry)
         else:
             index += 1
     found, _ = _collect_items(_section_lines(text, _NEXT_SESSION_HEADING), 0, stop_on_prose=False)

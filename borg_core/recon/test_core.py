@@ -536,3 +536,34 @@ def test_the_link_up_templates_none_form_yields_no_you_items():
     assert "`Waits on you: none`" in _SKILL.read_text(encoding="utf-8")
     body = "## 4. Blockers\n\nNo blockers.\n\nWaits on you: none\n\n## 5. Next Session\n\n1. Do the next thing\n"
     assert core.checkpoint_owned_items(body) == [{"text": "Do the next thing", "owner": "AGENT"}]
+
+
+_CARD_TEXT = (
+    "## 4. Blockers\n\nWaits on you:\n"
+    "- **Close #97 or restate its scope?** https://github.com/o/r/issues/97\n"
+    "  - Context: the issue asks for X, but #101 shipped X.\n"
+    "  - Options:\n"
+    "    - Close it. Pro: clean board. Con: loses the Y ask. Runs: gh issue close 97.\n"
+    "    - Restate it. Pro: keeps Y. Con: stays open. Runs: gh issue edit 97.\n"
+    "  - Recommend: close it.\n"
+    "- Rotate the demo token\n\n## 5. Next Session\n1. go\n"
+)
+
+
+def test_owned_items_decision_card_keeps_the_title_as_text_and_the_whole_card():
+    items = core.checkpoint_owned_items(_CARD_TEXT)
+    assert [item["owner"] for item in items] == ["YOU", "YOU", "AGENT"]
+    card = items[0]
+    assert card["text"] == "Close #97 or restate its scope? https://github.com/o/r/issues/97"
+    assert card["card"].splitlines()[0] == card["text"]
+    assert "  - Recommend: close it." in card["card"].splitlines()
+    assert "    - Close it. Pro: clean board. Con: loses the Y ask. Runs: gh issue close 97." in card["card"]
+
+
+def test_owned_items_one_liner_beside_a_card_stays_a_plain_item():
+    assert core.checkpoint_owned_items(_CARD_TEXT)[1] == {"text": "Rotate the demo token", "owner": "YOU"}
+
+
+def test_owned_items_wrapped_one_liner_is_not_a_card():
+    text = "## 4. Blockers\nWaits on you:\n- Rotate the\n  demo token\n"
+    assert core.checkpoint_owned_items(text) == [{"text": "Rotate the demo token", "owner": "YOU"}]
