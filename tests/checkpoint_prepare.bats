@@ -306,3 +306,12 @@ EOF
     [[ "$output" == *"checkpoint-prepare"* ]] || false
     [[ "$output" == *"checkpoint-name"* ]] || false
 }
+
+@test "PLAN_TRACKED names a tracked PROJECT_PLAN.md and PLAN reads none (#538)" {
+    : > "$REPO/PROJECT_PLAN.md"
+    git -C "$REPO" add PROJECT_PLAN.md
+    _prepare --cwd "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(_field PLAN)" = "none" ]
+    [[ "$output" == *"PLAN_TRACKED: "*"/PROJECT_PLAN.md"* ]] || false
+}

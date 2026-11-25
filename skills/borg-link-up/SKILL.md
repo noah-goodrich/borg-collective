@@ -110,5 +110,6 @@ Write the **Wrote:** form when add-row ran and printed `MANIFEST_OK`; otherwise 
 The default run (`PLAN: none`, every `EXTENSION_*` field `not present`, `STATUS: ok`) needs none of these and makes no extra tool call.
 
 - `PLAN` is not `none`: Read `references/criteria.md`.
+- A `PLAN_TRACKED: <path>` line is present (the line appears only then): the plan is tracked by git, which `borg-plan` never does (`PROJECT_PLAN.md` is an untracked link to the in-flight directive). `PLAN` is `none`, so reconcile nothing. Write one line in §4 Blockers: `PROJECT_PLAN.md is tracked on this branch (leaked from another worktree); run git rm --cached PROJECT_PLAN.md, move its content to docs/plans/directives/, and re-link with borg start <slug>`.
 - Any `EXTENSION_*` field is not `not present`: Read `references/extensions.md`.
 - `STATUS` says `fallback: <reason>`, or the prepared block is missing: Read `references/fallback.md`.

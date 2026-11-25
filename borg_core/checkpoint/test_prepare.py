@@ -86,6 +86,13 @@ def test_plan_is_none_when_absent_and_a_path_when_present():
     assert "PLAN: /work/repo/PROJECT_PLAN.md" in prepare.render(_facts(plan="/work/repo/PROJECT_PLAN.md")).splitlines()
 
 
+def test_plan_tracked_line_appears_only_for_a_tracked_plan():
+    assert not [line for line in prepare.render(_facts()).splitlines() if line.startswith("PLAN_TRACKED")]
+    lines = prepare.render(_facts(plan_tracked="/work/repo/PROJECT_PLAN.md")).splitlines()
+    assert "PLAN: none" in lines
+    assert "PLAN_TRACKED: /work/repo/PROJECT_PLAN.md" in lines
+
+
 def test_borg_source_dir_is_a_path_line_and_unknown_by_default():
     assert "BORG_SOURCE_DIR: unknown" in prepare.render(_facts()).splitlines()
     assert "BORG_SOURCE_DIR: /opt/borg" in prepare.render(_facts(source_dir="/opt/borg")).splitlines()

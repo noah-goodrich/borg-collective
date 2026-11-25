@@ -6,6 +6,8 @@ The gate is **mechanical, not judged**: the engine reads the plan's `Evidence:` 
 
 **If absent, skip.** `PLAN: none` means nothing to reconcile: do not run the engine, do not emit a `## Criteria Reconciled` section, do not mention it in the checkpoint, and do not say "no plan found" anywhere. The step is a SILENT no-op.
 
+`PROJECT_PLAN.md` is normally a symlink to the in-flight directive (#538). Pass the link path as `<PLAN>` exactly as given: the engine writes through it to the directive and keeps the link, so never resolve it yourself or point the engine at the directive.
+
 `--apply` implies the derive and reports it, so one invocation both writes and tells you what it wrote. Run it **once per link-up**. If it fails or times out, do NOT retry and do NOT flip anything by hand — write one line in §4 Blockers naming the failure and move on.
 
 Read the verdicts from the JSON the Bash call printed:

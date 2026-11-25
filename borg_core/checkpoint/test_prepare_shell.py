@@ -91,6 +91,35 @@ def test_plan_path_prefers_the_root_file_then_docs_plans(tmp_path):
     assert prepare_shell.plan_path(str(tmp_path)) == str(tmp_path / "PROJECT_PLAN.md")
 
 
+def test_plan_path_follows_a_symlink_to_the_directive(tmp_path):
+    """#538: PROJECT_PLAN.md is a link to the in-flight directive; a live link is a plan, a dangling one is not."""
+    (tmp_path / "docs" / "plans" / "directives").mkdir(parents=True)
+    (tmp_path / "docs" / "plans" / "directives" / "d.md").write_text("x")
+    (tmp_path / "PROJECT_PLAN.md").symlink_to("docs/plans/directives/d.md")
+    assert prepare_shell.plan_path(str(tmp_path)) == str(tmp_path / "PROJECT_PLAN.md")
+    (tmp_path / "docs" / "plans" / "directives" / "d.md").unlink()
+    assert prepare_shell.plan_path(str(tmp_path)) == ""
+
+
+def test_plan_tracked_is_true_only_for_a_plan_git_tracks(tmp_path):
+    repo = _git_repo(tmp_path)
+    plan = repo / "PROJECT_PLAN.md"
+    plan.write_text("x")
+    assert prepare_shell.plan_tracked(str(repo), str(plan), prepare_shell.Budget(20.0)) is False
+    subprocess.run(["git", "-C", str(repo), "add", "PROJECT_PLAN.md"], check=True)
+    assert prepare_shell.plan_tracked(str(repo), str(plan), prepare_shell.Budget(20.0)) is True
+    assert prepare_shell.plan_tracked(str(repo), "", prepare_shell.Budget(20.0)) is False
+
+
+def test_a_tracked_plan_is_reported_not_reconciled(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / "PROJECT_PLAN.md").write_text("x")
+    subprocess.run(["git", "-C", str(repo), "add", "PROJECT_PLAN.md"], check=True)
+    facts = prepare_shell.gather(str(repo))
+    assert facts.plan == ""
+    assert facts.plan_tracked.endswith("PROJECT_PLAN.md")
+
+
 # ------------------------------------------------------------------------------------ git status
 
 
