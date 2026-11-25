@@ -5,7 +5,7 @@
 #   usage: evals/triggers/live.sh [--mode isolated|in-situ|both] [--skill A[,B]] [--model M] [--jobs N]
 #                                 [--max-budget-usd USD] [--out DIR] [--no-record]
 #
-# Each case is one `claude -p "<query>" --plugin-dir <build of this checkout>` with only the Skill tool, two turns,
+# Each case is one `claude -p "<query>" --plugin-dir <build of this checkout>` with only the Skill tool, one turn (the skill call is the verdict; the skill body is never run),
 # run from a throwaway directory under $TMPDIR (a sandbox inside this repo would let the session read its CLAUDE.md).
 #   isolated  adds `--setting-sources project`: only the build under review (plus Claude Code's bundled plugins).
 #   in-situ   keeps the user's enabled plugins, the only mode that measures competition between skills.
@@ -28,7 +28,7 @@ if [ "${1:-}" = "--worker" ]; then
     sandbox="$SBX_ROOT/$mode-$id"; mkdir -p "$sandbox"
     query="$(jq -r --arg id "$id" '.[] | select(.id == $id) | .query' "$HERE/$skill.json")"
     args=(-p "$query" --plugin-dir "$PLUGIN" --tools Skill --output-format stream-json --verbose --model "$MODEL"
-        --max-turns 2 --max-budget-usd "$BUDGET" --no-session-persistence)
+        --max-turns 1 --max-budget-usd "$BUDGET" --no-session-persistence)
     [ "$mode" = "isolated" ] && args+=(--setting-sources project)
     expect=(); [ "$mode" = "in-situ" ] && expect=(--expect-file "$EXPECT")
     (cd "$sandbox" && BORG_NO_SESSION_HOOKS=1 claude "${args[@]}" > "$stream" 2> "$stream.err")
