@@ -99,6 +99,8 @@ the deliverable*, so its absence is the work not being done.
 
 ## Using it
 
+`PROJECT_PLAN.md` is a symlink to the in-flight directive (#538). Point the engine at the link: `--apply` writes through it to the directive and keeps the link.
+
 ```bash
 # What would change, and why. Writes nothing.
 python3 -m borg_core.planstate.cli PROJECT_PLAN.md --json

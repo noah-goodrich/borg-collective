@@ -15,7 +15,14 @@ Everything else is repository policy and the repository layer wins. Full rules: 
 
 If neither exists, skip silently.
 
-After the conversation, write `PROJECT_PLAN.md` in the repository root.
+After the conversation, write the plan as a DIRECTIVE at `docs/plans/directives/<plan-slug>.md` (the
+`- Plan-slug:` value below, plus `.md`; update the file if it already exists), then link it as the in-flight plan:
+`borg start <plan-slug>`. That creates `PROJECT_PLAN.md` in the repository root as a relative symlink to the
+directive and idempotently adds `/PROJECT_PLAN.md` to `.git/info/exclude` (shared by every worktree of the clone;
+`.gitignore` is untouched). **`PROJECT_PLAN.md` is never tracked and never committed (#538):** editing it edits
+the directive, and the directive is what gets committed, merged and later archived by `/borg-assimilate`. Where
+this skill says "write `PROJECT_PLAN.md`" below, it means this directive-plus-link pair. Never write a regular
+file named `PROJECT_PLAN.md`, and never `git add` it.
 
 **`- Plan-slug:` is the plan's own name for its archived copy, and it is chosen HERE — once, by a
 person, at plan time.** It is `<established-date>-<short-slug>`, where the short slug is a 3-6 word

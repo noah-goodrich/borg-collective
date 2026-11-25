@@ -320,9 +320,9 @@ Hooks are registered in `~/.claude/settings.json`:
 
 `borg-plan-promote.sh` fires on `Edit`, `Write`, and `NotebookEdit` tool calls. It scans the
 session JSONL for an `ExitPlanMode` tool call since the most recent real user message. If found,
-and no `PROJECT_PLAN.md` already exists in the repo, it writes the plan to
-`docs/plans/PROJECT_PLAN.md` (creating the directory if needed) and emits a one-line note to
-stderr. Always exits 0 — it never blocks the edit. Repository sessions only; Queen sessions are
+and no `PROJECT_PLAN.md` already exists in the repo, it writes the plan as a directive under
+`docs/plans/directives/`, links `PROJECT_PLAN.md` to it (an untracked relative symlink, #538) and emits a
+one-line note. Always exits 0 — it never blocks the edit. Repository sessions only; Queen sessions are
 excluded via `_borg_session_mode`.
 
 ---

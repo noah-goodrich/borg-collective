@@ -192,6 +192,14 @@ _borg_read_directives() {
     dir="$ppath/docs/plans/directives"
     [[ -d "$dir" ]] || { echo "0"; return 0; }
     local files=("$dir"/*.md(N))
+    # The in-flight directive is the plan, not a pending directive: PROJECT_PLAN.md links to it (#538).
+    if [[ -L "$ppath/PROJECT_PLAN.md" ]]; then
+        local self="$ppath/PROJECT_PLAN.md"
+        self="${self:A}"
+        local kept=()
+        for f in "${files[@]}"; do [[ "${f:A}" == "$self" ]] || kept+=("$f"); done
+        files=("${kept[@]}")
+    fi
     (( ${#files[@]} == 0 )) && { echo "0"; return 0; }
     echo "${#files[@]}"
     for f in "${files[@]}"; do

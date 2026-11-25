@@ -171,12 +171,13 @@ below before presenting it for confirmation.
 #### Shipping Actions
 
 1. Present the shipping actions as a numbered list:
+   - Archive the directive on the PR branch, BEFORE the merge: `git mv` it from `docs/plans/directives/<slug>.md`
+     to `docs/plans/assimilated/<slug>.md` with checkboxes marked + ship date, commit and push, so the archive
+     lands on main with the work (`PROJECT_PLAN.md` is an untracked link to that directive; see Plan Archival Format)
    - Merge PR (show exact `gh pr merge` command)
    - Any plan-specific ship definition steps
    - Run 03-followup extensions (see below) — only after the merge has been confirmed
-   - Archive PROJECT_PLAN.md → `docs/plans/assimilated/<date>-<slug>.md` with checkboxes marked
-     + ship date
-   - Remove PROJECT_PLAN.md from repository root
+   - Remove the local `PROJECT_PLAN.md` link (an untracked symlink; nothing is committed for this)
 2. **Ask for confirmation**: "Ready to ship. These are the actions I'll take: [list]. Confirm?"
 3. Only execute after explicit confirmation. Execute each step, reporting results.
 4. After shipping, verify: PR merged, plan archived, working tree clean.
@@ -225,8 +226,14 @@ developer to resolve manually.
 
 ### Plan Archival Format
 
-When archiving PROJECT_PLAN.md:
-- Copy to `docs/plans/assimilated/<slug>.md`, where `<slug>` is the plan's **declared**
+`PROJECT_PLAN.md` is never tracked (#538): it is a relative symlink to the in-flight directive, so the directive
+itself is what gets archived, and it is archived on the PR branch before the merge. A tracked `PROJECT_PLAN.md`
+(`git ls-files --error-unmatch PROJECT_PLAN.md` succeeds) is a leak: `git rm --cached` it and move its content to
+`docs/plans/directives/<slug>.md` first, then archive as below.
+
+When archiving the plan:
+- `git mv` the directive the link points at (`readlink PROJECT_PLAN.md`) to `docs/plans/assimilated/<slug>.md`, then
+  edit the moved file in place and commit it on the PR branch, where `<slug>` is the plan's **declared**
   `- Plan-slug:` value — the same `_borg_plan_declared_slug PROJECT_PLAN.md` read Step 0.75 made.
   Do NOT compute it from the objective: Step 0.75 gated on the declared slug, so archiving under a
   computed one renames the plan out from under the nine directives that point at it, and the
@@ -234,11 +241,12 @@ When archiving PROJECT_PLAN.md:
 - Add `*Shipped: <today's date> — PR #<number> merged to main*` below the established date
 - Mark all acceptance criteria checkboxes as `[x]`
 - Append an "Additional Work Shipped" section if significant work happened beyond the criteria
-- Delete PROJECT_PLAN.md from repository root
+- Remove the dangling local link: `rm PROJECT_PLAN.md`. It is untracked, so this commits nothing; do it after the
+  merge, since the plan stays readable through the link until then
 
 ### Step 4c: Chained Auto-Promotion
 
-After PROJECT_PLAN.md has been archived (the previous step), check whether the next directive
+After the plan has been archived (the previous step), check whether the next directive
 should promote itself automatically — reusing Step 0.75's own scan idiom, run after archival
 instead of before it.
 
