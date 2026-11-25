@@ -108,7 +108,7 @@ borg_resume_probe() {
             return 1
         fi
     elif [ "$_shape" = unrecognized ]; then
-        printf 'borg-resume probe: unrecognized /usage output shape (Claude Code changed its format?): session percentage unavailable\n' >&2
+        printf 'borg-resume probe: could not parse a session percentage: unrecognized /usage output shape (Claude Code changed its format?)\n' >&2
         return 1
     fi
     case "$_pct" in
