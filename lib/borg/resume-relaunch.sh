@@ -271,6 +271,17 @@ _rr_launch() { # <sid> <cwd> <claude-bin> <name> <session>
     return 0
 }
 
+# Exit 0 when the registry row's claude pid is alive with the recorded start (epoch, or a legacy string).
+_rr_original_alive() { # <registry file>
+    local _p _e _s
+    _p="$(jq -r '.claude_pid // empty' "$1" 2>/dev/null)"
+    case "$_p" in "" | *[!0-9]* | 0) return 1 ;; esac
+    kill -0 "$_p" 2>/dev/null || return 1
+    _e="$(jq -r '.claude_start_epoch // empty' "$1" 2>/dev/null)"
+    _s="$(jq -r '.claude_start // empty' "$1" 2>/dev/null)"
+    [ "$(borg_resume_start_check "$_p" "$_e" "$_s")" = same ]
+}
+
 borg_resume_relaunch_group() {
     local _sid="$1" _f _cause="" _c _reg _cwd _proj _name _sess _old _recent _since _res _fb _cap
     local _lead _lrid _t _loc
@@ -305,6 +316,14 @@ EOF
     _t="${_loc%%$'\t'*}"
     if [ "$(_rl_tail_state "$_t")" = interrupt ]; then
         _rg_each _rg_to cancelled interrupted_by_user
+        return 1
+    fi
+
+    # Never relaunch while the original process is alive (#491): two claudes on one session id write one transcript.
+    # Positive proof only: the recorded pid answers kill -0 and its start epoch matches the record.
+    if _rr_original_alive "$_reg"; then
+        _rr_log "refused: original process still alive sid=$_sid"
+        _rg_each _rg_to cancelled original_alive
         return 1
     fi
 

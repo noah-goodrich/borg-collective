@@ -155,12 +155,41 @@ n_recs() { all_recs | jq -s 'length'; }
     [ "$(n_recs)" = 0 ]
 }
 
-@test "alive pid with a different start time (pid reuse) is dead" {
+# add claude_start_epoch to a registry row (the form borg-resume writes since #491)
+set_epoch() { # <sid> <epoch>
+    jq -c --argjson e "$2" '.claude_start_epoch = $e' "$RD/sessions/$1.json" >"$RD/sessions/$1.json.t" &&
+        mv "$RD/sessions/$1.json.t" "$RD/sessions/$1.json"
+    set_mtime "$RD/sessions/$1.json" $((NOW - 60))
+}
+proc_epoch() { TZ=UTC LC_ALL=C date -j -f '%a %b %e %T %Y' "$(TZ=UTC LC_ALL=C ps -o lstart= -p "$1")" +%s 2>/dev/null ||
+    TZ=UTC LC_ALL=C date -d "$(TZ=UTC LC_ALL=C ps -o lstart= -p "$1")" +%s; }
+
+@test "alive pid with a different start epoch (pid reuse) is dead" {
     mk_tr "$SID" open
     mk_regx "$SID" "$ALIVEPID" "$(lstart_of $((NOW - 7200)))"
+    set_epoch "$SID" $((NOW - 7200))
     watch
     [ "$(n_pending)" = 1 ]
     [ "$(rec_q '.[0].class')" = process_death ]
+}
+
+@test "a system timezone change does not kill a live session (epoch row, #491)" {
+    mk_tr "$SID" open
+    # recorded under Los Angeles time, checked under Denver time: the string differs by an hour, the epoch does not
+    st="$(TZ=America/Los_Angeles LC_ALL=C ps -o lstart= -p "$ALIVEPID")"
+    mk_regx "$SID" "$ALIVEPID" "$st"
+    set_epoch "$SID" "$(proc_epoch "$ALIVEPID")"
+    TZ=America/Denver watch
+    [ "$status" -eq 0 ]
+    [ "$(n_recs)" = 0 ]
+}
+
+@test "a legacy string row recorded under another timezone is never declared dead (#491)" {
+    mk_tr "$SID" open
+    st="$(TZ=America/Los_Angeles LC_ALL=C ps -o lstart= -p "$ALIVEPID")"
+    mk_regx "$SID" "$ALIVEPID" "$st"
+    TZ=America/Denver watch
+    [ "$(n_recs)" = 0 ]
 }
 
 @test "no pid evidence and no bound pane is unknown, never death (absence of activity is not death)" {
