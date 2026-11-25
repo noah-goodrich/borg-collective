@@ -969,8 +969,10 @@ _launchd_path_value() {
     [ "$(_row_field '.status')" = "ok" ]
 }
 
-@test "launchd: a missing lib/borg-hooks.sh is fail-open, not fatal" {
+@test "launchd: a missing lib/borg-hooks.sh is fail-open, not fatal (parser lib present)" {
     local fake_home="${BATS_TEST_TMPDIR}/nolib"
+    mkdir -p "${BATS_TEST_TMPDIR}/rootlib/lib/borg"
+    cp "${BATS_TEST_DIRNAME}/../lib/borg/usage-parse.sh" "${BATS_TEST_TMPDIR}/rootlib/lib/borg/"
     mkdir -p "$fake_home/.local/bin"
     printf '#!/usr/bin/env bash\ncat "%s"\n' "$FIXTURE" > "$fake_home/.local/bin/claude"
     chmod +x "$fake_home/.local/bin/claude"
@@ -979,13 +981,25 @@ _launchd_path_value() {
         USER=test \
         HOME="$fake_home" \
         PATH="/usr/bin:/bin" \
-        BORG_ROOT="${BATS_TEST_TMPDIR}/does-not-exist" \
+        BORG_ROOT="${BATS_TEST_TMPDIR}/rootlib" \
         BORG_USAGE_SAMPLES="$BORG_USAGE_SAMPLES" \
         BORG_USAGE_LOG="$BORG_USAGE_LOG" \
         BORG_USAGE_PANE_CMD="echo claude" \
         "$SCRIPT" --once
     [ "$status" -eq 0 ]
     [ "$(_row_field '.status')" = "ok" ]
+}
+
+@test "launchd: a missing lib/borg/usage-parse.sh is loud: error row, nonzero exit (#465)" {
+    local fake_home="${BATS_TEST_TMPDIR}/noparse"
+    mkdir -p "$fake_home/.local/bin"
+    printf '#!/usr/bin/env bash\ncat "%s"\n' "$FIXTURE" > "$fake_home/.local/bin/claude"
+    chmod +x "$fake_home/.local/bin/claude"
+    run env -i USER=test HOME="$fake_home" PATH="/usr/bin:/bin" BORG_ROOT="${BATS_TEST_TMPDIR}/does-not-exist" \
+        BORG_USAGE_SAMPLES="$BORG_USAGE_SAMPLES" BORG_USAGE_LOG="$BORG_USAGE_LOG" BORG_USAGE_PANE_CMD="echo claude" \
+        "$SCRIPT" --once
+    [ "$status" -ne 0 ]
+    [ "$(_row_field '.status')" = "error" ]
 }
 
 # ─── shared claude resolver (lib/borg/claude-bin.sh) ─────────────────────────
@@ -1066,4 +1080,56 @@ _launchd_path_value() {
         BORG_USAGE_NOW_EPOCH="$BORG_USAGE_NOW_EPOCH" \
         bash -c "echo '{\"tool_name\":\"Agent\"}' | '${BATS_TEST_DIRNAME}/../hooks/borg-dispatch-guard.sh'"
     [ "$status" -eq 0 ]
+}
+
+# ─── #465: parse by output shape; the limits-breakdown shape is loud, never a silent UNKNOWN ───────────────────
+FIXTURES_DIR="${BATS_TEST_DIRNAME}/fixtures"
+
+@test "shape 2.1.300: the fixture captured under env -i parses to a numeric session_pct" {
+    _write_mock_claude "cat '$FIXTURES_DIR/usage-output-2.1.300.txt'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(_row_field '.status')" = "ok" ]
+    [ "$(_row_field '.session_pct')" = "5" ]
+    [ "$(_row_field '.source')" = "usage" ]
+}
+
+@test "shape limits-breakdown with no statusline reading: error row, DEGRADED log, guardian records blind" {
+    export BORG_USAGE_RATELIMITS_FILE="${BATS_TEST_TMPDIR}/none.json"
+    _write_mock_claude "cat '$FIXTURES_DIR/usage-output-limits-breakdown.txt'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(_row_field '.status')" = "error" ]
+    [ "$(_row_field '.detail')" = "limits_breakdown_no_session" ]
+    [ "$(_row_field '.session_pct')" = "null" ]
+    grep -q "DEGRADED — BLIND" "$BORG_USAGE_LOG"
+    [ "$(jq -r '.blind_reason' "$BORG_USAGE_GUARDIAN_STATE")" = "limits_breakdown_no_session" ]
+    [ "$(jq -r '.last_ok_at // "none"' "$BORG_USAGE_GUARDIAN_STATE")" = "none" ]
+}
+
+@test "shape limits-breakdown with a fresh statusline reading: ok row from the statusline source" {
+    export BORG_USAGE_RATELIMITS_FILE="${BATS_TEST_TMPDIR}/rl.json"
+    printf '{"five_hour_pct":42.7,"five_hour_resets_at":1700003600,"seven_day_pct":9,"at":%s}\n' "$((BORG_USAGE_NOW_EPOCH - 30))" > "$BORG_USAGE_RATELIMITS_FILE"
+    _write_mock_claude "cat '$FIXTURES_DIR/usage-output-limits-breakdown.txt'"
+    run "$SCRIPT" --once
+    [ "$(_row_field '.status')" = "ok" ]
+    [ "$(_row_field '.session_pct')" = "42" ]
+    [ "$(_row_field '.source')" = "statusline" ]
+    [ -n "$(jq -r '.last_ok_at // empty' "$BORG_USAGE_GUARDIAN_STATE")" ]
+}
+
+@test "shape limits-breakdown with a STALE statusline reading stays blind" {
+    export BORG_USAGE_RATELIMITS_FILE="${BATS_TEST_TMPDIR}/rl.json"
+    printf '{"five_hour_pct":42,"at":%s}\n' "$((BORG_USAGE_NOW_EPOCH - 7200))" > "$BORG_USAGE_RATELIMITS_FILE"
+    _write_mock_claude "cat '$FIXTURES_DIR/usage-output-limits-breakdown.txt'"
+    run "$SCRIPT" --once
+    [ "$(_row_field '.status')" = "error" ]
+}
+
+@test "unrecognized shape: error row, DEGRADED log naming the shape" {
+    _write_mock_claude "echo 'something Claude Code has never printed'"
+    run "$SCRIPT" --once
+    [ "$(_row_field '.status')" = "error" ]
+    [ "$(_row_field '.detail')" = "unrecognized_shape" ]
+    grep -q "DEGRADED — BLIND.*unrecognized" "$BORG_USAGE_LOG" || grep -q "DEGRADED — BLIND" "$BORG_USAGE_LOG"
 }

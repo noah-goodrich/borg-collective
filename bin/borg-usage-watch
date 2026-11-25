@@ -366,13 +366,13 @@ _guardian_set_swept() {
 # reasons (binary_not_found, claude_failed, parse_failed). Idle/suspect are NOT unknown: no claude
 # call was even attempted, so they neither extend nor reset the streak.
 _guardian_record_error() {
-    local streak
+    local streak why="${1:-}"
     streak=$(_guardian_read_all | jq -r '.consecutive_unknown // 0' 2>/dev/null) || streak=0
     [[ "$streak" =~ ^[0-9]+$ ]] || streak=0
     streak=$((streak + 1))
     local merged
-    if merged=$(_guardian_read_all | jq -c --argjson n "$streak" --arg ts "$ts" \
-            '. + {consecutive_unknown:$n, last_unknown_at:$ts}' 2>/dev/null) \
+    if merged=$(_guardian_read_all | jq -c --argjson n "$streak" --arg ts "$ts" --arg why "$why" \
+            '. + {consecutive_unknown:$n, last_unknown_at:$ts, blind_reason:$why}' 2>/dev/null) \
             && _guardian_atomic_write "$merged"; then
         :
     else
@@ -386,7 +386,7 @@ _guardian_record_error() {
 # A successful (status:"ok") poll resets the streak.
 _guardian_record_ok() {
     local merged
-    if merged=$(_guardian_read_all | jq -c '. + {consecutive_unknown:0}' 2>/dev/null) \
+    if merged=$(_guardian_read_all | jq -c --arg ts "$ts" '. + {consecutive_unknown:0, last_ok_at:$ts, blind_reason:""}' 2>/dev/null) \
             && _guardian_atomic_write "$merged"; then
         :
     else
@@ -539,24 +539,34 @@ if [[ "$claude_exit" -ne 0 ]]; then
     exit 0
 fi
 
-# The "· resets <time>" suffix is present only when session_pct > 0. At 0% Claude Code renders a
-# bare "Current session: 0% used" with no reset clause, so the suffix must be OPTIONAL here — a
-# required "· resets" mis-parsed every idle 0% poll as parse_failed (582 of 591 observed failures).
-# Match the percentage (always present when the session line exists) and let resets_at (below) pick
-# up the clause only when it is there. A genuinely absent "Current session:" line still yields an
-# empty session_pct → parse_failed, which is correct.
-session_line=$(echo "$output" | grep -oE 'Current session: [0-9]+% used( · resets [^(]+)?' | head -1) || session_line=""
-session_pct=$(echo "$session_line" | sed -E 's/^Current session: ([0-9]+)% used.*$/\1/') || session_pct=""
-if [[ "$session_pct" == "$session_line" ]]; then session_pct=""; fi
-resets_at=$(echo "$session_line" | sed -E 's/^Current session: [0-9]+% used · resets (.+)$/\1/' | sed -E 's/ +$//') || resets_at=""
-if [[ "$resets_at" == "$session_line" ]]; then resets_at=""; fi
-week_line=$(echo "$output" | grep -oE 'Current week \(all models\): [0-9]+% used' | head -1) || week_line=""
-week_pct=$(echo "$week_line" | sed -E 's/^Current week \(all models\): ([0-9]+)% used$/\1/') || week_pct=""
-if [[ "$week_pct" == "$week_line" ]]; then week_pct=""; fi
+# Parse by output SHAPE (lib/borg/usage-parse.sh), never by Claude Code version. The "· resets <time>" suffix is
+# present only when session_pct > 0 (a bare "Current session: 0% used" at idle), so the parser keeps it optional.
+# Shapes: session-line (the session limit), unmetered (cost summary), limits-breakdown (newer /usage with no session
+# line: contribution shares, never the limit), unrecognized. Without the lib this poller cannot parse: fail loud.
+if [[ ! -r "$_UW_LIB/borg/usage-parse.sh" ]] || ! { source "$_UW_LIB/borg/usage-parse.sh"; } >/dev/null 2>&1; then
+    log "ERROR: cannot load $_UW_LIB/borg/usage-parse.sh — poller is BLIND (lib not installed?)"
+    row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
+        '{ts:$ts, status:"error", reason:"parse_failed", detail:"usage-parse.sh missing", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
+    _append_sample "$row"
+    _guardian_record_error "usage-parse.sh missing"
+    exit 1
+fi
+parsed=$(borg_usage_parse "$output")
+IFS='|' read -r usage_shape session_pct week_pct resets_at <<<"$parsed"
+session_source="usage"
 
-# A usage-billed account has no session limit: /usage prints a cost summary and no session line. Shape
-# test only (no `claude auth status` call per pass). Anything else without a session line stays a failure.
-if [[ -z "$session_line" ]] && printf '%s\n' "$output" | grep -qE '^Total cost:'; then
+# Second source for the limits-breakdown shape: the statusline cache (rate_limits.five_hour from the JSON Claude Code
+# pipes to bin/borg-statusline). Fresh reading wins; none means the guardian is blind and says so.
+if [[ "$usage_shape" == "limits-breakdown" ]]; then
+    if sl=$(borg_usage_statusline_pct "$now_epoch"); then
+        IFS='|' read -r session_pct resets_at sl_week <<<"$sl"
+        [[ -n "$week_pct" ]] || week_pct="$sl_week"
+        session_source="statusline"
+    fi
+fi
+
+# A usage-billed account has no session limit: /usage prints a cost summary and no session line.
+if [[ "$usage_shape" == "unmetered" ]]; then
     _note_state unmetered "usage-billed account: /usage reports cost, not session limits — no session limit applies (unmetered)"
     row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
         '{ts:$ts, status:"unmetered", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
@@ -566,12 +576,17 @@ if [[ -z "$session_line" ]] && printf '%s\n' "$output" | grep -qE '^Total cost:'
 fi
 
 if [[ -z "$session_pct" ]] || ! [[ "$session_pct" =~ ^[0-9]+$ ]] || [[ "$session_pct" -gt 100 ]]; then
-    log "WARNING: could not parse session_pct from /usage output — state UNKNOWN"
+    case "$usage_shape" in
+        limits-breakdown) blind_why="limits_breakdown_no_session"
+            log "WARNING: DEGRADED — BLIND: /usage is the limits-breakdown shape (no session line) and there is no fresh statusline reading ($(borg_usage_ratelimits_path)); the 85% sweep and 92% dispatch guard cannot see the session limit. Run 'borg setup --statusline' and keep a Claude session open." ;;
+        *) blind_why="unrecognized_shape"
+            log "WARNING: DEGRADED — BLIND: could not parse session_pct from /usage output (shape: $usage_shape) — state UNKNOWN; Claude Code may have changed its /usage format" ;;
+    esac
     _log_output_excerpt "$output"
-    row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
-        '{ts:$ts, status:"error", reason:"parse_failed", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
+    row=$(jq -c -n --arg ts "$ts" --arg why "$blind_why" --argjson pane_count "$pane_count" \
+        '{ts:$ts, status:"error", reason:"parse_failed", detail:$why, pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
     _append_sample "$row"
-    _guardian_record_error
+    _guardian_record_error "$blind_why"
     exit 0
 fi
 
@@ -588,11 +603,12 @@ row=$(jq -c -n \
     --argjson session_pct "$session_pct" \
     "${week_pct_arg[@]}" \
     --arg resets_at "$resets_at" \
-    '{ts:$ts, status:"ok", pane_count:$pane_count, session_pct:$session_pct, week_pct:$week_pct, resets_at:$resets_at}')
+    --arg source "$session_source" \
+    '{ts:$ts, status:"ok", pane_count:$pane_count, session_pct:$session_pct, week_pct:$week_pct, resets_at:$resets_at, source:$source}')
 
 _append_sample "$row"
 _clear_state
-log "sample: session_pct=$session_pct week_pct=$week_pct resets_at=$resets_at"
+log "sample: session_pct=$session_pct week_pct=$week_pct resets_at=$resets_at source=$session_source"
 _guardian_record_ok
 
 # Gap 1: week_pct is a 7-day window — a checkpoint cannot help it, so this is WARN-only and

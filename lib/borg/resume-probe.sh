@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # resume-probe.sh -- borg-resume probe (slice S0c): the resume feature's OWN usage sample, independent of the
 # usage guardian. Runs `claude -p /usage` through the ABSOLUTE claude binary (claude-bin.sh) so it works under
-# launchd's minimal environment, parses "Current session: N% used", and caches the answer for 120s.
+# launchd's minimal environment, parses the session percentage by output shape (usage-parse.sh), and caches the answer for 120s.
 #
 # borg_resume_probe prints N (0..100) and returns 0, or prints a message on stderr and returns 1.
 # A usage-billed account (Enterprise seat) has no session limit: its /usage prints a cost summary ("Total cost:")
@@ -17,7 +17,7 @@ BORG_RESUME_PROBE_TIMEOUT="${BORG_RESUME_PROBE_TIMEOUT:-30}"
 case "$BORG_RESUME_PROBE_TIMEOUT" in "" | *[!0-9]*) BORG_RESUME_PROBE_TIMEOUT=30 ;; esac
 
 borg_resume_probe() {
-    local _dir _cache _now _at _pct _out _rc=0 _libdir _user _tmp _pid _ticks
+    local _dir _cache _now _at _pct _out _rc=0 _libdir _user _tmp _pid _ticks _parsed _shape _sl
     _libdir="${BORG_RESUME_LIBDIR:-${BASH_SOURCE[0]%/*}}"
     _dir="$(borg_resume_dir)"
     _cache="$_dir/usage-probe.json"
@@ -88,18 +88,39 @@ borg_resume_probe() {
         return 1
     fi
 
-    [ -z "${BORG_RESUME_PROBE_VERBOSE:-}" ] || printf "%s\n" "$_out" | grep -E "Current session: [0-9]+% used" | head -1 >&2
-    _pct="$(printf '%s\n' "$_out" | grep -oE 'Current session: [0-9]+% used' | head -1 | sed -E 's/^Current session: ([0-9]+)% used$/\1/')"
+    # shellcheck source=/dev/null
+    . "$_libdir/usage-parse.sh" 2>/dev/null || {
+        printf 'borg-resume probe: cannot load %s/usage-parse.sh (lib not installed?)\n' "$_libdir" >&2
+        return 1
+    }
+    _parsed="$(borg_usage_parse "$_out")"
+    _shape="${_parsed%%|*}"
+    _pct="${_parsed#*|}"
+    _pct="${_pct%%|*}"
+    [ -z "${BORG_RESUME_PROBE_VERBOSE:-}" ] || printf 'usage shape: %s\n' "$_shape" >&2
+    if [ "$_shape" = limits-breakdown ]; then
+        # The newer /usage page has no session line. Its percentages are contribution shares, not the limit.
+        # Take the session limit from the statusline cache when it is fresh; otherwise fail closed, loudly.
+        if _sl="$(borg_usage_statusline_pct "$_now")"; then
+            _pct="${_sl%%|*}"
+        else
+            printf 'borg-resume probe: /usage is the limits-breakdown shape (no session line) and no fresh statusline reading in %s: session percentage unavailable (blind)\n' "$(borg_usage_ratelimits_path)" >&2
+            return 1
+        fi
+    elif [ "$_shape" = unrecognized ]; then
+        printf 'borg-resume probe: unrecognized /usage output shape (Claude Code changed its format?): session percentage unavailable\n' >&2
+        return 1
+    fi
     case "$_pct" in
         "" | *[!0-9]*)
-            # No session line. A cost summary ("Total cost:") instead of limits is the unmetered shape.
-            if printf '%s\n' "$_out" | grep -qE '^Total cost:'; then
+            # No session percentage. A cost summary ("Total cost:") instead of limits is the unmetered shape.
+            if [ "$_shape" = unmetered ]; then
                 mkdir -p "$_dir" 2>/dev/null &&
                     printf '{"at":%s,"session_pct":"unmetered"}\n' "$_now" | borg_resume_write_atomic "$_cache" 2>/dev/null
                 printf 'unmetered\n'
                 return 0
             fi
-            printf 'borg-resume probe: could not parse "Current session: N%% used" from /usage output\n' >&2
+            printf 'borg-resume probe: could not parse a session percentage from /usage output\n' >&2
             return 1
             ;;
     esac

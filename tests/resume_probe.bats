@@ -138,3 +138,35 @@ STUB
     BORG_RESUME_USAGE_CMD="true" run "$BR" probe
     [ "$status" -ne 0 ]
 }
+
+# ─── #465: shape-driven parse, one fixture per shape seen in the wild ───────────────────────────────────────────
+@test "probe parses the 2.1.300 fixture and the legacy fixture by shape" {
+    F="${BATS_TEST_DIRNAME}/fixtures"
+    BORG_RESUME_USAGE_CMD="cat '$F/usage-output-2.1.300.txt'" run "$BR" probe
+    [ "$status" -eq 0 ]
+    [ "$output" = "5" ]
+    rm -f "$BORG_RESUME_DIR/usage-probe.json"
+    BORG_RESUME_USAGE_CMD="cat '$F/usage-output.txt'" run "$BR" probe
+    [ "$output" = "21" ]
+}
+
+@test "probe on the limits-breakdown shape with no statusline reading fails loudly (blind), not UNKNOWN" {
+    F="${BATS_TEST_DIRNAME}/fixtures"
+    BORG_USAGE_RATELIMITS_FILE="${BATS_TEST_TMPDIR}/none.json" BORG_RESUME_USAGE_CMD="cat '$F/usage-output-limits-breakdown.txt'" run "$BR" probe
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"limits-breakdown"*"blind"* ]]
+}
+
+@test "probe on the limits-breakdown shape uses a fresh statusline reading" {
+    F="${BATS_TEST_DIRNAME}/fixtures"
+    printf '{"five_hour_pct":61,"at":%s}\n' "$(date +%s)" > "${BATS_TEST_TMPDIR}/rl.json"
+    BORG_USAGE_RATELIMITS_FILE="${BATS_TEST_TMPDIR}/rl.json" BORG_RESUME_USAGE_CMD="cat '$F/usage-output-limits-breakdown.txt'" run "$BR" probe
+    [ "$status" -eq 0 ]
+    [ "$output" = "61" ]
+}
+
+@test "probe on an unrecognized shape fails naming the shape problem" {
+    BORG_RESUME_USAGE_CMD="echo hello" run "$BR" probe
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"unrecognized /usage output shape"* ]]
+}

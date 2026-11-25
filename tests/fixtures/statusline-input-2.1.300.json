@@ -1,0 +1,22 @@
+{
+  "session_id": "fixture-session",
+  "model": {
+    "id": "claude-opus-5-5",
+    "display_name": "Opus 5.5"
+  },
+  "context_window": {
+    "used_percentage": 6,
+    "total_input_tokens": 59275
+  },
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": 10,
+      "resets_at": 1795638600
+    },
+    "seven_day": {
+      "used_percentage": 4,
+      "resets_at": 1796130000
+    }
+  },
+  "version": "2.1.300"
+}
