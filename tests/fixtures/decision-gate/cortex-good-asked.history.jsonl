@@ -1,0 +1,4 @@
+{"content": [{"type": "text", "text": "what is open?", "is_user_prompt": true, "internalOnly": false}], "id": "u1", "role": "user"}
+{"content": [{"type": "tool_use", "tool_use": {"name": "ask_user_question", "input": {}, "tool_use_id": "t1"}}], "id": "a0", "role": "assistant"}
+{"content": [{"type": "tool_result", "tool_result": {"name": "ask_user_question", "status": "success", "tool_use_id": "t1", "content": []}}], "id": "u2", "role": "user"}
+{"content": [{"type": "text", "text": "## Needs Noah\n- #97, close or restate scope\n"}], "id": "a1", "role": "assistant"}

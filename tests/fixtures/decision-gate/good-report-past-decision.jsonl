@@ -1,0 +1,2 @@
+{"type": "user", "message": {"role": "user", "content": "recap"}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Shipped the hook (#540).\n\nDecision: wire it through HOOKS_JSON. Noah decided this on 2026-11-25 after the third miss, and I did not need to ask again.\n\nNeeds Noah: none\n\nI decided to keep the reason text short.\n"}]}}

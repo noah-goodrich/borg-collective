@@ -1,0 +1,2 @@
+{"type": "user", "message": {"role": "user", "content": "status"}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Done with the sweep. Waits on you: #97 (close or restate)."}]}}

@@ -2109,6 +2109,9 @@ typeset -ga _BORG_CORTEX_HOOKS=(
     "SessionStart|borg-arrival-brief.sh"
     "Stop|borg-link-up.sh"
     "Stop|notify.sh"
+    # Stop is delivered (tests/fixtures/cortex/stop.json). Whether Cortex honors decision:block, and that its tool id
+    # ask_user_question is what the block reason's AskUserQuestion maps to, is NOT confirmed live; fail-open if not.
+    "Stop|borg-decision-gate.sh"
     "Notification|notify.sh"
     "Notification|borg-notify.sh"
     "PreToolUse|pre-commit-remind.sh"
