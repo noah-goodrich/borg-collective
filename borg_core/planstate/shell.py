@@ -157,7 +157,13 @@ def write_atomic(path: Path, text: str) -> None:
     `/tmp`, because `os.replace` is only atomic within a filesystem and a cross-device rename falls
     back to a copy -- which is the crash window this exists to close. A failure after the tmp write
     and before the replace leaves the original plan byte-identical.
+
+    A SYMLINK IS RESOLVED FIRST. `PROJECT_PLAN.md` is a link to the in-flight directive (#538), and `os.replace`
+    onto a link swaps the LINK for a regular file, leaving the directive stale and the plan an untracked copy. The
+    sibling tmp file and the replace therefore act on the link's target, so the link survives and the directive
+    is what gets the flip.
     """
+    path = Path(os.path.realpath(path))
     directory = path.parent
     handle, tmp = tempfile.mkstemp(dir=str(directory), prefix=".planstate-", suffix=".tmp")
     try:
