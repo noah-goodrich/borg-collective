@@ -99,6 +99,15 @@
         1,
         2
       ]
+    },
+    "evals/cortex-skill-trigger": {
+      "covers": [
+        "evals/cortex-skill-trigger/**"
+      ],
+      "tiers": [
+        1,
+        2
+      ]
     }
   },
   "items": {

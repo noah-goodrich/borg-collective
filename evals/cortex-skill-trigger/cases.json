@@ -1,0 +1,6 @@
+[
+  {"id": "pane-fire", "skill": "pane", "should_fire": true, "query": "Split my tmux pane to the right."},
+  {"id": "pane-nofire", "skill": "pane", "should_fire": false, "query": "What is the capital of France? Answer in one word."},
+  {"id": "next-fire", "skill": "borg-next", "should_fire": true, "query": "What should I work on next?"},
+  {"id": "next-nofire", "skill": "borg-next", "should_fire": false, "query": "Explain what a git rebase does in one sentence."}
+]
