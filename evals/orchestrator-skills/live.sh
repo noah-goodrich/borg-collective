@@ -77,6 +77,10 @@ EVAL_MODEL="${EVAL_MODEL:-claude-opus-5-5}"
 EVAL_EFFORT="${EVAL_EFFORT:-xhigh}"
 CAP_EXPLICIT="${EVAL_MAX_BUDGET_USD:+1}"
 EVAL_MAX_BUDGET_USD="${EVAL_MAX_BUDGET_USD:-1.00}"
+# The run directory is resolved to its physical path (below, once it exists). On macOS TMPDIR ends in "/" and sits behind the /var -> /private/var
+# symlink, so an unresolved sandbox path ("T//borg-eval-...") never equals the path the model reports for a file it edits
+# ("/private/var/..."). That mismatch made BG1's allow-write hook refuse its one file and RS2's grader miss the script path
+# in the first scheduled sweep (2026-11-22), both for a reason unrelated to the skill under test.
 OUT="${EVAL_OUT:-${TMPDIR:-/tmp}/borg-eval-orchestrator-skills}"
 PYTHON="$(_os_python "$REPO")"
 
@@ -343,7 +347,7 @@ for tool in claude jq git zsh; do
 done
 command -v "$PYTHON" >/dev/null 2>&1 || _abort "interpreter '$PYTHON' not found"
 
-mkdir -p "$OUT"
+mkdir -p "$OUT" && OUT="$(cd "$OUT" && pwd -P)"
 PLUGIN="${EVAL_PLUGIN_DIR:-$OUT/plugin}"
 if [ -z "${EVAL_PLUGIN_DIR:-}" ]; then
     rm -rf "$OUT/plugin"
