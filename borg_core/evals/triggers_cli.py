@@ -38,7 +38,8 @@ def enabled_plugin_names(runner: Runner = _run) -> list[str]:
         listed = json.loads(runner(["claude", "plugin", "list", "--json"]))
     except (ValueError, OSError, subprocess.SubprocessError):
         return []
-    names = {str(p["id"]).split("@")[0] for p in listed if isinstance(p, dict) and p.get("enabled") and p.get("id")}
+    enabled = [p for p in listed if isinstance(p, dict) and p.get("enabled") and p.get("id")]
+    names = {str(p["id"]).split("@", maxsplit=1)[0] for p in enabled}
     return sorted(names)
 
 
@@ -49,7 +50,7 @@ def frontmatter(path: Path) -> dict[str, str]:
     for line in parts[1].splitlines() if len(parts) > 2 else []:
         match = re.match(r"^([A-Za-z-]+):\s*(.*)$", line)
         if match:
-            fields[match.group(1)] = match.group(2).strip().strip('"')
+            fields[match[1]] = match[2].strip().strip('"')
     return fields
 
 
@@ -70,6 +71,7 @@ def listing_size(skills_dir: Path) -> tuple[int, int]:
 
 
 def load_suite(path: Path) -> Any:
+    """The parsed JSON of one suite file."""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -159,14 +161,19 @@ def _fmt(summary: dict[str, Any]) -> str:
 
 
 def _parser() -> argparse.ArgumentParser:
+    # JUSTIFICATION: argparse's builder API is a chain by design
     p = argparse.ArgumentParser(prog="borg_core.evals.triggers_cli", description=__doc__.splitlines()[0])
-    sub = p.add_subparsers(dest="cmd", required=True)
-    v = sub.add_parser("validate")
+    # JUSTIFICATION: argparse's builder API is a chain by design
+    sub = p.add_subparsers(dest="cmd", required=True)  # pylint: disable=clean-arch-demeter
+    # JUSTIFICATION: argparse's builder API is a chain by design
+    v = sub.add_parser("validate")  # pylint: disable=clean-arch-demeter
     v.add_argument("--dir", default="evals/triggers")
     v.add_argument("--skills", default="skills")
     v.add_argument("--complete", action="store_true", help="every self-firing skill must have a suite")
-    sub.add_parser("plugins")
-    g = sub.add_parser("grade")
+    # JUSTIFICATION: argparse's builder API is a chain by design
+    sub.add_parser("plugins")  # pylint: disable=clean-arch-demeter
+    # JUSTIFICATION: argparse's builder API is a chain by design
+    g = sub.add_parser("grade")  # pylint: disable=clean-arch-demeter
     g.add_argument("--suite", required=True)
     g.add_argument("--id", required=True)
     g.add_argument("--stream", required=True)
@@ -174,15 +181,18 @@ def _parser() -> argparse.ArgumentParser:
     g.add_argument("--plugin-dir", required=True)
     g.add_argument("--expect-file")
     g.add_argument("--verdicts")
-    r = sub.add_parser("report")
+    # JUSTIFICATION: argparse's builder API is a chain by design
+    r = sub.add_parser("report")  # pylint: disable=clean-arch-demeter
     r.add_argument("--verdicts", required=True)
     r.add_argument("--dir", default="evals/triggers")
     r.add_argument("--misfires")
-    sub.add_parser("listing").add_argument("--skills", default="skills")
+    # JUSTIFICATION: argparse's builder API is a chain by design
+    sub.add_parser("listing").add_argument("--skills", default="skills")  # pylint: disable=clean-arch-demeter
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry; see the module docstring for the subcommands and exit codes."""
     args = _parser().parse_args(argv)
     if args.cmd == "plugins":
         print("\n".join(enabled_plugin_names()))

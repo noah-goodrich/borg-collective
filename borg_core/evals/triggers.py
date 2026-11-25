@@ -67,12 +67,8 @@ def _case_problems(skill: str, index: int, case: Any, seen_ids: set[str], seen_q
         return [f"{where}: a case is an object"]
     problems = []
     case_id, query = case.get("id"), case.get("query")
-    if not isinstance(case_id, str) or not case_id.startswith(f"{skill}-"):
-        problems.append(f"{where}: id must be a string starting '{skill}-'")
-    elif case_id in seen_ids:
-        problems.append(f"{where}: duplicate id {case_id}")
-    else:
-        seen_ids.add(case_id)
+    id_problem = _id_problem(skill, case_id, seen_ids)
+    problems += [f"{where}: {id_problem}"] if id_problem else []
     if not isinstance(query, str) or not query.strip():
         problems.append(f"{where}: query must be a non-empty string")
     else:
@@ -86,6 +82,16 @@ def _case_problems(skill: str, index: int, case: Any, seen_ids: set[str], seen_q
     if case.get("should_fire") is False and not case.get("competitor"):
         problems.append(f"{where}: a near-miss names its competitor (the skill or tool whose job this is)")
     return problems
+
+
+def _id_problem(skill: str, case_id: Any, seen_ids: set[str]) -> str:
+    """What is wrong with a case id, or "" (and the id is remembered)."""
+    if not isinstance(case_id, str) or not case_id.startswith(f"{skill}-"):
+        return f"id must be a string starting '{skill}-'"
+    if case_id in seen_ids:
+        return f"duplicate id {case_id}"
+    seen_ids.add(case_id)
+    return ""
 
 
 def _names_skill(skill: str, query: str) -> bool:
@@ -131,18 +137,17 @@ def plugin_problems(
     names = sorted({str(p.get("name")) for p in plugins if not str(p.get("name")).startswith(BUILTIN_PREFIX)})
     problems = []
     ours = [p for p in plugins if p.get("name") == PLUGIN]
-    if not ours:
-        problems.append(f"{PLUGIN} is not loaded (a --bare run loads no plugin); loaded: {names or 'none'}")
-    elif not any(p.get("source") == f"{PLUGIN}@inline" and p.get("path") == plugin_dir for p in ours):
-        problems.append(f"{PLUGIN} is not the build under review at {plugin_dir}: {[p.get('source') for p in ours]}")
+    inline = [p for p in ours if p.get("source") == f"{PLUGIN}@inline" and p.get("path") == plugin_dir]
+    no_plugin = [f"{PLUGIN} is not loaded (a --bare run loads no plugin); loaded: {names or 'none'}"]
+    not_build = [f"{PLUGIN} is not the build under review at {plugin_dir}: {[p.get('source') for p in ours]}"]
+    problems += no_plugin if not ours else (not_build if not inline else [])
     if mode == "isolated" and names != [PLUGIN] and ours:
         problems.append(f"isolated run loaded other plugins: {[n for n in names if n != PLUGIN]}")
     if mode == "in-situ" and expected is not None:
         want = sorted(set(expected) | {PLUGIN})
         if names != want:
-            problems.append(
-                f"plugin list mismatch: missing {sorted(set(want) - set(names))}, extra {sorted(set(names) - set(want))}"
-            )
+            missing, extra = sorted(set(want) - set(names)), sorted(set(names) - set(want))
+            problems.append(f"plugin list mismatch: missing {missing}, extra {extra}")
     return problems
 
 

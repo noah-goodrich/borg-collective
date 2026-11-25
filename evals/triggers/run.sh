@@ -34,8 +34,9 @@ if [ -n "${BORG_EVAL_PYTHON:-}" ]; then PYTHON="$BORG_EVAL_PYTHON"
 elif [ -x "$REPO/.venv/bin/python" ]; then PYTHON="$REPO/.venv/bin/python"
 else PYTHON="python3"; fi
 
-OUT="$(mktemp -d "${TMPDIR:-/tmp}/borg-triggers.XXXXXX")"
-trap 'rm -rf "$OUT"' EXIT
+OUT="$REPO/evals/triggers/out"
+rm -rf "$OUT"
+mkdir -p "$OUT"
 PASS=0; FAIL=0; SKIPPED=0
 ok()   { echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
