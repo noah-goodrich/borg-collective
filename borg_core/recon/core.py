@@ -357,17 +357,18 @@ _SUB_BULLET = re.compile(r"^\s+(?:[-*+]|\d+[.)])\s+")
 
 
 def _wait_entry(parts: list[str]) -> dict[str, str] | None:
-    """One `Waits on you` item as `{"text", "owner": "YOU"}`, plus `card` when it is a decision card.
+    """One `Waits on you` item as `{"text", "owner": "YOU"}`, plus `decision_card` when it is a decision card.
 
     Two forms are accepted. A one-liner (the item and any wrapped continuation lines) is collapsed whole into `text`.
     A decision card is a first line (the title) followed by indented sub-bullets (context, options, recommendation,
-    source link): `text` is the title ALONE so the pages and the brief stay one line per item, and `card` is the
-    whole item, one line per row with the indentation of the sub-bullets kept, for the skill that asks it.
+    source link): `text` is the title ALONE so the pages and the brief stay one line per item, and
+    `decision_card` is the whole item, one line per row with the sub-bullets' indentation kept, for the skill that
+    asks it.
     """
     if len(parts) > 1 and any(_SUB_BULLET.match(line) for line in parts[1:]):
         title = _strip_emphasis(_flat(parts[:1]))
         card = "\n".join([_strip_emphasis(parts[0].strip()), *(_strip_emphasis(line.rstrip()) for line in parts[1:])])
-        return {"text": title, "owner": "YOU", "card": card} if title else None
+        return {"text": title, "owner": "YOU", "decision_card": card} if title else None
     text = _strip_emphasis(_flat(parts))
     return {"text": text, "owner": "YOU"} if text else None
 
@@ -398,7 +399,8 @@ def _strip_emphasis(text: str) -> str:
 def checkpoint_owned_items(text: str) -> list[dict[str, str]]:
     """The checkpoint's owned next items as `{"text", "owner"}`: `YOU` for waits, `AGENT` for Next Session.
 
-    A YOU item written as a decision card (`_wait_entry`) also carries `card`, its full text; `text` is its title.
+    A YOU item written as a decision card (`_wait_entry`) also carries `decision_card`, its full text; `text` is the
+    title.
 
     YOU items are the top-level list items that follow a whole-line `Waits on you:` or `These wait on <name>:`
     lead-in (case-insensitive) inside `## 4. Blockers`; `Waits on you: none`, `No blockers.` and any other prose
@@ -415,8 +417,8 @@ def checkpoint_owned_items(text: str) -> list[dict[str, str]]:
             owned.extend(entry for entry in (_wait_entry(parts) for parts in found) if entry)
         else:
             index += 1
-    found, _ = _collect_items(_section_lines(text, _NEXT_SESSION_HEADING), 0, stop_on_prose=False)
-    owned.extend({"text": _strip_emphasis(item), "owner": "AGENT"} for item in found)
+    upcoming, _ = _collect_items(_section_lines(text, _NEXT_SESSION_HEADING), 0, stop_on_prose=False)
+    owned.extend({"text": _strip_emphasis(item), "owner": "AGENT"} for item in upcoming)
     return owned
 
 

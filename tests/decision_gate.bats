@@ -130,3 +130,17 @@ _passes() {
     [ "$output" -ge 2 ]
     [ -x "$HOOK" ]
 }
+
+@test "borg-link-up writes Waits on you as decision cards and keeps the contract lines the readers need" {
+    local skill="${BATS_TEST_DIRNAME}/../skills/borg-link-up/SKILL.md"
+    grep -q 'decision card' "$skill"
+    grep -q 'Pro:' "$skill" && grep -q 'Con:' "$skill" && grep -q 'Runs:' "$skill" && grep -q 'Recommend:' "$skill"
+    grep -q '^Waits on you:$' "$skill"
+    grep -q 'Waits on you: none' "$skill"
+}
+
+@test "borg-link asks waiting decisions through AskUserQuestion in rounds of 4" {
+    local skill="${BATS_TEST_DIRNAME}/../skills/borg-link/SKILL.md"
+    grep -q 'AskUserQuestion in rounds of 4' "$skill"
+    grep -q 'select(.owner == "YOU")' "$skill"
+}

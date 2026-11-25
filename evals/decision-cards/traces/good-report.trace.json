@@ -1,0 +1,15 @@
+{
+  "steps": [
+    {
+      "kind": "tool",
+      "name": "Bash",
+      "input": {
+        "command": "gh pr list"
+      }
+    },
+    {
+      "kind": "message",
+      "text": "Swept the board. Decision: kept the retry wrapper from #101. Needs Noah: none."
+    }
+  ]
+}

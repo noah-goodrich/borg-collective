@@ -890,8 +890,18 @@ def test_plan_rows_carry_the_whole_criterion_as_detail_beside_the_cut_next_step(
 
 
 def test_checkpoint_row_of_a_decision_card_keeps_the_title_as_detail_and_adds_the_card():
-    item = {"text": "Close #97?", "owner": "YOU", "card": "Close #97?\n  - Recommend: close it."}
+    item = {"text": "Close #97?", "owner": "YOU", "decision_card": "Close #97?\n  - Recommend: close it."}
     row = core._checkpoint_row(item)  # pylint: disable=protected-access
     assert row["detail"] == "Close #97?"
-    assert row["card"] == item["card"]
-    assert "card" not in core._checkpoint_row({"text": "plain", "owner": "YOU"})  # pylint: disable=protected-access
+    assert row["decision_card"] == item["decision_card"]
+    assert "decision_card" not in core._checkpoint_row({"text": "plain", "owner": "YOU"})  # pylint: disable=protected-access
+
+
+def test_numbered_rows_carry_the_card_only_when_the_row_has_one():
+    rows = [
+        {"project": "p", "detail": "t", "decision_card": "t\n  - Recommend: x"},
+        {"project": "p", "detail": "u"},
+    ]
+    wire = core.numbered_rows(rows, [{"name": "p", "status": "waiting"}])
+    assert wire[0]["decision_card"] == "t\n  - Recommend: x"
+    assert "decision_card" not in wire[1]

@@ -5,9 +5,9 @@ when the turn's final assistant message asks Noah to decide (`core.asks_for_deci
 AskUserQuestion call. Otherwise it prints nothing.
 
 THE TURN is everything after the last real user prompt. Claude Code's transcript is JSONL of `{"type": "user" |
-"assistant", "message": {"content": str | [blocks]}}`; Cortex's `transcript_path` is `<id>.json`, a metadata document with
-no messages, so its messages are read from `<id>.history.jsonl` beside it (`{"role", "content": [blocks]}`, a prompt
-flagged `is_user_prompt`, tool calls as `{"type": "tool_use", "tool_use": {"name": ...}}`).
+"assistant", "message": {"content": str | [blocks]}}`; Cortex's `transcript_path` is `<id>.json`, a metadata document
+with no messages, so its messages are read from `<id>.history.jsonl` beside it (`{"role", "content": [blocks]}`, a
+prompt flagged `is_user_prompt`, tool calls as `{"type": "tool_use", "tool_use": {"name": ...}}`).
 
 NEVER BLOCKS TWICE: a payload with `stop_hook_active` true is the model's answer to our own block, so it passes.
 FAILS OPEN: no transcript, a transcript that cannot be read, a crash, all print nothing and exit 0. A plugin hook fires
@@ -31,7 +31,7 @@ def _tail_lines(path: str) -> list[str]:
         size = handle.seek(0, os.SEEK_END)
         handle.seek(max(0, size - TAIL_BYTES))
         raw = handle.read().decode("utf-8", errors="replace")
-    lines = raw.splitlines()
+    lines = str.splitlines(raw)
     return lines[1:] if size > TAIL_BYTES else lines
 
 
@@ -51,7 +51,8 @@ def _tool_name(block: dict[str, Any]) -> str:
 
 def _event(entry: dict[str, Any]) -> tuple[str, str, set[str]] | None:
     """`(kind, text, tool names)` of one transcript entry, kind `prompt` | `result` | `assistant`; None to skip."""
-    message = entry.get("message") if isinstance(entry.get("message"), dict) else entry
+    nested = entry.get("message")
+    message: dict[str, Any] = nested if isinstance(nested, dict) else entry
     role = message.get("role") or entry.get("type")
     blocks = _blocks(message.get("content"))
     if role == "assistant":

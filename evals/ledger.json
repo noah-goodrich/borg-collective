@@ -99,6 +99,18 @@
         1,
         2
       ]
+    },
+    "evals/decision-cards": {
+      "covers": [
+        "evals/decision-cards/**",
+        "hooks/borg-decision-gate.sh",
+        "borg_core/decisiongate/**",
+        "skills/borg-link-up/**",
+        "skills/borg-link/**"
+      ],
+      "tiers": [
+        1
+      ]
     }
   },
   "items": {
