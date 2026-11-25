@@ -94,16 +94,19 @@ git -C <PLUGINS-2> pull --ff-only
 
    Omit the last line on a machine with no second local marketplace.
 
-c. Update every plugin installed from each local-folder marketplace, not only borg-collective. The marketplace checkout carries all of its plugins, and a release of the mirror can bump several at once. List what is installed, then update each entry whose name ends in `@<MARKETPLACE>` or in the name of another local-folder marketplace (for example `noah-personal@noah-private`):
+c. Check what each plugin will load. A plugin from a local-folder marketplace (an entry's `Read from:` line points into a checkout on this machine) is read from its folder, so the pull in step b already updated it. `claude plugin update` is a no-op for these: it prints "read from its folder ... nothing to update. Edits there take effect at the next session start or /reload-plugins." Skip it for folder sources; step e restarts the sessions that apply the change. The marketplace checkout carries all of its plugins, and a release of the mirror can bump several at once, so check every plugin installed from each local-folder marketplace (for example `noah-personal@noah-private`), not only borg-collective:
 
 ```
 claude plugin list
-claude plugin update borg-collective@<MARKETPLACE>
-claude plugin update <OTHER-PLUGIN>@<MARKETPLACE>
-claude plugin list
 ```
 
-   Run the `update` line once per `<name>@<marketplace>` entry in the first listing whose marketplace is a local folder (an entry's `Read from:` line points into its checkout). Entries from marketplaces served from GitHub are not yours to update here. `autoUpdate` on a marketplace is best-effort and has been seen not to fire, so do not rely on it: the version check in section 6 is the gate. The second listing should show each updated plugin at the version in its own `.claude-plugin/plugin.json` under `<PLUGINS>`. `claude plugin update` says to restart to apply; step e does that.
+   Each folder-sourced entry should show the version in its own `.claude-plugin/plugin.json` under `<PLUGINS>`. A different version means the pull in step b missed that checkout. Only a plugin from a marketplace served from GitHub needs the update, once per `<name>@<marketplace>` entry (`claude plugin marketplace update <MARKETPLACE>` first), and it says to restart to apply:
+
+```
+claude plugin update <NAME>@<MARKETPLACE>
+```
+
+   `autoUpdate` on a marketplace is best-effort and has been seen not to fire, so do not rely on it: the version check in section 6 is the gate.
 
 d. Refresh what borg installs, right away, before anything else runs against the registry. `borg setup` refreshes the hooks, the bin utilities and the tmux binding (a no-op once step 0 is done, because the dotfiles config already has it), migrates an old registry key (section 5), and rebuilds the local plugin mirror. When `cortex` is on `PATH` it also registers borg's Cortex hooks, copies borg's six agents into `~/.snowflake/cortex/agents/` and registers the skills with Cortex. Skills and agents ship through the plugin in the previous step. Run the installed `borg` from any directory, but never from a git worktree of borg-collective, because that registers skill paths under the worktree:
 
@@ -170,7 +173,7 @@ The path from 0.9.13 or earlier, in order (the commands are in section 4):
 
 1. Pull the checkouts (`git -C <BORG> pull --ff-only`, and the same for `<PLUGINS>`).
 2. Run `./install.sh` or `borg setup`. A plain `./install.sh` does not install the eval sweep (see "Do not" below).
-3. Run `claude plugin update` for every plugin installed from the marketplace, not only borg-collective (section 4, step c).
+3. Check with `claude plugin list` that every plugin installed from the marketplace, not only borg-collective, shows its new version. A folder-sourced plugin is already updated by the pull (section 4, step c).
 4. Restart every open Claude Code session and every open Cortex session.
 
 What `borg setup` now does by itself, with nothing for you to run:
@@ -213,7 +216,7 @@ The path from 0.9.12 or earlier, in order (the commands are in section 4):
 
 0. Bring the dotfiles current (section 4, step 0). Skip it only if you already did it as part of this same upgrade.
 1. Pull the checkouts.
-2. Run `claude plugin update` for borg-collective.
+2. Check with `claude plugin list` that borg-collective shows its new version. A folder-sourced plugin is already updated by the pull (section 4, step c).
 3. Run `borg setup`.
 4. Restart every open Claude Code session and every open Cortex session.
 5. On a machine with Cortex Code, run `grep -l 'borg-collective:borg-' ~/.snowflake/cortex/agents/*.md` and show the output: six files named `borg-*.md`. If `borg setup` printed an effort warning, say so.
@@ -225,7 +228,7 @@ The path from 0.9.12 or earlier, in order (the commands are in section 4):
 The path from 0.9.11 or earlier, in order (the commands are in section 4):
 
 1. Pull the checkouts.
-2. Run `claude plugin update` for borg-collective.
+2. Check with `claude plugin list` that borg-collective shows its new version. A folder-sourced plugin is already updated by the pull (section 4, step c).
 3. Run `borg setup`.
 4. Restart every open Claude Code session.
 5. This step is the person's, and you cannot do it for them: a slash command runs inside the session it is typed in. Tell them to open the Queen session (`borg init`), run `/borg-link-up` there, and do the same in any repository session whose latest checkpoint has something waiting on them. Do not write a checkpoint yourself.
@@ -245,7 +248,7 @@ A good answer lists the Queen's waiting items with owner `YOU`. If the Queen has
 The path from 0.9.10, in order (the commands are in section 4):
 
 1. Pull the checkouts.
-2. Run `claude plugin update` for borg-collective.
+2. Check with `claude plugin list` that borg-collective shows its new version. A folder-sourced plugin is already updated by the pull (section 4, step c).
 3. Run `borg setup`.
 4. Restart every open Claude Code session, because a new SessionStart hook ships through the plugin and a running session does not load it.
 5. On the next start, look for "SessionStart:startup says:" followed by the brief.
@@ -258,7 +261,7 @@ The path from 0.9.9, in order (the commands are in section 4):
 
 1. Pull the checkouts.
 2. Run `borg setup`.
-3. Run `claude plugin update` for borg-collective, then restart every open Claude Code session. The `/borg-link` and `/borg-next` skills changed, and a running session keeps the old ones.
+3. Check with `claude plugin list` that borg-collective shows its new version (a folder-sourced plugin is already updated by the pull, section 4, step c), then restart every open Claude Code session. The `/borg-link` and `/borg-next` skills changed, and a running session keeps the old ones.
 4. Optional: run `borg setup --statusline` to show `borg next --line` in the Claude Code status line. `borg setup --statusline=off` removes it.
 5. Optional: add the tmux `status-right` string from `docs/agents/commands.md` to your tmux config.
 
@@ -378,13 +381,13 @@ git -C <BORG> checkout v0.9.5
 borg setup
 ```
 
-2. Check out the matching commit of the plugin mirror, then update the plugin. The first command lists the mirror's version bumps, newest first; pick the commit whose subject says 0.9.5.
+2. Check out the matching commit of the plugin mirror. The plugin loads from that folder, so the checkout is the rollback and `claude plugin update` has nothing to do (section 4, step c). The first command lists the mirror's version bumps, newest first; pick the commit whose subject says 0.9.5. The last command should show borg-collective at 0.9.5.
 
 ```
 git -C <PLUGINS> log --oneline -5 \
   -- borg-collective/.claude-plugin/plugin.json
 git -C <PLUGINS> checkout <COMMIT> -- borg-collective
-claude plugin update borg-collective@<MARKETPLACE>
+claude plugin list
 ```
 
 3. Restart open Claude Code sessions.
@@ -396,7 +399,7 @@ To return to the current release afterwards: `git -C <BORG> checkout main`, then
 ## 8. Troubleshooting
 
 - The pull refuses because of modified mirror files. Those are generated files from an earlier local build. Stash them (section 4, step a) and pull again. Do not discard them.
-- `claude plugin update` says there is nothing to do. The marketplace checkout was not pulled, so the update source is still the old version. Pull `<PLUGINS>` (section 4, step b) and run the update again. If the marketplace comes from a GitHub repository rather than a folder, run `claude plugin marketplace update <MARKETPLACE>` first.
+- `claude plugin update` says "read from its folder ... nothing to update". That is expected for a local-folder marketplace: the plugin loads straight from the checkout, so the pull in section 4, step b is the update, and it takes effect at the next session start or `/reload-plugins`. If `claude plugin list` still shows the old version, the checkout was not pulled: pull `<PLUGINS>` and restart. For a marketplace served from GitHub, run `claude plugin marketplace update <MARKETPLACE>` first, then the update.
 - borg says `unknown command` after the pull. `PATH` points at a different checkout than the one you pulled. Run `command -v borg | xargs readlink -f`, then either pull that checkout or run `./install.sh` from the intended checkout, which re-points the `borg` link (ask first on a machine that already has borg).
 - Hooks and skills still look old. The Claude Code session was started before the update. Restart it.
 - A plugin other than borg-collective is still on its old version, or a skill that was removed still appears. Only the plugins you updated by name were updated. Run `claude plugin list`, update every `<name>@<MARKETPLACE>` entry (section 4, step c), and restart.
