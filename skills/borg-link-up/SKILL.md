@@ -12,7 +12,7 @@ Flush the session state into a structured checkpoint in three requests: ONE Bash
 
 !`borg checkpoint-prepare --session ${CLAUDE_SESSION_ID} --cwd ${CLAUDE_PROJECT_DIR} 2>/dev/null || echo "STATUS: fallback: prepare verb unavailable"`
 
-The block above is the prepared document, printed by `borg checkpoint-prepare` before you saw this skill. It is read-only; do not run the verb again. Its fields:
+The block above is the prepared document, printed by `borg checkpoint-prepare` before you saw this skill. It is read-only; do not run the verb again, except when the block is missing or STATUS says fallback (see "References"). Its fields:
 
 - `PROJECT_ROOT`, `PLAN` (a path or `none`), and `CHECKPOINT_PATH`, the file to Write (see "The filename").
 - `BORG_SOURCE_DIR`: copy that literal path into `PYTHONPATH=` in the Bash call.

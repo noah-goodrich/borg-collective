@@ -306,3 +306,30 @@ EOF
     [[ "$output" == *"checkpoint-prepare"* ]] || false
     [[ "$output" == *"checkpoint-name"* ]] || false
 }
+
+# Issue 454: Cortex does not expand the skill's injected block, so link-up runs its fallback. The fallback re-runs the
+# verb with --cwd (no --session) in a directory that is not a repository; every absent extension must come back as
+# `not present` with exit 0, so no Read or Glob of an absent optional file is ever needed.
+@test "454: outside Git, no session, all six extensions absent: exit 0, six not present" {
+    local outside="${BATS_TEST_TMPDIR}/not-a-repo"
+    mkdir -p "$outside"
+    _prepare --cwd "$outside"
+    [ "$status" -eq 0 ]
+    [ "$(_headers)" = "$EXPECTED_HEADERS" ]
+    [ "$(printf '%s\n' "$output" | grep -c -E '^EXTENSION_.*: not present$')" -eq 6 ]
+}
+
+@test "454: partial population (machine 02 only, repository 03 only) reports exactly those two" {
+    mkdir -p "$(_ext_dir_machine)" "$(_ext_dir_repo)"
+    printf 'machine out\n' > "$(_ext_dir_machine)/02-output.md"
+    printf 'repo follow\n' > "$(_ext_dir_repo)/03-followup.md"
+    _prepare --cwd "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(_field EXTENSION_01_CONTEXT_MACHINE)" = "not present" ]
+    [ "$(_field EXTENSION_01_CONTEXT_REPOSITORY)" = "not present" ]
+    [[ "$(_field EXTENSION_02_OUTPUT_MACHINE)" == */02-output.md ]] || false
+    [ "$(_field EXTENSION_02_OUTPUT_REPOSITORY)" = "not present" ]
+    [ "$(_field EXTENSION_03_FOLLOWUP_MACHINE)" = "not present" ]
+    [[ "$(_field EXTENSION_03_FOLLOWUP_REPOSITORY)" == */03-followup.md ]] || false
+    [ "$(printf '%s\n' "$output" | grep -c -E '^EXTENSION_.*: not present$')" -eq 4 ]
+}
