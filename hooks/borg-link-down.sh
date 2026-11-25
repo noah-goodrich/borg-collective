@@ -275,6 +275,13 @@ If this is exploratory/investigative work with no deliverable, state that explic
 and you may proceed without /borg-plan.")
 fi
 
+# Tracked-plan guard (#538): PROJECT_PLAN.md is an untracked link to the in-flight directive, so a TRACKED one is a leak
+# from another branch, not this worktree's own plan. Say so and point at the cleanup instead of treating it as current.
+if [[ -n "$CWD" && -e "$CWD/PROJECT_PLAN.md" ]] \
+    && git -C "$CWD" ls-files --error-unmatch PROJECT_PLAN.md >/dev/null 2>&1; then
+    CONTEXT_PARTS+=("PROJECT_PLAN.md IS TRACKED BY GIT IN THIS WORKTREE. borg never tracks it: it is an untracked link to the in-flight directive in docs/plans/directives/. Treat it as a leaked plan from another branch, not this worktree's own. Cleanup: git rm --cached PROJECT_PLAN.md, move its content to docs/plans/directives/<date>-<slug>.md (or archive it under docs/plans/assimilated/ if it shipped), then borg start <slug> to link the plan you are working on.")
+fi
+
 # Memory-gate verdict — Phase 1.6 of the cairn-decommission directive. bin/borg-memory-gate
 # (a daily launchd job) writes this file only while the auto-memory read instrument's last
 # check came back FAIL (< 0.2 reads/session); it is removed on the next PASS. Surface it loudly
