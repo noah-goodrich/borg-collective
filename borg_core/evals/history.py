@@ -95,6 +95,12 @@ def _cli_version() -> str | None:
     return words[0] if words and words[0][:1].isdigit() else None
 
 
+def _stamp_cli_version(record: dict[str, Any]) -> None:
+    """Fill a missing `cli_version` from the installed CLI, except for a skip: its run never started."""
+    if record.get("cli_version") is None and record["verdict"] != "skip":
+        record["cli_version"] = _cli_version()
+
+
 def _git_sha(repo: str | None) -> str | None:
     try:
         proc = subprocess.run(
@@ -151,8 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         result_text=text,
         ts=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
-    if record.get("cli_version") is None and record["verdict"] != "skip":
-        record["cli_version"] = _cli_version()
+    _stamp_cli_version(record)
     if args.plugin_eval_result:
         try:
             cost, _reason = parse_plugin_eval(Path(args.plugin_eval_result).read_text(encoding="utf-8"))
