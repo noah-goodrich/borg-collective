@@ -1,0 +1,1 @@
+[{"id":"pane-01","query":"split the pane to the right","should_fire":true},{"id":"pane-02","query":"open a new window","should_fire":false,"competitor":"tmux"}]
