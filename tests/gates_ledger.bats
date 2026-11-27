@@ -51,7 +51,7 @@ _edit() {
     _text "I will read the files."
     _edit
     [ "$status" -eq 2 ]
-    [[ "$output" == *"G1 scope:"* && "$output" == *"G5 calibrate:"* ]]
+    [[ "$output" == *"G1 scope:"* && "$output" == *"G5 calibrate:"* && "$output" == *"WRITE it yourself"* ]]
     [[ "$output" == *"Gates: trivial"* ]]
     [[ "$output" == *"BORG_GATES_LEDGER=0"* ]]
 }
@@ -176,8 +176,9 @@ _edit() {
     [ "$status" -eq 0 ]
 }
 
-@test "after 3 denials the edit passes, so an unseen ledger cannot wedge a session" {
+@test "after the denial cap the edit passes, so an unseen ledger cannot wedge a session" {
     _slash borg-collective:borg-review 'Apply the gates.'
+    export BORG_GATES_LEDGER_MAX_DENIALS=3
     _edit
     [ "$status" -eq 2 ]
     _edit

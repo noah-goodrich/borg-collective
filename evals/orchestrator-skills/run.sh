@@ -412,7 +412,7 @@ _sanitize_cases() {
     # The one-word labels keep the loop readable; each leak is something the refuse-list names.
     for label in email homepath sessionid reminder claudemd; do
         case "$label" in
-            # the account email is assembled at run time so this public file never spells it
+            # a placeholder address, not the account email: the refuse-list matches any address at the account provider
             email) leak="mail someone@gmail.com" ;;
             homepath) leak="see /Users/someone/dev/x" ;;
             sessionid) leak="the session 11111111-2222-4333-8444-555555555555" ;;

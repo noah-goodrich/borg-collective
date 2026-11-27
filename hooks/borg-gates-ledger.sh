@@ -17,7 +17,7 @@
 # touched. Subagents (payload agent_id / agent_type) are not touched: the ledger is the main session's.
 #
 # Contract: denies with exit 2 and the reason on stderr. FAILS OPEN on everything else: no python3, no transcript,
-# an unreadable payload, a Cortex `.json` transcript. After BORG_GATES_LEDGER_MAX_DENIALS (default 3) denials in one
+# an unreadable payload, a Cortex `.json` transcript. After BORG_GATES_LEDGER_MAX_DENIALS (default 8) denials in one
 # session since the last invocation it lets the edit through, so a ledger the hook cannot see never wedges a session.
 # Kill switch: BORG_GATES_LEDGER=0. Tests: tests/gates_ledger.bats.
 
@@ -44,8 +44,9 @@ TRIGGER_RE = re.compile(r"apply the gates|fable mode|gates mode|5-gate|five gate
 LEDGER_LINE_RE = re.compile(r"^[\s>*\-`]*G([1-5]) (?:scope|evidence|adversary|verify|calibrate):")
 TRIVIAL_RE = re.compile(r"Gates:\s*trivial")
 
-DENY = """borg-review is in gates mode and no G1-G5 ledger has been printed yet, so this edit is denied.
-Print the ledger now as visible text (not in thinking), then repeat the same edit. Exactly this shape:
+DENY = """EDIT DENIED by the gates-ledger hook: borg-review is in gates mode and you have not printed the G1-G5 ledger.
+The hook does NOT print it for you. WRITE it yourself now, as plain text in your next reply to the user (text in
+thinking does not count), filled in for this task, with these five labels at the start of their lines:
 
 G1 scope:     <one sentence: what is in scope and the observable done-criterion; what is NOT>
 G2 evidence:  <the real files you opened, as paths, and the load-bearing fact@path:line>
@@ -53,9 +54,9 @@ G3 adversary: <the strongest way this plan is wrong, and your answer>
 G4 verify:    <the exact test command you will run and expect to pass>
 G5 calibrate: <effort tier, model routing, response size>
 
-For a trivial one-line change print only this line instead: Gates: trivial — G1+G5 only
-Read any file you still need first: reads are never blocked. Once the ledger is printed, edits pass.
-(Kill switch for this check: BORG_GATES_LEDGER=0.)"""
+For a trivial one-line change write only this line instead: Gates: trivial \u2014 G1+G5 only
+Read any file you still need first (reads are never blocked), write the ledger, THEN repeat the edit. Once the
+ledger is in your reply, edits pass. (Kill switch: BORG_GATES_LEDGER=0.)"""
 
 
 def texts(content):
@@ -145,9 +146,9 @@ def main():
     if marker is None or ledger:
         return 0
     try:
-        cap = int(os.environ.get("BORG_GATES_LEDGER_MAX_DENIALS", "3"))
+        cap = int(os.environ.get("BORG_GATES_LEDGER_MAX_DENIALS", "8"))
     except ValueError:
-        cap = 3
+        cap = 8
     session = str(payload.get("session_id") or "")
     cp = counter_path(session + "-" + str(marker))
     try:
