@@ -99,6 +99,34 @@
       "ref": "noah-goodrich/borg-collective#532",
       "status": "open",
       "why": "Step 3b-C: sweep the 3b groups, AC3 done; tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "15",
+      "ref": "noah-goodrich/borg-collective#548",
+      "status": "open",
+      "why": "Step 4a: trigger-suite runner, plugin-list abort, floors and CLI-version records (AC4); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "16",
+      "ref": "noah-goodrich/borg-collective#556",
+      "status": "open",
+      "why": "Step 4b: trigger suites for pane, borg-switch, borg-next, borg-link (AC4); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "17",
+      "ref": "noah-goodrich/borg-collective#557",
+      "status": "open",
+      "why": "Step 4c: trigger suites for adhd-guardrails, borg-assimilate, borg-collective-review, borg-link-up (AC4); tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "18",
+      "ref": "noah-goodrich/borg-collective#558",
+      "status": "open",
+      "why": "Step 4d: trigger suites for borg-plan, borg-resume, borg-review, borg-verify and the misfire list (AC4); tracking #480"
     }
   ]
 }

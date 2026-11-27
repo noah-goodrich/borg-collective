@@ -1,0 +1,214 @@
+{
+  "adhd-guardrails": [
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "adhd-guardrails-06",
+      "invoked": [
+        "borg-plan"
+      ],
+      "mode": "isolated",
+      "query": "write me a plan for the migration project",
+      "reason": "missed: loaded ['borg-plan']",
+      "should_fire": true,
+      "split": "train"
+    },
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "adhd-guardrails-01",
+      "invoked": [],
+      "mode": "in-situ",
+      "query": "I've been coding for six hours straight and I feel like I'm falling apart, keep going anyway",
+      "reason": "missed: loaded no skill",
+      "should_fire": true,
+      "split": "held-out"
+    },
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "adhd-guardrails-04",
+      "invoked": [],
+      "mode": "in-situ",
+      "query": "I feel stupid for missing this bug, I should have caught it hours ago",
+      "reason": "missed: loaded no skill",
+      "should_fire": true,
+      "split": "held-out"
+    }
+  ],
+  "borg-assimilate": [
+    {
+      "cli_version": "2.1.326",
+      "competitor": "git",
+      "id": "borg-assimilate-16",
+      "invoked": [
+        "borg-assimilate"
+      ],
+      "mode": "isolated",
+      "query": "merge this branch into main",
+      "reason": "misfire: loaded the skill on a near-miss",
+      "should_fire": false,
+      "split": "held-out"
+    }
+  ],
+  "borg-collective-review": [
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "borg-collective-review-03",
+      "invoked": [],
+      "mode": "in-situ",
+      "query": "debate this architecture decision from several perspectives",
+      "reason": "missed: loaded no skill",
+      "should_fire": true,
+      "split": "held-out"
+    },
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "borg-collective-review-10",
+      "invoked": [],
+      "mode": "in-situ",
+      "query": "red-team the proposed migration plan before I start",
+      "reason": "missed: loaded no skill",
+      "should_fire": true,
+      "split": "train"
+    },
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "borg-collective-review-09",
+      "invoked": [],
+      "mode": "in-situ",
+      "query": "have several experts argue for and against moving to a monorepo",
+      "reason": "missed: loaded no skill",
+      "should_fire": true,
+      "split": "train"
+    }
+  ],
+  "borg-link": [
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "borg-link-08",
+      "invoked": [],
+      "mode": "in-situ",
+      "query": "what's the state of the stillpoint repository?",
+      "reason": "missed: loaded no skill",
+      "should_fire": true,
+      "split": "train"
+    }
+  ],
+  "borg-link-up": [
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "borg-link-up-03",
+      "invoked": [
+        "checkpoint"
+      ],
+      "mode": "in-situ",
+      "query": "write a checkpoint before I take a break",
+      "reason": "missed: loaded ['checkpoint']",
+      "should_fire": true,
+      "split": "train"
+    },
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "borg-link-up-06",
+      "invoked": [
+        "checkpoint"
+      ],
+      "mode": "in-situ",
+      "query": "checkpoint this session",
+      "reason": "missed: loaded ['checkpoint']",
+      "should_fire": true,
+      "split": "held-out"
+    }
+  ],
+  "borg-plan": [
+    {
+      "cli_version": "2.1.326",
+      "competitor": "none",
+      "id": "borg-plan-19",
+      "invoked": [
+        "borg-plan"
+      ],
+      "mode": "isolated",
+      "query": "fix the typo in the plan file's heading",
+      "reason": "misfire: loaded the skill on a near-miss",
+      "should_fire": false,
+      "split": "train"
+    },
+    {
+      "cli_version": "2.1.326",
+      "competitor": null,
+      "id": "borg-plan-07",
+      "invoked": [],
+      "mode": "in-situ",
+      "query": "what should the goals and done-criteria be for this feature?",
+      "reason": "missed: loaded no skill",
+      "should_fire": true,
+      "split": "train"
+    }
+  ],
+  "borg-resume": [
+    {
+      "cli_version": "2.1.326",
+      "competitor": "borg-plan",
+      "id": "borg-resume-19",
+      "invoked": [
+        "borg-resume"
+      ],
+      "mode": "isolated",
+      "query": "continue with the next step of the plan",
+      "reason": "misfire: loaded the skill on a near-miss",
+      "should_fire": false,
+      "split": "train"
+    }
+  ],
+  "borg-verify": [
+    {
+      "cli_version": "2.1.326",
+      "competitor": "gh",
+      "id": "borg-verify-18",
+      "invoked": [
+        "borg-verify"
+      ],
+      "mode": "in-situ",
+      "query": "merge the pull request",
+      "reason": "misfire: loaded the skill on a near-miss",
+      "should_fire": false,
+      "split": "train"
+    }
+  ],
+  "pane": [
+    {
+      "cli_version": "2.1.326",
+      "competitor": "tmux",
+      "id": "pane-13",
+      "invoked": [
+        "pane"
+      ],
+      "mode": "isolated",
+      "query": "close the pane on the right",
+      "reason": "misfire: loaded the skill on a near-miss",
+      "should_fire": false,
+      "split": "held-out"
+    },
+    {
+      "cli_version": "2.1.326",
+      "competitor": "show-file",
+      "id": "pane-17",
+      "invoked": [
+        "pane"
+      ],
+      "mode": "isolated",
+      "query": "show me the file in a pane next to the editor",
+      "reason": "misfire: loaded the skill on a near-miss",
+      "should_fire": false,
+      "split": "train"
+    }
+  ]
+}
