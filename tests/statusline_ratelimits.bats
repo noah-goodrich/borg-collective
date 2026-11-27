@@ -29,6 +29,7 @@ setup() {
     [[ "$(borg_usage_parse "$(cat $F/usage-output.txt)")" == session-line\|21\|39\|* ]]
     [[ "$(borg_usage_parse "$(cat $F/usage-output-idle.txt)")" == session-line\|0\|0\|* ]]
     [[ "$(borg_usage_parse "$(cat $F/usage-output-2.1.300.txt)")" == session-line\|5\|4\|* ]]
+    [[ "$(borg_usage_parse "$(cat $F/usage-output-2.1.326.txt)")" == session-line\|4\|14\|* ]]
     [[ "$(borg_usage_parse "$(cat $F/usage-output-unmetered.txt)")" == unmetered\|* ]]
     [[ "$(borg_usage_parse "$(cat $F/usage-output-limits-breakdown.txt)")" == "limits-breakdown|||" ]]
     [[ "$(borg_usage_parse "garbage")" == "unrecognized|||" ]]
