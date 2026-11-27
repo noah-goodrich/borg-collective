@@ -15,6 +15,7 @@ from borg_core.evals.sweep import cli, core, shell
 
 IN_WINDOW = "2026-11-10"
 AFTER_WINDOW = "2026-12-06"
+TEN_DOLLAR_DAY = "2026-11-02"  # before the raise: the only date left on the $10 cap
 GROUPS = (
     ["lifecycle-manifests"]
     + ["link-next"] * 4
@@ -103,12 +104,12 @@ def test_each_row_names_its_model_and_agent_gates_reports_the_agents_own_pin(san
     )
 
 
-def test_the_raise_has_expired_after_the_window_and_the_sweep_runs_on_the_old_cap(sandbox, monkeypatch):
+def test_after_the_window_the_sweep_runs_on_the_25_dollar_cap(sandbox, monkeypatch):
     fake_harness(monkeypatch, 0.2)
     monkeypatch.setattr(shell, "today_utc", lambda: AFTER_WINDOW)
-    assert cli.main(["--repo", str(sandbox)]) == 1
+    cli.main(["--repo", str(sandbox)])
     doc = summary()
-    assert doc["cap_usd"] == 10.0 and doc["counts"]["skip"] > 0 and doc["spend_usd"] <= 10.0
+    assert doc["cap_usd"] == 25.0 and doc["spend_usd"] <= 25.0
 
 
 def test_dry_run_prints_the_plan_runs_nothing_and_writes_no_summary(sandbox, monkeypatch, capsys):
@@ -121,7 +122,7 @@ def test_dry_run_prints_the_plan_runs_nothing_and_writes_no_summary(sandbox, mon
 
 def test_null_cost_link_next_cases_exhaust_the_cap_and_the_rest_are_skipped_and_recorded(sandbox, monkeypatch):
     calls = fake_harness(monkeypatch, None)
-    monkeypatch.setattr(shell, "today_utc", lambda: AFTER_WINDOW)
+    monkeypatch.setattr(shell, "today_utc", lambda: TEN_DOLLAR_DAY)
     assert cli.main(["--repo", str(sandbox)]) == 1
     # lifecycle null-cost counts 9.0; 9.0 + 1.5 > 10 so every link-next case skips; the step-3a groups skip too.
     assert len(calls) == 1

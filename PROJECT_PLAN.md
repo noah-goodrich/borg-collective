@@ -116,6 +116,7 @@ Noah says "lock the evals plan". Then: copy this file to `PROJECT_PLAN.md` uncha
 
 - **Weekly live sweep cap: $10 a week total, $1.50 per case**, pinned Opus, covering the 6 lifecycle cases plus link and next. A case that would exceed the cap is skipped and raises a `borg next` row (AC1).
 - **Weekly live sweep cap raised to $15 a week until 2026-12-03** (Noah, 2026-11-03: $15 a week until 2026-12-03 while the step 3a harnesses join the sweep, then back to $10 automatically). The $1.50 per-case ceiling is unchanged. The raise expires on its own: `sweep_cap_usd` in `borg_core/evals/sweep/core.py` returns $15 from 2026-11-03 up to but not including 2026-12-03, else $10, with the date passed in by the shell.
+- **Weekly live sweep cap: $25 a week from 2026-12-03, replacing the automatic drop to $10** (Noah, 2026-11-25). $15 stays until 2026-12-03. The $1.50 per-case ceiling is unchanged. The first scheduled sweep cost $10.73 a week before the trigger suites join (`docs/evidence/2026-11-22-first-scheduled-sweep.md`).
 - **Personal Cortex account: not a trial.** Billing is set up, so the trial-end lockout in Risks no longer applies. AC5's evidence file records "billed account, no trial end date" where it asks for the trial end date.
 - **Employer-account Cortex probe and passive prompt capture: no.** AC5's evidence file says "not approved"; only the personal account is used.
 - **Step 3b live spend: up to $10 one time** (Noah, 2026-11-04) to record step 3b's transcripts. $7.48 spent.

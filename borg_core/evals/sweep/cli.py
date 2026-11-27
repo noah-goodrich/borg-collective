@@ -2,8 +2,8 @@
 
 Runs the lifecycle-manifests model cases (one invocation), the link-next cases (one invocation each, one run each),
 the orchestrator-skills groups (review, resume, break-glass) and the agent-gates cases (no --model: the agents' own
-pins are under test) against the build in the checkout, under the sweep cap (core.sweep_cap_usd: $10, or $15 from
-2026-11-03 up to 2026-12-03) and a $1.50 per-case ceiling (lower for the step-3a groups), then writes
+pins are under test) against the build in the checkout, under the sweep cap (core.sweep_cap_usd: $10 before
+2026-11-03, $15 up to 2026-12-03, $25 from then on) and a $1.50 per-case ceiling (lower for the step-3a groups), then writes
 `<state root>/evals/sweep-last.json` (contract: borg_core/evals/sweep/core.py). Harnesses append their own history
 records; this driver appends a `skip` or `error` record for every case it did not or could not run.
 
