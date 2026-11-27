@@ -382,6 +382,9 @@ _build_self_contained_hook "$HOOKS_SRC/borg-supabase-guard.sh" "$HOOKS_DST/borg-
 # borg-verifier-guard.sh is self-contained (python3, stdin JSON only) — copy as-is. agents/borg-verifier.md
 # grants Bash, and this hook is what makes that grant read-only; tests/verifier_guard.bats pins the pair.
 _build_self_contained_hook "$HOOKS_SRC/borg-verifier-guard.sh" "$HOOKS_DST/borg-verifier-guard.sh" 0
+# borg-gates-ledger.sh is self-contained (python3, stdin JSON + transcript only) — copy as-is. It enforces the G1-G5
+# ledger in /borg-review gates mode (#510); tests/gates_ledger.bats.
+_build_self_contained_hook "$HOOKS_SRC/borg-gates-ledger.sh" "$HOOKS_DST/borg-gates-ledger.sh" 0
 # scout-readonly-guard.sh is self-contained (python3, stdin JSON only) — copy as-is. agents/borg-scout.md grants
 # Bash, and this hook is what makes that grant read-only; tests/scout_readonly_guard.bats pins the pair.
 _build_self_contained_hook "$HOOKS_SRC/scout-readonly-guard.sh" "$HOOKS_DST/scout-readonly-guard.sh" 0
@@ -588,6 +591,16 @@ HOOKS_JSON='{
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-plan-promote.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-gates-ledger.sh",
             "timeout": 10
           }
         ]

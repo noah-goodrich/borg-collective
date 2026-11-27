@@ -2149,6 +2149,7 @@ typeset -ga _BORG_CORTEX_CLAUDE_ONLY=(
     "borg-dispatch-guard.sh|reads Claude /usage samples, which Cortex does not produce"
     "borg-workflow-model-guard.sh|guards Claude's Workflow tool; Cortex has no Workflow tool"
     "borg-memory-read-log.sh|logs reads of Claude project-memory paths; Cortex has no such memory"
+    "borg-gates-ledger.sh|reads Claude JSONL transcripts for the /borg-review gates mode; a Cortex .json transcript fails open"
 )
 
 # Plugin hooks not yet registered for Cortex, as "<script>|<reason>" entries naming the work that adapts them. Empty
