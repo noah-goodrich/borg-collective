@@ -99,6 +99,13 @@
       "ref": "noah-goodrich/borg-collective#532",
       "status": "open",
       "why": "Step 3b-C: sweep the 3b groups, AC3 done; tracking #480"
+    },
+    {
+      "lane": "_default",
+      "order": "15",
+      "ref": "noah-goodrich/borg-collective#555",
+      "status": "open",
+      "why": "read the first scheduled sweep; fix harness defects; plan evidence"
     }
   ]
 }
