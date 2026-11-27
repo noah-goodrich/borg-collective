@@ -61,13 +61,18 @@ The sweep's reported spend ($10.7313) is the sum of every case's own cost, skipp
 
 ## Live spend for this triage
 
-| Run | Cases | Cost |
-|-----|-------|-----:|
-| fix check | RS2, BG1, BG2, BG3, AD1, AD2, AD4 | $1.800 |
-| BG repeat | BG1, BG2 | $0.519 |
-| Total | | $2.318 |
+| Run | Cases | CLI | Cost |
+|-----|-------|-----|-----:|
+| fix check | RS2 BG1 BG2 BG3 AD1 AD2 | 2.1.300 | $1.800 |
+| BG repeat | BG1 BG2 | 2.1.300 | $0.519 |
+| Total | | | $2.318 |
 
 ## Follow-ups
 
 - #544, #545, #546, #547 are product defects for later PRs; none is fixed here.
 - Records now carry an optional `cli_version`, because Claude Code may move from 2.1.300 to 2.1.326 and a trend across that change is not one population.
+
+## CLI version of each run
+
+- The sweep and both triage re-runs above used Claude Code 2.1.300.
+- This machine is now on 2.1.326. A re-run of RS2, BG1, BG2 and AD1 on 2.1.326 was attempted on 2026-11-27 and refused by the usage guardian (`session_pct=100`, nothing started, $0). The fixes are therefore verified on 2.1.300 only; the next sweep is the first 2.1.326 evidence, and its records carry `cli_version`.
