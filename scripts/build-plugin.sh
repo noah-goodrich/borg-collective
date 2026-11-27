@@ -382,9 +382,14 @@ _build_self_contained_hook "$HOOKS_SRC/borg-supabase-guard.sh" "$HOOKS_DST/borg-
 # borg-verifier-guard.sh is self-contained (python3, stdin JSON only) — copy as-is. agents/borg-verifier.md
 # grants Bash, and this hook is what makes that grant read-only; tests/verifier_guard.bats pins the pair.
 _build_self_contained_hook "$HOOKS_SRC/borg-verifier-guard.sh" "$HOOKS_DST/borg-verifier-guard.sh" 0
-# borg-gates-ledger.sh is self-contained (python3, stdin JSON + transcript only) — copy as-is. It enforces the G1-G5
-# ledger in /borg-review gates mode (#510); tests/gates_ledger.bats.
-_build_self_contained_hook "$HOOKS_SRC/borg-gates-ledger.sh" "$HOOKS_DST/borg-gates-ledger.sh" 0
+# borg-gates-ledger.sh is self-contained (python3, stdin JSON + transcript only). It enforces the G1-G5 ledger in
+# /borg-review gates mode (#510; tests/gates_ledger.bats). Copied WITHOUT the "borg on PATH" guard: the hook never
+# calls borg, and the guard made it a silent no-op in any session whose PATH lacks borg (the eval sandbox's, which
+# is why the first live run showed no effect).
+_copy_if_changed "$HOOKS_SRC/borg-gates-ledger.sh" "$HOOKS_DST/borg-gates-ledger.sh" "hooks/borg-gates-ledger.sh"
+if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-gates-ledger.sh" ]]; then
+    chmod +x "$HOOKS_DST/borg-gates-ledger.sh"
+fi
 # scout-readonly-guard.sh is self-contained (python3, stdin JSON only) — copy as-is. agents/borg-scout.md grants
 # Bash, and this hook is what makes that grant read-only; tests/scout_readonly_guard.bats pins the pair.
 _build_self_contained_hook "$HOOKS_SRC/scout-readonly-guard.sh" "$HOOKS_DST/scout-readonly-guard.sh" 0
