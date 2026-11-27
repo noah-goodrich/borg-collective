@@ -1,0 +1,2 @@
+{"hook_event_name":"PostToolUse","tool_name":"skill","tool_input":{"command":"pane"}}
+{"hook_event_name":"PreToolUse","tool_name":"skill","tool_input":{"command":"pane"}}
