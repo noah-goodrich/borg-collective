@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-resume-01",
+    "skill": "borg-resume",
+    "query": "the workflow failed with a session limit error, pick it back up when the limit clears",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-02",
+    "skill": "borg-resume",
+    "query": "usage limit reached, resets at 3pm, resume after the reset",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-03",
+    "skill": "borg-resume",
+    "query": "auto-resume the workflow once the limit resets",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-04",
+    "skill": "borg-resume",
+    "query": "my run was killed by the usage limit, continue it later",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-05",
+    "skill": "borg-resume",
+    "query": "the agent hit the session limit halfway, how do I get it going again after it resets?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-06",
+    "skill": "borg-resume",
+    "query": "resume after reset",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-07",
+    "skill": "borg-resume",
+    "query": "limit resets in two hours, can you restart the paused work automatically then?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-08",
+    "skill": "borg-resume",
+    "query": "the workflow died with 'usage limit reached, resets 7:30pm', get it running again",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-09",
+    "skill": "borg-resume",
+    "query": "I got a rate reset notice mid-task, continue where it stopped when it clears",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-10",
+    "skill": "borg-resume",
+    "query": "a session limit paused my background agents, bring them back after the reset",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-11",
+    "skill": "borg-resume",
+    "query": "pick the interrupted work back up when my limit comes back",
+    "should_fire": true
+  },
+  {
+    "id": "borg-resume-12",
+    "skill": "borg-resume",
+    "query": "save a checkpoint so I can resume tomorrow",
+    "should_fire": false,
+    "competitor": "borg-link-up"
+  },
+  {
+    "id": "borg-resume-13",
+    "skill": "borg-resume",
+    "query": "resume the git rebase I started",
+    "should_fire": false,
+    "competitor": "git"
+  },
+  {
+    "id": "borg-resume-14",
+    "skill": "borg-resume",
+    "query": "write a resume for a software engineer role",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-resume-15",
+    "skill": "borg-resume",
+    "query": "my API returns 429 rate limit errors, add exponential backoff",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-resume-16",
+    "skill": "borg-resume",
+    "query": "what is the usage limit on the free tier of this service",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-resume-17",
+    "skill": "borg-resume",
+    "query": "restart the dev server",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-resume-18",
+    "skill": "borg-resume",
+    "query": "give me an overview of where all my repositories stand",
+    "should_fire": false,
+    "competitor": "borg-link"
+  },
+  {
+    "id": "borg-resume-19",
+    "skill": "borg-resume",
+    "query": "continue with the next step of the plan",
+    "should_fire": false,
+    "competitor": "borg-plan"
+  },
+  {
+    "id": "borg-resume-20",
+    "skill": "borg-resume",
+    "query": "the test run was killed by an out-of-memory error, why",
+    "should_fire": false,
+    "competitor": "none"
+  }
+]

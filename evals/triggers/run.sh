@@ -11,13 +11,13 @@
 #            streams; a real --bare run needs an API key, so its empty list is hand-written here.)
 #
 # Flags (shared by every harness `make eval` globs; an unknown flag exits 2):
-#   --skip-model, --skip-network   ACCEPTED AND INERT. --complete: require a suite for every self-firing skill.
+#   --skip-model, --skip-network   ACCEPTED AND INERT. --complete: accepted; every self-firing skill must have a suite (always on now that every batch has landed).
 
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${BORG_EVAL_REPO:-$(cd "$HERE/../.." && pwd)}"
-COMPLETE=""
+COMPLETE="--complete"
 while [ $# -gt 0 ]; do
     case "$1" in
         --skip-model|--skip-network) ;;

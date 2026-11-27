@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-review-01",
+    "skill": "borg-review",
+    "query": "I'm stuck, check where I am against the plan",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-02",
+    "skill": "borg-review",
+    "query": "am I still building the right thing?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-03",
+    "skill": "borg-review",
+    "query": "I feel scattered, give me one recommendation",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-04",
+    "skill": "borg-review",
+    "query": "apply the gates before I start this change",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-05",
+    "skill": "borg-review",
+    "query": "fable mode",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-06",
+    "skill": "borg-review",
+    "query": "I'm about to start a non-trivial change, run the start-of-change gates",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-07",
+    "skill": "borg-review",
+    "query": "I think I'm in a bad loop with this bug, take a look at the session",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-08",
+    "skill": "borg-review",
+    "query": "detect whether I'm creeping scope, I've been at this for hours",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-09",
+    "skill": "borg-review",
+    "query": "check my progress mid-session and tell me the one thing to do",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-10",
+    "skill": "borg-review",
+    "query": "this change feels risky, review it with the five gates first",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-11",
+    "skill": "borg-review",
+    "query": "am I off track? I can't tell if this refactor is still what we planned",
+    "should_fire": true
+  },
+  {
+    "id": "borg-review-12",
+    "skill": "borg-review",
+    "query": "review this pull request for bugs",
+    "should_fire": false,
+    "competitor": "code-review"
+  },
+  {
+    "id": "borg-review-13",
+    "skill": "borg-review",
+    "query": "have the collective debate the plan",
+    "should_fire": false,
+    "competitor": "borg-collective-review"
+  },
+  {
+    "id": "borg-review-14",
+    "skill": "borg-review",
+    "query": "independently verify the PR before merge with a fresh reviewer",
+    "should_fire": false,
+    "competitor": "borg-verify"
+  },
+  {
+    "id": "borg-review-15",
+    "skill": "borg-review",
+    "query": "is it done, can I ship?",
+    "should_fire": false,
+    "competitor": "borg-assimilate"
+  },
+  {
+    "id": "borg-review-16",
+    "skill": "borg-review",
+    "query": "write the plan for this project",
+    "should_fire": false,
+    "competitor": "borg-plan"
+  },
+  {
+    "id": "borg-review-17",
+    "skill": "borg-review",
+    "query": "review my writing for tone",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-review-18",
+    "skill": "borg-review",
+    "query": "give me a performance review template for my team",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-review-19",
+    "skill": "borg-review",
+    "query": "look at this stack trace and tell me what failed",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-review-20",
+    "skill": "borg-review",
+    "query": "flag that I've been working a long time and should take a break",
+    "should_fire": false,
+    "competitor": "adhd-guardrails"
+  }
+]
