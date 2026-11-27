@@ -503,7 +503,7 @@ _resume_install() {
     _write_settings "$HOME/.claude/settings.json"
     : > "$RESUME_DIR/watch.heartbeat"
     export BORG_RESUME_DOCTOR_TEST=1
-    printf '{"last_swept_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$XDG_STATE_HOME/borg/usage-guardian.json"
+    printf '{"last_swept_at":"%s","last_ok_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$XDG_STATE_HOME/borg/usage-guardian.json"
     export BORG_RESUME_DIR="$RESUME_DIR"
     export BORG_RESUME_USAGE_CMD="echo 'Current session: 12% used'"
     _write_launchctl_resume running
@@ -661,10 +661,26 @@ EOF
 
 @test "resume: stale usage-guardian.json -> WARN, not FAIL" {
     _resume_install
-    printf '{"last_swept_at":"2020-01-01T00:00:00Z"}\n' > "$XDG_STATE_HOME/borg/usage-guardian.json"
+    printf '{"last_swept_at":"2020-01-01T00:00:00Z","last_ok_at":"2020-01-01T00:00:00Z"}\n' > "$XDG_STATE_HOME/borg/usage-guardian.json"
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
     [[ "$output" == *"resume-guardian"*"WARN"* ]] || false
+}
+
+@test "resume: guardian that ran recently but never parsed a sample -> WARN, not OK (#465)" {
+    _resume_install
+    printf '{"last_unknown_at":"%s","consecutive_unknown":40,"blind_reason":"limits_breakdown_no_session"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$XDG_STATE_HOME/borg/usage-guardian.json"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-guardian"*"WARN"*"never parsed a sample"* ]] || false
+    [[ "$output" == *"limits_breakdown_no_session"* ]] || false
+}
+
+@test "resume: guardian blind again after a good sample -> WARN naming the streak (#465)" {
+    _resume_install
+    printf '{"last_ok_at":"%s","last_unknown_at":"%s","consecutive_unknown":5,"blind_reason":"unrecognized_shape"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$XDG_STATE_HOME/borg/usage-guardian.json"
+    run "$BORG_CMD" doctor
+    [[ "$output" == *"resume-guardian"*"WARN"*"5 consecutive unparseable"* ]] || false
 }
 
 @test "resume: missing allowlist entries -> FAIL naming them" {

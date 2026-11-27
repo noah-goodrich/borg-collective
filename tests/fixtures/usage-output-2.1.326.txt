@@ -1,0 +1,29 @@
+You are currently using your subscription to power your Claude Code usage
+
+Current session: 4% used · resets Nov 27 at 1:10pm (America/Denver)
+Current week (all models): 14% used · resets Dec 1 at 6am (America/Denver)
+Current week (Fable): 6% used · resets Dec 1 at 6am (America/Denver)
+
+What's contributing to your usage?
+Approximate · sessions on this machine only · shares overlap
+
+Last 24h · 61 requests · 4 sessions
+  57%  Run fewer sessions at once · up to 4 at once
+  51%  Start fresh when you switch tasks · run /clear
+  44%  Compact before you step away · run /compact
+  27%  Check which model "borg-collective:borg-nanoprobe" subagents use
+  27%  Review the "borg-collective" plugin
+  Top subagents: borg-collective:borg-nanoprobe 27%
+  Top plugins: borg-collective 27%
+  Top MCP servers: claude.ai Supabase 13%
+
+Last 7d · 1155 requests · 37 sessions
+  36%  Review the "borg-collective" plugin
+  34%  Start fresh when you switch tasks · run /clear
+  25%  Check which model "borg-collective:borg-nanoprobe" subagents use
+  24%  Turn off MCP servers you don't use · 18k tokens per request
+  23%  Run fewer sessions at once · up to 8 at once
+  Top skills: /borg-collective:borg-link-up 7%, /claude-in-chrome 2%, /borg-collective:borg-plan 1%, /simplify 1%, /borg-collective:borg-collective-review 1%, /borg-collective:borg-assimilate 1%, /token-cost:token-cost 1%
+  Top subagents: borg-collective:borg-nanoprobe 25%, borg-collective:borg-scout 1%
+  Top plugins: borg-collective 36%, token-cost 1%
+  Top MCP servers: claude-in-chrome 9%, claude.ai Supabase 3%, claude.ai ingle 2%, claude.ai Gmail 1%
