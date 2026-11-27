@@ -25,6 +25,7 @@ from typing import Any
 from borg_core.evals import triggers
 
 ABORT = 3
+MISFIRES = "misfires.json"  # the report's output for step 6, kept beside the suites; not a suite
 Runner = Callable[[list[str]], str]
 
 
@@ -77,7 +78,7 @@ def load_suite(path: Path) -> Any:
 
 def cmd_validate(args: argparse.Namespace) -> int:
     """Every self-firing skill has an admissible suite, and no suite exists for a skill the model cannot load."""
-    suites = {p.stem: p for p in sorted(Path(args.dir).glob("*.json"))}
+    suites = {p.stem: p for p in sorted(Path(args.dir).glob("*.json")) if p.name != MISFIRES}
     firing = self_firing_skills(Path(args.skills))
     problems: list[str] = []
     for skill in sorted(set(firing) - set(suites) if args.complete else []):

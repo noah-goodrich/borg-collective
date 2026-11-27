@@ -331,3 +331,12 @@ def test_the_expected_one_turn_stop_is_an_answer_not_an_error():
     stopped = {"type": "result", "subtype": "error_max_turns", "is_error": True, "result": None}
     parsed = triggers.parse_stream(json.dumps(_init(OURS)) + "\n" + json.dumps(stopped))
     assert not triggers.run_problems(parsed)
+
+
+def test_validate_does_not_mistake_the_misfires_file_for_a_suite(tmp_path):
+    skills, suites = tmp_path / "skills", tmp_path / "triggers"
+    _write_skill(skills, "pane")
+    suites.mkdir()
+    (suites / "pane.json").write_text(json.dumps(_suite()))
+    (suites / "misfires.json").write_text("{}")
+    assert triggers_cli.main(["validate", "--dir", str(suites), "--skills", str(skills), "--complete"]) == 0
