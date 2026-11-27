@@ -4,6 +4,8 @@ Read only when the prepared document says `PLAN` is a path (not `none`). Moved v
 
 The gate is **mechanical, not judged**: the engine reads the plan's `Evidence:` annotations, resolves each against the real filesystem / git / `gh` / test runner, and returns `pass`, `fail` or `unknown` per criterion. **You do not decide what is met.** Let the engine flip what it proved and report what it did — never second-guess a verdict, never supply one of your own.
 
+**`PLAN_TRACKED: <path>` present.** `PROJECT_PLAN.md` is never tracked (an untracked link to the in-flight directive), so a tracked one leaked from another branch. `PLAN` is `none`: reconcile nothing, and write one line in §4 Blockers: `PROJECT_PLAN.md is tracked on this branch (leaked); run git rm --cached PROJECT_PLAN.md, move its content to docs/plans/directives/, then borg start <slug>`.
+
 **If absent, skip.** `PLAN: none` means nothing to reconcile: do not run the engine, do not emit a `## Criteria Reconciled` section, do not mention it in the checkpoint, and do not say "no plan found" anywhere. The step is a SILENT no-op.
 
 `PROJECT_PLAN.md` is normally a symlink to the in-flight directive (#538). Pass the link path as `<PLAN>` exactly as given: the engine writes through it to the directive and keeps the link, so never resolve it yourself or point the engine at the directive.
