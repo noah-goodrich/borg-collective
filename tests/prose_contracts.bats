@@ -628,3 +628,12 @@ _names_foreign_skill() {
     [ "$status" -ne 0 ] || { echo "false evidence claim is back: $output"; false; }
     grep -qF "changed only in its fixture paths" "$f"
 }
+
+# Issue 454: the link-up fallback must never Read an unconfirmed extension path or scan for extensions.
+@test "454: borg-link-up fallback bounds extension discovery and forbids blind Read and Glob" {
+    local f="${REPO_ROOT}/skills/borg-link-up/references/fallback.md"
+    grep -q 'borg checkpoint-prepare --cwd' "$f"
+    grep -q 'NEVER Read a path you have not just confirmed exists' "$f"
+    grep -q 'NEVER Glob or Grep to discover extensions' "$f"
+    ! grep -q 'Read each extension file that exists' "$f"
+}
