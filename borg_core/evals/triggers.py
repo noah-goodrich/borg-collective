@@ -2,9 +2,11 @@
 
 A trigger suite is `evals/triggers/<skill>.json`, a JSON array of labeled queries for ONE self-firing skill::
 
-    {"id": "pane-01", "query": "split the pane to the right", "should_fire": true}
-    {"id": "pane-09", "query": "...a request that belongs to a competing skill...", "should_fire": false,
-     "competitor": "borg-switch"}
+    {"id": "pane-01", "skill": "pane", "query": "split the pane to the right", "should_fire": true}
+    {"id": "pane-09", "skill": "pane", "query": "...a request that belongs to a competing skill...",
+     "should_fire": false, "competitor": "borg-switch"}
+
+`id`, `skill`, `should_fire` and `query` are the fields the Cortex probe's cases (evals/cortex-skill-trigger) use too.
 
 A `should_fire: false` case is a NEAR-MISS: a request that sits next to the skill (a competing skill's job, a shared
 word) and must NOT load it. A suite needs at least 20 cases and at least 40% near-misses (testing-tiers.md: one-sided
@@ -77,6 +79,8 @@ def _case_problems(skill: str, index: int, case: Any, seen_ids: set[str], seen_q
         seen_queries.add(query.strip().lower())
         if _names_skill(skill, query):
             problems.append(f"{where}: the query names the skill under test ({skill})")
+    if case.get("skill") != skill:
+        problems.append(f"{where}: skill must be '{skill}' (the same field the Cortex probe cases carry)")
     if not isinstance(case.get("should_fire"), bool):
         problems.append(f"{where}: should_fire must be true or false")
     if case.get("should_fire") is False and not case.get("competitor"):
@@ -183,6 +187,24 @@ def _skill_calls(event: dict[str, Any]) -> list[str]:
             if isinstance(skill, str):
                 found.append(short_name(skill))
     return found
+
+
+def run_problems(parsed: dict[str, Any]) -> list[str]:
+    """A run that never produced an answer (a session limit, an auth failure, a budget stop before the first turn).
+
+    Without this a refusal text reads as "the skill did not load" and grades a should-fire case as a miss.
+    """
+    result = parsed["result"]
+    if result is None:
+        return ["no result event in the stream: the run was cut off"]
+    if result.get("is_error"):
+        return [f"the run failed before answering: {str(result.get('result'))[:120]}"]
+    return []
+
+
+def cli_version(init: dict[str, Any] | None) -> str | None:
+    """The Claude Code version the run reported. Runs of different versions are never pooled."""
+    return (init or {}).get("claude_code_version")
 
 
 def grade(skill: str, case: dict[str, Any], invoked: list[str]) -> tuple[str, str]:

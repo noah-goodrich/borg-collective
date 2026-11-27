@@ -113,11 +113,19 @@ def cmd_grade(args: argparse.Namespace) -> int:
     if args.expect_file:
         expected = [n for n in Path(args.expect_file).read_text(encoding="utf-8").split() if n]
     aborts = triggers.plugin_problems(parsed["init"], args.mode, args.plugin_dir, expected)
+    aborts += triggers.run_problems(parsed)
     if aborts:
         print("ABORT " + "; ".join(aborts))
         return ABORT
     verdict, reason = triggers.grade(skill, case, parsed["invoked"])
-    row = {"mode": args.mode, "skill": skill, "id": args.id, "should_fire": case["should_fire"], "verdict": verdict}
+    row = {
+        "cli_version": triggers.cli_version(parsed["init"]),
+        "mode": args.mode,
+        "skill": skill,
+        "id": args.id,
+        "should_fire": case["should_fire"],
+        "verdict": verdict,
+    }
     row.update({"reason": reason, "invoked": parsed["invoked"], "query": case["query"]})
     row["competitor"] = case.get("competitor")
     if args.verdicts:
@@ -131,12 +139,17 @@ def cmd_report(args: argparse.Namespace) -> int:
     """Accuracy per skill and mode with Wilson intervals; the misfires (with their split) go to `--misfires`."""
     rows = [json.loads(line) for line in Path(args.verdicts).read_text(encoding="utf-8").splitlines() if line.strip()]
     misfires: dict[str, list[dict[str, Any]]] = {}
-    for mode in triggers.MODES:
-        for skill in sorted({r["skill"] for r in rows}):
-            mine = [r for r in rows if r["mode"] == mode and r["skill"] == skill]
-            if not mine:
-                continue
-            print(f"{mode:9} {skill:24} {_fmt(triggers.summarize(mine))}")
+    versions = sorted({str(r.get("cli_version")) for r in rows})
+    for version in versions:
+        for mode in triggers.MODES:
+            for skill in sorted({r["skill"] for r in rows}):
+                mine = [
+                    r
+                    for r in rows
+                    if str(r.get("cli_version")) == version and r["mode"] == mode and r["skill"] == skill
+                ]
+                if mine:
+                    print(f"{version:9} {mode:9} {skill:24} {_fmt(triggers.summarize(mine))}")
     for skill in sorted({r["skill"] for r in rows}):
         cases = load_suite(Path(args.dir) / f"{skill}.json")
         train, _held = triggers.split_cases(cases)
@@ -144,8 +157,8 @@ def cmd_report(args: argparse.Namespace) -> int:
         for r in rows:
             if r["skill"] == skill and r["verdict"] == "fail":
                 split = "train" if r["id"] in train_ids else "held-out"
-                keep = ("mode", "id", "should_fire", "query", "competitor", "invoked", "reason")
-                misfires.setdefault(skill, []).append({**{k: r[k] for k in keep}, "split": split})
+                keep = ("cli_version", "mode", "id", "should_fire", "query", "competitor", "invoked", "reason")
+                misfires.setdefault(skill, []).append({**{k: r.get(k) for k in keep}, "split": split})
     if args.misfires:
         Path(args.misfires).write_text(json.dumps(misfires, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0

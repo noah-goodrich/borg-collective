@@ -14,7 +14,7 @@ BUILD = "/tmp/build/borg-collective"
 
 
 def _case(n: int, fire: bool, text: str | None = None) -> dict:
-    case = {"id": f"pane-{n:02d}", "query": text or f"query number {n}", "should_fire": fire}
+    case = {"id": f"pane-{n:02d}", "skill": "pane", "query": text or f"query number {n}", "should_fire": fire}
     if not fire:
         case["competitor"] = "borg-switch"
     return case
@@ -57,6 +57,7 @@ def test_malformed_cases_are_each_named():
     cases[1]["id"] = cases[2]["id"]
     cases[3]["query"] = cases[4]["query"]
     cases[5]["should_fire"] = "yes"
+    cases[6]["skill"] = "other"
     del cases[-1]["competitor"]
     cases.append("junk")
     text = "\n".join(triggers.validate_suite("pane", cases))
@@ -283,3 +284,44 @@ def test_main_prints_plugins_and_listing(capsys, monkeypatch):
     assert triggers_cli.main(["listing", "--skills", str(REPO / "skills")]) == 0
     out = capsys.readouterr().out
     assert "a\nb" in out and "listed " in out and " skills, " in out
+
+
+def test_a_run_that_never_answered_is_not_graded():
+    limited = {"type": "result", "is_error": True, "result": "You've hit your session limit"}
+    parsed = triggers.parse_stream(json.dumps(_init(OURS)) + "\n" + json.dumps(limited))
+    assert "session limit" in triggers.run_problems(parsed)[0]
+    assert triggers.run_problems(triggers.parse_stream(json.dumps(_init(OURS))))[0].startswith("no result")
+    assert not triggers.run_problems(triggers.parse_stream(_stream(["pane"])))
+
+
+def test_grade_aborts_on_an_errored_run_and_rows_carry_the_cli_version(tmp_path, capsys):
+    suite = tmp_path / "pane.json"
+    suite.write_text(json.dumps(_suite()))
+    init = {**_init(OURS, BUILTIN), "claude_code_version": "2.1.326"}
+    bad = tmp_path / "bad.jsonl"
+    bad.write_text(json.dumps(init) + "\n" + json.dumps({"type": "result", "is_error": True, "result": "limit"}))
+    good = tmp_path / "good.jsonl"
+    good.write_text(_stream(["pane"], init))
+    verdicts = tmp_path / "v.jsonl"
+    base = ["grade", "--suite", str(suite), "--id", "pane-00", "--mode", "isolated", "--plugin-dir", BUILD]
+    base += ["--verdicts", str(verdicts)]
+    assert triggers_cli.main(base + ["--stream", str(bad)]) == triggers_cli.ABORT
+    assert not verdicts.exists()
+    assert triggers_cli.main(base + ["--stream", str(good)]) == 0
+    assert json.loads(verdicts.read_text())["cli_version"] == "2.1.326"
+    assert triggers.cli_version(None) is None
+    capsys.readouterr()
+
+
+def test_report_never_pools_cli_versions(tmp_path, capsys):
+    (tmp_path / "pane.json").write_text(json.dumps(_suite()))
+    keep = {"mode": "isolated", "skill": "pane", "id": "pane-00", "should_fire": True, "reason": "", "invoked": []}
+    rows = [
+        {**keep, "cli_version": "2.1.300", "verdict": "pass"},
+        {**keep, "cli_version": "2.1.326", "verdict": "fail"},
+    ]
+    verdicts = tmp_path / "v.jsonl"
+    verdicts.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    assert triggers_cli.main(["report", "--verdicts", str(verdicts), "--dir", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "2.1.300" in out and "2.1.326" in out and "all 1/1" in out and "all 0/1" in out

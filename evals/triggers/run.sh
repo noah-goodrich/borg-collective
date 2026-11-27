@@ -6,7 +6,8 @@
 #            self-firing skill; with --complete (set once every batch has landed) every self-firing skill has one.
 #   FLOORS   the runner aborts, never grades, when the plugin list is wrong: a --bare run (no plugin) aborts in both
 #            modes, an isolated run with an extra plugin aborts, an in-situ run whose list differs from the enabled set
-#            aborts, and the abort writes no verdict row. A matching list grades. (floor/*.jsonl are init-shaped
+#            aborts, a run that never answered (session limit) aborts instead of grading as a miss, and an abort writes
+#            no verdict row. A matching list grades. (floor/*.jsonl are init-shaped
 #            streams; a real --bare run needs an API key, so its empty list is hand-written here.)
 #
 # Flags (shared by every harness `make eval` globs; an unknown flag exits 2):
@@ -71,6 +72,7 @@ else
     floor bare.jsonl in-situ "borg-collective" 3 bare-in-situ-aborts
     floor wrong-list.jsonl isolated - 3 isolated-extra-plugin-aborts
     floor wrong-list.jsonl in-situ "borg-collective" 3 in-situ-wrong-list-aborts
+    floor limit.jsonl isolated - 3 session-limit-run-aborts-not-a-miss
     floor isolated-ok.jsonl isolated - 0 isolated-matching-list-grades
     floor isolated-ok.jsonl in-situ "borg-collective" 0 in-situ-matching-list-grades
     floor wrong-list.jsonl in-situ "borg-collective
