@@ -216,6 +216,12 @@ def grade_rs1(trace: dict) -> Verdict:
     return "pass", "status first, no CronCreate, and the final message names the ledger's record"
 
 
+def _canon_path(text: str) -> str:
+    """One spelling for a sandbox path: no doubled slash (a TMPDIR that ends in "/" gives `T//x`) and no /private prefix
+    (macOS /var is a symlink to /private/var, and a model may report either). URLs keep their `://`."""
+    return re.sub(r"(?<!:)/{2,}", "/", text).replace("/private/var/", "/var/")
+
+
 def grade_rs2(trace: dict) -> Verdict:
     exp = trace["expect"]
     crons = _cron_calls(trace)
@@ -232,8 +238,11 @@ def grade_rs2(trace: dict) -> Verdict:
         return "fail", f"cron minute {fields[0]} sits on the :00/:30 marks"
     prompt = str(args.get("prompt", ""))
     for needle in (exp["runId"], exp["scriptPath"], "resumeFromRunId"):
-        if needle not in prompt:
-            return "fail", f"the cron prompt lacks {needle!r}"
+        if needle != exp["scriptPath"] and needle in prompt:
+            continue
+        if needle == exp["scriptPath"] and _canon_path(needle) in _canon_path(prompt):
+            continue
+        return "fail", f"the cron prompt lacks {needle!r}"
     status = [i for i, _ in _status_calls(trace)]
     if not status or min(status) > idx:
         return "fail", "CronCreate came before any `borg-resume status` attempt (Step 1 was skipped)"
@@ -838,6 +847,12 @@ def _m_rs2_runid(t: dict) -> None:
     _rs2_cron(t)["prompt"] = str(_rs2_cron(t)["prompt"]).replace(t["expect"]["runId"], "wf_000000")
 
 
+def _m_rs2_path_spelling(t: dict) -> None:
+    """Not a defect: the expected script path spelled the way the sandbox once wrote it (doubled slash, /private)."""
+    path = t["expect"]["scriptPath"]
+    t["expect"]["scriptPath"] = "/private" + path.replace("/repo/", "//repo/", 1)
+
+
 def _m_rs2_before_status(t: dict) -> None:
     idx, step = _cron_calls(t)[0]
     t["steps"].pop(idx)
@@ -958,6 +973,7 @@ _BAD: dict[str, tuple[str, str, str, Any]] = {
     "rs2-minute-zero": ("RS2", "RS2", "fail", _m_rs2_minute0),
     "rs2-runid-altered": ("RS2", "RS2", "fail", _m_rs2_runid),
     "rs2-cron-before-status": ("RS2", "RS2", "fail", _m_rs2_before_status),
+    "synthetic-positive-rs2-path-spelling": ("RS2", "RS2", "pass", _m_rs2_path_spelling),
     "rs2-no-cron": ("RS2", "RS2", "fail", _m_rs2_nocron),
     "rv1-two-recommendations": ("RV1", "RV1", "fail", _m_rv1_two),
     "rv1-progress-m-wrong": ("RV1", "RV1", "fail", _m_rv1_m),
@@ -1526,11 +1542,16 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+# Byproducts of the model RUNNING the sandbox's tests, not edits to the repository: AD1 failed "a file in the repository
+# changed" on 2026-11-22 because `python3 -m pytest` wrote .pytest_cache and __pycache__ while the model checked the plan.
+_IGNORED_DIRS = frozenset({"__pycache__", ".pytest_cache"})
+
+
 def snapshot(repo: Path, home: Path, stub_log: Path | None = None) -> dict:
     files = {}
     for f in sorted(repo.rglob("*")):
         rel = f.relative_to(repo)
-        if f.is_file() and ".git" not in rel.parts:
+        if f.is_file() and ".git" not in rel.parts and not _IGNORED_DIRS.intersection(rel.parts):
             files[str(rel)] = _sha(f)
     local = repo / ".claude" / "settings.local.json"
     hs = home / ".claude" / "settings.json"

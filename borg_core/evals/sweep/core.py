@@ -36,7 +36,8 @@ from dataclasses import dataclass
 from typing import Any
 
 SCHEMA_VERSION = 1
-SWEEP_CAP_USD = 10.0
+SWEEP_CAP_USD = 10.0  # the library default for decide/run; the cap in force on a date is sweep_cap_usd(today)
+STEADY_CAP_USD = 25.0  # from RAISED_CAP_UNTIL on (Noah, 2026-11-25: $25 instead of the automatic drop to $10)
 RAISED_CAP_USD = 15.0
 RAISED_CAP_FROM = "2026-11-03"
 RAISED_CAP_UNTIL = "2026-12-03"
@@ -107,8 +108,12 @@ class Group:
 
 def sweep_cap_usd(today: str) -> float:
     """The sweep cap on `today` (YYYY-MM-DD, passed in: this module has no clock). $15 from RAISED_CAP_FROM up to but
-    NOT including RAISED_CAP_UNTIL, else $10, so the raise expires with no human step. ISO dates order as strings."""
-    return RAISED_CAP_USD if RAISED_CAP_FROM <= today[:10] < RAISED_CAP_UNTIL else SWEEP_CAP_USD
+    NOT including RAISED_CAP_UNTIL, $25 from RAISED_CAP_UNTIL on, $10 before RAISED_CAP_FROM, so each step happens with
+    no human step. ISO dates order as strings."""
+    day = today[:10]
+    if day < RAISED_CAP_FROM:
+        return SWEEP_CAP_USD
+    return RAISED_CAP_USD if day < RAISED_CAP_UNTIL else STEADY_CAP_USD
 
 
 def plan_groups(link_next_cases: list[str]) -> list[Group]:

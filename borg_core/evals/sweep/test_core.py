@@ -122,13 +122,13 @@ def test_rows_carry_the_model_and_agent_gates_reports_the_agents_pin():
         ("2026-11-03", 15.0),
         ("2026-11-08", 15.0),
         ("2026-12-02", 15.0),
-        ("2026-12-03", 10.0),
-        ("2026-12-06", 10.0),
-        ("2027-06-01", 10.0),
+        ("2026-12-03", 25.0),
+        ("2026-12-06", 25.0),
+        ("2027-06-01", 25.0),
         ("2026-12-02T23:59:59Z", 15.0),
     ],
 )
-def test_the_raised_cap_starts_2026_11_03_and_expires_on_its_own_2026_12_03(today, cap):
+def test_the_raised_cap_starts_2026_11_03_and_steps_to_25_on_its_own_2026_12_03(today, cap):
     assert core.sweep_cap_usd(today) == cap
 
 
@@ -331,5 +331,5 @@ def test_on_a_raised_cap_date_recorded_costs_plus_reserves_skip_no_group(today):
 
 
 def test_at_the_ten_dollar_cap_the_late_groups_skip_without_a_cap_reset():
-    ran = _sweep(core.sweep_cap_usd("2026-12-03"))
+    ran = _sweep(core.SWEEP_CAP_USD)
     assert not all(ran.values()) and ran[("lifecycle-manifests", "P1")] is True

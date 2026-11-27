@@ -114,3 +114,12 @@ def test_plugin_eval_partial_reason_is_one_of_the_documented_strings():
 )
 def test_plugin_eval_anything_unrecognized_is_none(text):
     assert history.parse_plugin_eval(text)[0] is None
+
+
+def test_parser_reads_the_cli_version_from_the_init_event_and_is_none_without_one():
+    init = {"type": "system", "subtype": "init", "model": "claude-opus-5-5", "claude_code_version": "2.1.300"}
+    result = {"type": "result", "total_cost_usd": 0.1, "num_turns": 2}
+    with_version = history.parse_result("\n".join(json.dumps(e) for e in [init, result]))
+    assert with_version["cli_version"] == "2.1.300"
+    without = history.parse_result(json.dumps(result))
+    assert without["cli_version"] is None

@@ -54,19 +54,26 @@ Make borg's live evals trustworthy, recorded and scheduled; put every skill and 
 - [x] **AC1: The live evals are trustworthy, recorded and scheduled.** The lifecycle sweep passes against the build under review. Every live run appends one JSONL record (git SHA, model id, cost, turns, tokens, verdict) and a stdlib script reports Wilson intervals and per-SHA trends. A weekly sweep runs on the personal machine under launchd with a pinned model, a per-case cap and a total cap, and a skipped or errored case raises a `borg next` row. A Cortex load check fails the build on a folded or literal `description:` block, and `borg setup` no longer discards `cortex skill add` errors.
   - Verify: `EVAL_PLUGIN_DIR=<build> bash evals/lifecycle-manifests/run.sh` prints `RESULT: 7 pass, 0 fail`; `bash evals/lifecycle-manifests/floor-tests.sh` prints `0 failed`; `python3 -m borg_core.evals.history --report` prints an interval per case; `launchctl list` shows the sweep label; `bats tests/cortex_skill_load.bats` is green and turns red on a folded description.
   - Verified 2026-11-02: launchd sweep 10/10 pass, $4.10 of $10, lifecycle `RESULT: 7 pass, 0 fail, 0 skip`; tracking #480
+  - Evidence: `path:docs/evidence/2026-11-22-first-scheduled-sweep.md`
 - [x] **AC2: Every harness declares its tier.** `evals/ledger.json` carries `tiers` on each `evals/*` entry, optional first, filled, then required (expand, migrate, contract).
   - Verify: `jq '[.evals[] | has("tiers")] | all' evals/ledger.json` prints `true`; `bats tests/eval_ledger.bats` fails on an entry without it.
+  - Evidence: `bats:tests/eval_ledger.bats`
 - [x] **AC3: No waiver expires without a case.** Each of the 17 waived items has an eval (with a known-good and a known-bad transcript graded offline) or a renewed waiver whose reason says why no observable output exists. `llm` graders are allowed for the three items the ledger says need a judge, with a calibration note.
   - Verify: `bats tests/eval_ledger.bats` is green; `jq '[.items[] | select(.waiver) | .review_by] | min' evals/ledger.json` is `2027-01-31` or later, or the waivers are gone.
   - Verified 2026-11-04: 0 waivers remain and every item has an eval (the 17 waived items closed by #529, #530, #531 and this PR); `bats tests/eval_ledger.bats` is green; the `jq` check prints `null` because the waivers are gone; tracking #480
+  - Evidence: `bats:tests/eval_ledger.bats`
 - [ ] **AC4: Skills are sorted, and the self-firing ones have trigger suites.** A triage table records each skill's invocation mode; slash-command-only skills carry `disable-model-invocation: true`; each self-firing skill has at least 20 labeled queries with at least 40% near-misses, run isolated and in situ. The in-situ runner reads the plugin list from the `system/init` event and aborts on a mismatch.
   - Verify: `jq 'length' evals/triggers/<skill>.json` is 20 or more per self-firing skill; a floor case feeds the runner a wrong plugin list and requires an abort; the listing size before and after is recorded in the PR.
+  - Evidence: `path:evals/triggers`
 - [ ] **AC5: The Cortex question is answered, not assumed.** One recorded probe says whether a skill invocation can be detected in Cortex's stream or hook payloads. If it can, the Cortex trigger check is built under a ceiling below the monthly allowance; if not, the check stays advisory. No employer-account run or passive capture happens without Noah's recorded approval.
   - Verify: `docs/evidence/2026-11-cortex-skill-trigger.md` states the finding and the trial end date; `rg -n "employer" docs/evidence/2026-11-cortex-skill-trigger.md` shows the approval line or the words "not approved".
+  - Evidence: `path:docs/evidence/2026-11-cortex-skill-trigger.md`
 - [ ] **AC6: The first description hillclimb reports honestly.** For at least one skill: one rewrite from the misfire cases on the 60% train split; held-out never read by the rewrite; accuracy and tokens reported separately; a paired comparison. The change merges only if the held-out gain is outside the interval or the suite has at least 40 queries; otherwise the report says "do not merge".
   - Verify: the report file under `docs/evidence/` carries the paired interval and the token counts; the PR links it.
+  - Evidence: `path:docs/evidence/2026-12-description-hillclimb.md`
 - [ ] **AC7: Nothing breaks.** `make test`, `make test-bats`, `make lint` and `make eval` are green; `tests/context_budget.bats` is green.
   - Verify: the four make targets and the bats file.
+  - Evidence: `bats:tests/context_budget.bats`
 
 ## Testability
 
@@ -109,6 +116,7 @@ Noah says "lock the evals plan". Then: copy this file to `PROJECT_PLAN.md` uncha
 
 - **Weekly live sweep cap: $10 a week total, $1.50 per case**, pinned Opus, covering the 6 lifecycle cases plus link and next. A case that would exceed the cap is skipped and raises a `borg next` row (AC1).
 - **Weekly live sweep cap raised to $15 a week until 2026-12-03** (Noah, 2026-11-03: $15 a week until 2026-12-03 while the step 3a harnesses join the sweep, then back to $10 automatically). The $1.50 per-case ceiling is unchanged. The raise expires on its own: `sweep_cap_usd` in `borg_core/evals/sweep/core.py` returns $15 from 2026-11-03 up to but not including 2026-12-03, else $10, with the date passed in by the shell.
+- **Weekly live sweep cap: $25 a week from 2026-12-03, replacing the automatic drop to $10** (Noah, 2026-11-25). $15 stays until 2026-12-03. The $1.50 per-case ceiling is unchanged. The first scheduled sweep cost $10.73 a week before the trigger suites join (`docs/evidence/2026-11-22-first-scheduled-sweep.md`).
 - **Personal Cortex account: not a trial.** Billing is set up, so the trial-end lockout in Risks no longer applies. AC5's evidence file records "billed account, no trial end date" where it asks for the trial end date.
 - **Employer-account Cortex probe and passive prompt capture: no.** AC5's evidence file says "not approved"; only the personal account is used.
 - **Step 3b live spend: up to $10 one time** (Noah, 2026-11-04) to record step 3b's transcripts. $7.48 spent.
