@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-switch-01",
+    "skill": "borg-switch",
+    "query": "switch to the ingle repo",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-02",
+    "skill": "borg-switch",
+    "query": "go to stillpoint",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-03",
+    "skill": "borg-switch",
+    "query": "jump to the troth window",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-04",
+    "skill": "borg-switch",
+    "query": "take me over to the borg-collective repository",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-05",
+    "skill": "borg-switch",
+    "query": "switch over to the reveal project please",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-06",
+    "skill": "borg-switch",
+    "query": "I want to work on research-tools now, go there",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-07",
+    "skill": "borg-switch",
+    "query": "hop to the dotfiles repo",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-08",
+    "skill": "borg-switch",
+    "query": "can you switch me to claude-plugins",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-09",
+    "skill": "borg-switch",
+    "query": "go to the other repository, the one for the grocery app",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-10",
+    "skill": "borg-switch",
+    "query": "jump over to the repository I was in before this",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-11",
+    "skill": "borg-switch",
+    "query": "change to the stillpoint window",
+    "should_fire": true
+  },
+  {
+    "id": "borg-switch-12",
+    "skill": "borg-switch",
+    "query": "switch to the feature branch",
+    "should_fire": false,
+    "competitor": "git"
+  },
+  {
+    "id": "borg-switch-13",
+    "skill": "borg-switch",
+    "query": "go to line 120 of the file",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-switch-14",
+    "skill": "borg-switch",
+    "query": "what repository am I in right now",
+    "should_fire": false,
+    "competitor": "borg-link"
+  },
+  {
+    "id": "borg-switch-15",
+    "skill": "borg-switch",
+    "query": "which repository needs attention most urgently",
+    "should_fire": false,
+    "competitor": "borg-next"
+  },
+  {
+    "id": "borg-switch-16",
+    "skill": "borg-switch",
+    "query": "split the pane to the right",
+    "should_fire": false,
+    "competitor": "pane"
+  },
+  {
+    "id": "borg-switch-17",
+    "skill": "borg-switch",
+    "query": "switch the model to a smaller one",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-switch-18",
+    "skill": "borg-switch",
+    "query": "go ahead and run the tests",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-switch-19",
+    "skill": "borg-switch",
+    "query": "jump to the definition of this function",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-switch-20",
+    "skill": "borg-switch",
+    "query": "checkout main and pull",
+    "should_fire": false,
+    "competitor": "git"
+  }
+]

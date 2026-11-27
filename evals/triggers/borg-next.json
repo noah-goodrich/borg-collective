@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-next-01",
+    "skill": "borg-next",
+    "query": "what should I work on?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-02",
+    "skill": "borg-next",
+    "query": "what's next?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-03",
+    "skill": "borg-next",
+    "query": "which repository needs me most right now?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-04",
+    "skill": "borg-next",
+    "query": "I just sat down, what should I tackle first",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-05",
+    "skill": "borg-next",
+    "query": "give me my priorities",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-06",
+    "skill": "borg-next",
+    "query": "what is the most urgent thing across my projects?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-07",
+    "skill": "borg-next",
+    "query": "I finished that, what do I do now?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-08",
+    "skill": "borg-next",
+    "query": "rank my repositories by how much attention they need",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-09",
+    "skill": "borg-next",
+    "query": "I'm between tasks and need to pick something, what's on fire?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-10",
+    "skill": "borg-next",
+    "query": "what deserves my attention next?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-11",
+    "skill": "borg-next",
+    "query": "tell me where to spend the next hour",
+    "should_fire": true
+  },
+  {
+    "id": "borg-next-12",
+    "skill": "borg-next",
+    "query": "what's next in this function after the loop ends",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-next-13",
+    "skill": "borg-next",
+    "query": "give me a status overview of every repository",
+    "should_fire": false,
+    "competitor": "borg-link"
+  },
+  {
+    "id": "borg-next-14",
+    "skill": "borg-next",
+    "query": "what changed in the repositories since yesterday",
+    "should_fire": false,
+    "competitor": "borg-link"
+  },
+  {
+    "id": "borg-next-15",
+    "skill": "borg-next",
+    "query": "what is the next step in the plan we locked",
+    "should_fire": false,
+    "competitor": "borg-plan"
+  },
+  {
+    "id": "borg-next-16",
+    "skill": "borg-next",
+    "query": "what should I name this variable",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-next-17",
+    "skill": "borg-next",
+    "query": "switch to the repository with the most open pull requests",
+    "should_fire": false,
+    "competitor": "borg-switch"
+  },
+  {
+    "id": "borg-next-18",
+    "skill": "borg-next",
+    "query": "am I done, can this ship",
+    "should_fire": false,
+    "competitor": "borg-assimilate"
+  },
+  {
+    "id": "borg-next-19",
+    "skill": "borg-next",
+    "query": "what should I have for dinner",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-next-20",
+    "skill": "borg-next",
+    "query": "what's the next number in the sequence 2 4 8 16",
+    "should_fire": false,
+    "competitor": "none"
+  }
+]
