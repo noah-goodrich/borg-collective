@@ -1,0 +1,2 @@
+{"type": "user", "message": {"role": "user", "content": "show the old note"}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "The 2026-11-25 note read:\n\n> Needs Noah: #97\n> - Close it?\n> - Restate it?\n\nAnd the checkpoint format is:\n\n```markdown\nWaits on you:\n- Rotate the token?\n- Approve the budget?\n```\n"}]}}

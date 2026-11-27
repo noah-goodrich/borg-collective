@@ -57,8 +57,8 @@ _run_hook() {
         bash "${BATS_TEST_DIRNAME}/../hooks/$1" < "$2" 2>"${BATS_TEST_TMPDIR}/err") || RC=$?
 }
 
-@test "replay: the registered hook list is the eighteen borg hooks plus the two Cortex-only ones" {
-    [ "$(wc -l < "${BATS_TEST_TMPDIR}/hooks.txt" | tr -d ' ')" -eq 20 ]
+@test "replay: the registered hook list is the nineteen borg hooks plus the two Cortex-only ones" {
+    [ "$(wc -l < "${BATS_TEST_TMPDIR}/hooks.txt" | tr -d ' ')" -eq 21 ]
     grep -qx 'borg-cortex-plan.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
     grep -qx 'borg-cortex-restore.sh' "${BATS_TEST_TMPDIR}/hooks.txt"
     grep -qx 'bash-guard.sh' "${BATS_TEST_TMPDIR}/hooks.txt"

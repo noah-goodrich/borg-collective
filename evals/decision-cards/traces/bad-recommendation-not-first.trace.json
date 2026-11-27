@@ -1,0 +1,38 @@
+{
+  "steps": [
+    {
+      "kind": "tool",
+      "name": "Bash",
+      "input": {
+        "command": "gh pr list"
+      }
+    },
+    {
+      "kind": "tool",
+      "name": "AskUserQuestion",
+      "input": {
+        "questions": [
+          {
+            "question": "Close or restate noah-goodrich/borg-collective#97? It asks for a retry wrapper around gh calls, but #101 shipped one under another name, and the issue now blocks the 0.9.13 board. https://github.com/noah-goodrich/borg-collective/issues/97",
+            "header": "#97",
+            "multiSelect": false,
+            "options": [
+              {
+                "label": "Restate it",
+                "description": "Pro: keeps the logging ask. Con: stays open another cycle. Runs: gh issue edit 97."
+              },
+              {
+                "label": "Close it (Recommended)",
+                "description": "Pro: the board is clean. Con: loses the logging ask. Runs: gh issue close 97."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "message",
+      "text": "Swept the board.\n\n## Needs Noah\n- #97, close or restate scope\n- #101, merge or hold\n"
+    }
+  ]
+}

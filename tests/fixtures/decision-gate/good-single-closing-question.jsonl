@@ -1,0 +1,2 @@
+{"type": "user", "message": {"role": "user", "content": "recap"}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Fixed the parser and the tests pass.\n\nWant me to open the PR?\n"}]}}

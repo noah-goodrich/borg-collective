@@ -1,0 +1,2 @@
+{"content": [{"type": "text", "text": "what is open?", "is_user_prompt": true, "internalOnly": false}], "id": "u1", "role": "user"}
+{"content": [{"type": "text", "text": "## Needs Noah\n- #97, close or restate scope\n"}], "id": "a1", "role": "assistant"}

@@ -430,6 +430,14 @@ if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-precompact-checkpoint.sh" ]]; then
     chmod +x "$HOOKS_DST/borg-precompact-checkpoint.sh"
 fi
 
+# borg-decision-gate.sh (Stop) is a thin wrapper like the two above: it finds borg_core, is copied WITHOUT the "borg on PATH"
+# guard, and is silent and fail-open on any miss. It blocks a final message that asks Noah to decide as plain text when the
+# turn made no AskUserQuestion call (once, never twice in a row). Fires in every session. tests/decision_gate.bats.
+_copy_if_changed "$HOOKS_SRC/borg-decision-gate.sh" "$HOOKS_DST/borg-decision-gate.sh" "hooks/borg-decision-gate.sh"
+if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-decision-gate.sh" ]]; then
+    chmod +x "$HOOKS_DST/borg-decision-gate.sh"
+fi
+
 # ── Phase 3: Agent definition ─────────────────────────────────────────────────
 
 _info "Phase 3: Agents"
@@ -525,6 +533,16 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/notify.sh",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-decision-gate.sh",
+            "timeout": 10
           }
         ]
       }

@@ -1,0 +1,15 @@
+{
+  "steps": [
+    {
+      "kind": "tool",
+      "name": "Bash",
+      "input": {
+        "command": "gh pr list"
+      }
+    },
+    {
+      "kind": "message",
+      "text": "Swept the board.\n\n## Needs Noah\n- #97, close or restate scope\n- #101, merge or hold\n"
+    }
+  ]
+}

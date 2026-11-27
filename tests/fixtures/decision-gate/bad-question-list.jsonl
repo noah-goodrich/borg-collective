@@ -1,0 +1,2 @@
+{"type": "user", "message": {"role": "user", "content": "status"}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Two things are open:\n\n- Should I close #97 or restate it?\n- Merge #101 now or wait for CI?\n"}]}}

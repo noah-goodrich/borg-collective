@@ -516,23 +516,56 @@ _SKILL = Path(__file__).resolve().parents[2] / "skills" / "borg-link-up" / "SKIL
 
 def _template_example() -> str:
     """The fenced `Waits on you:` example the link-up skill carries, read from the skill file itself."""
-    found = re.search(r"```markdown\n(Waits on you:\n(?:- .*\n)+)```", _SKILL.read_text(encoding="utf-8"))
-    assert found, "borg-link-up/SKILL.md no longer carries a fenced `Waits on you:` example"
+    reference = _SKILL.parent / "references" / "decision-card.md"
+    found = re.search(r"```markdown\n(Waits on you:\n(?:(?:- |  ).*\n)+)```", reference.read_text(encoding="utf-8"))
+    assert found, "borg-link-up/references/decision-card.md no longer carries a fenced `Waits on you:` example"
     return found[1]
 
 
-def test_the_link_up_templates_own_example_parses_into_you_items():
+def test_the_link_up_templates_own_example_parses_into_a_card_and_a_one_liner():
     example = _template_example()
     body = f"tl;dr x\n\n## 4. Blockers\n\nNo blockers.\n\n{example}\n## 5. Next Session\n\n1. Do the next thing\n"
-    bullets = [line[2:] for line in example.splitlines()[1:]]
-    assert len(bullets) >= 2
-    assert core.checkpoint_owned_items(body) == [
-        *({"text": b, "owner": "YOU"} for b in bullets),
-        {"text": "Do the next thing", "owner": "AGENT"},
-    ]
+    items = core.checkpoint_owned_items(body)
+    assert [item["owner"] for item in items] == ["YOU", "YOU", "AGENT"]
+    card, chore = items[0], items[1]
+    assert card["text"].endswith("/issues/97") and "\n" not in card["text"]
+    parts = card["decision_card"]
+    assert all(label in parts for label in ("Context:", "Why open:", "Options:", "Pro:", "Con:", "Runs:", "Recommend:"))
+    assert chore == {"text": "Rotate the demo token in the vault.", "owner": "YOU"}
 
 
 def test_the_link_up_templates_none_form_yields_no_you_items():
     assert "`Waits on you: none`" in _SKILL.read_text(encoding="utf-8")
     body = "## 4. Blockers\n\nNo blockers.\n\nWaits on you: none\n\n## 5. Next Session\n\n1. Do the next thing\n"
     assert core.checkpoint_owned_items(body) == [{"text": "Do the next thing", "owner": "AGENT"}]
+
+
+_CARD_TEXT = (
+    "## 4. Blockers\n\nWaits on you:\n"
+    "- **Close #97 or restate its scope?** https://github.com/o/r/issues/97\n"
+    "  - Context: the issue asks for X, but #101 shipped X.\n"
+    "  - Options:\n"
+    "    - Close it. Pro: clean board. Con: loses the Y ask. Runs: gh issue close 97.\n"
+    "    - Restate it. Pro: keeps Y. Con: stays open. Runs: gh issue edit 97.\n"
+    "  - Recommend: close it.\n"
+    "- Rotate the demo token\n\n## 5. Next Session\n1. go\n"
+)
+
+
+def test_owned_items_decision_card_keeps_the_title_as_text_and_the_whole_card():
+    items = core.checkpoint_owned_items(_CARD_TEXT)
+    assert [item["owner"] for item in items] == ["YOU", "YOU", "AGENT"]
+    card = items[0]
+    assert card["text"] == "Close #97 or restate its scope? https://github.com/o/r/issues/97"
+    assert card["decision_card"].splitlines()[0] == card["text"]
+    assert "  - Recommend: close it." in card["decision_card"].splitlines()
+    assert "    - Close it. Pro: clean board. Con: loses the Y ask. Runs: gh issue close 97." in card["decision_card"]
+
+
+def test_owned_items_one_liner_beside_a_card_stays_a_plain_item():
+    assert core.checkpoint_owned_items(_CARD_TEXT)[1] == {"text": "Rotate the demo token", "owner": "YOU"}
+
+
+def test_owned_items_wrapped_one_liner_is_not_a_card():
+    text = "## 4. Blockers\nWaits on you:\n- Rotate the\n  demo token\n"
+    assert core.checkpoint_owned_items(text) == [{"text": "Rotate the demo token", "owner": "YOU"}]

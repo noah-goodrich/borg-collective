@@ -1,0 +1,38 @@
+{
+  "steps": [
+    {
+      "kind": "tool",
+      "name": "Bash",
+      "input": {
+        "command": "gh pr list"
+      }
+    },
+    {
+      "kind": "tool",
+      "name": "AskUserQuestion",
+      "input": {
+        "questions": [
+          {
+            "question": "#97, close or restate scope?",
+            "header": "#97",
+            "multiSelect": false,
+            "options": [
+              {
+                "label": "Close it (Recommended)",
+                "description": "Pro: the board is clean. Con: loses the logging ask. Runs: gh issue close 97."
+              },
+              {
+                "label": "Restate it",
+                "description": "Pro: keeps the logging ask. Con: stays open another cycle. Runs: gh issue edit 97."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "message",
+      "text": "Swept the board.\n\n## Needs Noah\n- #97, close or restate scope\n- #101, merge or hold\n"
+    }
+  ]
+}
