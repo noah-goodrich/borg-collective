@@ -183,6 +183,22 @@ _rd_guardian() {
         _rd_row WARN resume-guardian "no usage-guardian.json" "resume runs its own probe, so this is informational"
         return 0
     fi
+    local _ok _unk _why
+    _ok="$(jq -r '.last_ok_at // empty' "$_f" 2>/dev/null)"
+    _unk="$(jq -r '.consecutive_unknown // 0' "$_f" 2>/dev/null)"
+    _why="$(jq -r '.blind_reason // empty' "$_f" 2>/dev/null)"
+    case "$_unk" in "" | *[!0-9]*) _unk=0 ;; esac
+    # Running is not seeing (#465): a guardian that polls but never parsed a session percentage is blind.
+    if [ -z "$_ok" ]; then
+        _rd_row WARN resume-guardian "usage guardian has never parsed a sample (${_why:-no reading yet}): the 85% sweep is blind" \
+            "if /usage has no session line on this Claude Code, run 'borg setup --statusline' and keep a session open"
+        return 0
+    fi
+    if [ "$_unk" -ge 3 ]; then
+        _rd_row WARN resume-guardian "usage guardian blind: $_unk consecutive unparseable polls (${_why:-unknown})" \
+            "the 85% sweep cannot see the session limit; see ~/.local/share/borg/usage-watch.log"
+        return 0
+    fi
     _a="$(jq -r '.last_swept_at // empty' "$_f" 2>/dev/null)"
     _b="$(jq -r '.last_unknown_at // empty' "$_f" 2>/dev/null)"
     _t=""

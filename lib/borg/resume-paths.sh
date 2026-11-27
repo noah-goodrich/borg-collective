@@ -68,3 +68,51 @@ borg_resume_write_atomic() {
     rm -f "$_tmp" 2>/dev/null
     return 1
 }
+
+# ---------------------------------------------------------------------------------------------
+# Process start identity (#491). `ps -o lstart=` prints LOCAL time, so a system timezone change makes the same process
+# print a different string. The stable identity is the start EPOCH, read under a pinned TZ=UTC. Registry rows now carry
+# claude_start_epoch; rows written before that carry only the claude_start string (still accepted on read).
+# ---------------------------------------------------------------------------------------------
+
+# Start epoch of <pid> (timezone independent). Prints nothing and returns 1 when ps cannot answer.
+# Usage: borg_resume_proc_epoch <pid>
+borg_resume_proc_epoch() {
+    local _s
+    _s="$(TZ=UTC LC_ALL=C /bin/ps -o lstart= -p "$1" 2>/dev/null | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//')"
+    [ -n "$_s" ] || return 1
+    TZ=UTC LC_ALL=C date -j -f '%a %b %e %T %Y' "$_s" +%s 2>/dev/null || TZ=UTC LC_ALL=C date -d "$_s" +%s 2>/dev/null
+}
+
+# Does <pid> still carry the recorded start? Prints same | different | unknown.
+#   same       the start epoch matches (one second of tolerance), or a legacy string row matches verbatim
+#   different  the pid is gone, or its epoch differs from the recorded one (pid reuse)
+#   unknown    no proof either way: ps gave no answer for a live pid, or a legacy string row differs
+# Usage: borg_resume_start_check <pid> <start_epoch> <start_string>
+borg_resume_start_check() {
+    local _pid="$1" _sep="$2" _str="$3" _live _d _loc
+    _live="$(borg_resume_proc_epoch "$_pid")" || _live=""
+    if [ -z "$_live" ]; then
+        if kill -0 "$_pid" 2>/dev/null; then printf 'unknown\n'; else printf 'different\n'; fi
+        return 0
+    fi
+    case "$_sep" in
+        "" | *[!0-9]*) ;;
+        *)
+            _d=$((_live - _sep))
+            [ "$_d" -lt 0 ] && _d=$((0 - _d))
+            if [ "$_d" -le 1 ]; then printf 'same\n'; else printf 'different\n'; fi
+            return 0
+            ;;
+    esac
+    _str="$(printf '%s' "$_str" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//')"
+    [ -n "$_str" ] || { printf 'unknown\n'; return 0; }
+    _loc="$(LC_ALL=C /bin/ps -o lstart= -p "$_pid" 2>/dev/null | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//')"
+    if [ "$_loc" = "$_str" ]; then
+        printf 'same\n'
+        return 0
+    fi
+    # A legacy string that differs may be the same process printed under another timezone, or a reused pid: the string
+    # cannot tell them apart, so it is never proof of death. The next session_start rewrites the row with an epoch.
+    printf 'unknown\n'
+}

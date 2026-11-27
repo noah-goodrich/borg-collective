@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"role":"assistant","model":"claude-sonnet-5-5","content":[{"type":"text","text":"Paris."}]}}
+{"type":"result","subtype":"success","num_turns":1,"usage":{"input_tokens":4,"output_tokens":6,"cache_creation_input_tokens":14264,"cache_read_input_tokens":80954},"modelUsage":{"claude-sonnet-5-5":{"inputTokens":4,"outputTokens":6,"cacheReadInputTokens":80954,"cacheCreationInputTokens":14264}}}

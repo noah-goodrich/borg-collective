@@ -275,7 +275,7 @@ _fire_as() {
     [ "$status" -eq 0 ]
     local parent
     parent="$(cat "$BATS_TEST_TMPDIR/parent.pid")"
-    run jq -e --argjson p "$parent" '.claude_pid == $p and (.claude_start | type == "string")' "$REG"
+    run jq -e --argjson p "$parent" '.claude_pid == $p and (.claude_start | type == "string") and (.claude_start_epoch | type == "number")' "$REG"
     [ "$status" -eq 0 ]
 }
 

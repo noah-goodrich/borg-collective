@@ -151,7 +151,7 @@ _br_write_registry() {
         _mode="$( . "$BORG_RESUME_LIBDIR/../borg-hooks.sh" >/dev/null 2>&1 && _borg_session_mode "$_cwd" 2>/dev/null)"
     fi
 
-    _cpid="" _cstart=""
+    _cpid="" _cstart="" _cepoch=""
     _br_p_id="" _br_p_pid="" _br_p_session="" _br_p_window="" _br_p_widx="" _br_p_pidx="" _br_p_dir=""
     if [ "$_in_c" = false ]; then
         # The hook forwards its own parent (claude); a bare $PPID here would be the short-lived hook shell.
@@ -162,11 +162,12 @@ _br_write_registry() {
         _cstart="$(LC_ALL=C ps -o lstart= -p "$_cpid" 2>/dev/null)"
         _cstart="${_cstart#"${_cstart%%[![:space:]]*}"}"
         _cstart="${_cstart%"${_cstart##*[![:space:]]}"}"
+        _cepoch="$(borg_resume_proc_epoch "$_cpid")"
         _br_pane_facts "$_sid" "$_cpid"
     fi
 
     _reg="$(jq -n --arg sid "$_sid" --arg source "$_src" --arg cwd "$_cwd" --arg project "$_proj" --arg mode "$_mode" \
-        --argjson in_c "$_in_c" --arg cpid "$_cpid" --arg cstart "$_cstart" \
+        --argjson in_c "$_in_c" --arg cpid "$_cpid" --arg cstart "$_cstart" --arg cepoch "$_cepoch" \
         --arg pid_ "$_br_p_id" --arg ppid_ "$_br_p_pid" --arg sess "$_br_p_session" --arg win "$_br_p_window" \
         --arg widx "$_br_p_widx" --arg pidx "$_br_p_pidx" --arg pdir "$_br_p_dir" '
         def n: (try tonumber catch null);
@@ -180,6 +181,7 @@ _br_write_registry() {
             in_container: $in_c,
             claude_pid: ($cpid | n),
             claude_start: ($cstart | e),
+            claude_start_epoch: ($cepoch | n),
             tmux: (if $pid_ == "" then null else {
                 pane_id: $pid_, pane_pid: ($ppid_ | n), session: ($sess | e), window: ($win | e),
                 window_index: ($widx | n), pane_index: ($pidx | n), project_dir: ($pdir | e)

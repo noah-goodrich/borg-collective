@@ -1,0 +1,28 @@
+You are currently using your subscription to power your Claude Code usage
+
+Current session: 5% used · resets Nov 25 at 1:30pm (America/Denver)
+Current week (all models): 4% used · resets Dec 1 at 6am (America/Denver)
+Current week (Fable): 5% used · resets Dec 1 at 6am (America/Denver)
+
+What's contributing to your limits usage?
+Approximate, based on local sessions on this machine — does not include other devices or claude.ai. Behaviors are independent characteristics, not a breakdown.
+
+Last 24h · 121 requests · 6 sessions
+  44% of your usage came from subagent-heavy sessions
+  41% of your usage was at >150k context
+  27% of your usage was while 4+ sessions ran in parallel
+  26% of your usage went to always-on context over 40k tokens
+  Top skills: /borg-collective:borg-link-up 26%, /borg-collective:borg-link 2%, /token-cost:token-cost 1%
+  Top subagents: borg-collective:borg-nanoprobe 14%
+  Top plugins: borg-collective 42%, token-cost 1%
+
+Last 7d · 637 requests · 36 sessions
+  57% of your usage came from subagent-heavy sessions
+  37% of your usage was at >150k context
+  31% of your usage went to always-on context over 40k tokens
+  30% of your usage came from sessions active for 8+ hours
+  28% of your usage was while 4+ sessions ran in parallel
+  Top skills: /borg-collective:borg-link-up 12%, /claude-in-chrome 4%, /borg-collective:borg-plan 3%, /simplify 2%, /borg-collective:borg-collective-review 1%, /borg-collective:borg-assimilate 1%, /token-cost:token-cost 1%
+  Top subagents: borg-collective:borg-nanoprobe 4%, borg-collective:borg-scout 1%
+  Top plugins: borg-collective 23%, token-cost 1%
+  Top MCP servers: claude-in-chrome 15%, claude.ai Gmail 1%
