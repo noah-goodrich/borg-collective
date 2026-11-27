@@ -65,6 +65,7 @@ def parse_result(text: str) -> dict[str, Any]:
         derived["model"] = ",".join(sorted(model_usage))
     else:
         derived["model"] = inits[0].get("model") if inits else None
+    derived["cli_version"] = inits[0].get("claude_code_version") if inits else None
     return derived
 
 

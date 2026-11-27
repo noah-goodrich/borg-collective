@@ -99,6 +99,18 @@
         1,
         2
       ]
+    },
+    "evals/triggers": {
+      "covers": [
+        "evals/triggers/**",
+        "skills/*/SKILL.md",
+        "borg_core/evals/triggers*.py",
+        "scripts/build-plugin.sh"
+      ],
+      "tiers": [
+        1,
+        2
+      ]
     }
   },
   "items": {

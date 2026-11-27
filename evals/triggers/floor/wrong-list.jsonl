@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","plugins":[{"name":"borg-collective","source":"borg-collective@inline","path":"/build/borg-collective"},{"name":"hookify","source":"hookify@official","path":"/y"}]}
+{"type":"assistant","message":{"content":[]}}
+{"type":"result","is_error":false,"result":"ok"}

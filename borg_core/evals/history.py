@@ -27,6 +27,7 @@ RECORD SCHEMA, one JSON object per line::
     input_tokens   result.usage.input_tokens (else summed modelUsage inputTokens), or null
     output_tokens  likewise
     cache_read_tokens, cache_creation_tokens   likewise, or null
+    cli_version    the `claude_code_version` of the stream's init event, or null (never mix versions in one rate)
     verdict        "pass" | "fail" | "skip" | "error"
     reason         why, for skip and error (a run that could not pass must say so), else ""
 

@@ -66,6 +66,7 @@ Audited 2026-10-30. Tier 1 is the offline face; Tier 2 and 3 are the live face.
 | agent-gates | recordings | 2 | none |
 | orchestrator-skills | recordings | 2 | none |
 | plugin-eval/linkup-writes | none | 2 + 3 | 1 grader |
+| triggers | suites, abort floors | 2 | none |
 
 [1] s4-k3's other cases read the network: E2 resolves each
 declared ref with `gh pr view`, so it needs an authenticated
@@ -82,6 +83,8 @@ failure, never a pass. See the header of `evals/s4-k3/run.sh`.
 - The grunt cases (GR1, GR2) run with `BORG_NO_SESSION_HOOKS=1`: `claude -p --agent` runs the agent as the main session, so SessionStart fires, and 0 of 5 logged real grunt runs mention it.
 - The ledger names harnesses, what they cover and their `tiers`. `plugin-eval/linkup-writes` has no ledger entry: it lives under `evals/plugin-eval/` with no `run.sh` of its own, and the ledger check requires `evals/<name>/run.sh` for every entry.
 - The lifecycle-manifests live sweep is only trustworthy against the build under review when `EVAL_PLUGIN_DIR` is set. On 2026-10-30 all three of its positive cases failed against both the trimmed skills and the previous release's, because the sandbox PATH had no `borg`; rule 7 now has a floor case for it.
+
+- `evals/triggers/` holds one labeled-query suite per self-firing skill (`<skill>.json`, at least 20 cases, at least 40% near-misses). `live.sh` runs each case isolated and in situ through `claude -p --plugin-dir <build>` and aborts a run whose `system/init` plugin list does not match its mode (a `--bare` run loads none); grading and intervals are `borg_core/evals/triggers*.py`. `make eval` runs only the offline suite validation and the floor cases.
 
 ## Hillclimbing
 
