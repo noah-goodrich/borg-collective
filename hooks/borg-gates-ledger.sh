@@ -44,11 +44,13 @@ TRIGGER_RE = re.compile(r"apply the gates|fable mode|gates mode|5-gate|five gate
 LEDGER_LINE_RE = re.compile(r"^[\s>*\-`]*G([1-5]) (?:scope|evidence|adversary|verify|calibrate):")
 TRIVIAL_RE = re.compile(r"Gates:\s*trivial")
 
-DENY = """EDIT DENIED by the gates-ledger hook: borg-review is in gates mode and the session transcript holds NO visible
-text block with the G1-G5 ledger. Anything you wrote in thinking is invisible to the user and to this hook, so it does
-not count, and re-trying the edit without new visible text will be denied again. In your very next message, FIRST
-emit a visible text block (user-facing prose, before any tool call) that starts these five lines, filled in for this
-task, with these labels at the start of their lines:
+DENY = """EDIT DENIED by the gates-ledger hook (this is the policy working, not a bug in the hook): borg-review is in
+gates mode and the transcript holds NO user-visible text block with the G1-G5 ledger. Thinking is not visible text.
+You have probably composed the ledger in thinking and believe it was printed; it was not. The hook reads only the
+visible text blocks of your messages.
+Do this now: make your next message START with visible prose, written out in full as output text and not as
+reasoning, that consists of these five lines filled in for this task, and ONLY THEN call the edit tool again in that
+same message:
 
 G1 scope:     <one sentence: what is in scope and the observable done-criterion; what is NOT>
 G2 evidence:  <the real files you opened, as paths, and the load-bearing fact@path:line>
@@ -57,8 +59,8 @@ G4 verify:    <the exact test command you will run and expect to pass>
 G5 calibrate: <effort tier, model routing, response size>
 
 For a trivial one-line change write only this line instead: Gates: trivial \u2014 G1+G5 only
-Read any file you still need first (reads are never blocked), write the ledger, THEN repeat the edit. Once the
-ledger is in your reply, edits pass. (Kill switch: BORG_GATES_LEDGER=0.)"""
+Read any file you still need first (reads are never blocked). Once the visible ledger exists, edits pass.
+(Kill switch: BORG_GATES_LEDGER=0.)"""
 
 
 def texts(content):
