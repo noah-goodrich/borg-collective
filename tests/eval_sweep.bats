@@ -78,7 +78,7 @@ sweep() {
 }
 
 @test "sweep: a spent cap skips the remaining link-next cases, records each skip, and exits 1" {
-    BORG_EVAL_SWEEP_TODAY=2027-01-01 STUB_COST=1.5 sweep
+    BORG_EVAL_SWEEP_TODAY=2026-11-02 STUB_COST=1.5 sweep
     [ "$status" -eq 1 ]
     [ "$(jq -r '[.cases[] | select(.harness=="link-next" and .verdict=="skip")] | length' "$SUMMARY")" = 4 ]
     jq -e '.spend_usd == 9' "$SUMMARY"
