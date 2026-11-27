@@ -44,9 +44,11 @@ TRIGGER_RE = re.compile(r"apply the gates|fable mode|gates mode|5-gate|five gate
 LEDGER_LINE_RE = re.compile(r"^[\s>*\-`]*G([1-5]) (?:scope|evidence|adversary|verify|calibrate):")
 TRIVIAL_RE = re.compile(r"Gates:\s*trivial")
 
-DENY = """EDIT DENIED by the gates-ledger hook: borg-review is in gates mode and you have not printed the G1-G5 ledger.
-The hook does NOT print it for you. WRITE it yourself now, as plain text in your next reply to the user (text in
-thinking does not count), filled in for this task, with these five labels at the start of their lines:
+DENY = """EDIT DENIED by the gates-ledger hook: borg-review is in gates mode and the session transcript holds NO visible
+text block with the G1-G5 ledger. Anything you wrote in thinking is invisible to the user and to this hook, so it does
+not count, and re-trying the edit without new visible text will be denied again. In your very next message, FIRST
+emit a visible text block (user-facing prose, before any tool call) that starts these five lines, filled in for this
+task, with these labels at the start of their lines:
 
 G1 scope:     <one sentence: what is in scope and the observable done-criterion; what is NOT>
 G2 evidence:  <the real files you opened, as paths, and the load-bearing fact@path:line>

@@ -51,7 +51,7 @@ _edit() {
     _text "I will read the files."
     _edit
     [ "$status" -eq 2 ]
-    [[ "$output" == *"G1 scope:"* && "$output" == *"G5 calibrate:"* && "$output" == *"WRITE it yourself"* ]]
+    [[ "$output" == *"G1 scope:"* && "$output" == *"G5 calibrate:"* && "$output" == *"visible text block"* ]]
     [[ "$output" == *"Gates: trivial"* ]]
     [[ "$output" == *"BORG_GATES_LEDGER=0"* ]]
 }
