@@ -214,9 +214,9 @@ EOF
 }
 
 # Verdict for a session: alive | unknown | dead <cause> | defer <why>.
-# Usage: _rl_verdict <pid> <start> <in_container> <repository> <sid> <has_tmux_fact>
+# Usage: _rl_verdict <pid> <start> <in_container> <repository> <sid> <has_tmux_fact> [start_epoch]
 _rl_verdict() {
-    local _pid="$1" _start="$2" _cont="$3" _proj="$4" _sid="$5" _hastmux="$6" _live _boot _sepoch _pk
+    local _pid="$1" _start="$2" _cont="$3" _proj="$4" _sid="$5" _hastmux="$6" _sepoch0="${7:-}" _boot _sepoch _pk
     # Container identity (U9) is not established, so a container session is never declared dead from here: S3
     # must record a container id or label first. Positive evidence only.
     [ "$_cont" = true ] && { printf 'unknown\n'; return 0; }
@@ -225,19 +225,23 @@ _rl_verdict() {
         "" | *[!0-9]*) _pid="" ;;
         0) _pid="" ;;
     esac
-    if [ -n "$_pid" ] && [ -n "$_start" ]; then
-        _live="$(_rl_norm "$(LC_ALL=C /bin/ps -o lstart= -p "$_pid" 2>/dev/null)")"
-        if [ -n "$_live" ] && [ "$_live" = "$(_rl_norm "$_start")" ]; then
-            printf 'alive\n'
-            return 0
-        fi
-        # An unusable ps (empty answer) is not proof of death: confirm with kill -0 before calling it dead.
-        if [ -z "$_live" ] && kill -0 "$_pid" 2>/dev/null; then
-            printf 'unknown\n'
-            return 0
-        fi
+    if [ -n "$_pid" ] && { [ -n "$_start" ] || [ -n "$_sepoch0" ]; }; then
+        # Start identity is an epoch (#491): a system timezone change must not make a live process look reused.
+        case "$(borg_resume_start_check "$_pid" "$_sepoch0" "$_start")" in
+            same)
+                printf 'alive\n'
+                return 0
+                ;;
+            unknown)
+                # An unusable ps is not proof of death.
+                printf 'unknown\n'
+                return 0
+                ;;
+        esac
         # Dead. Refine the cause: a boot after the process started is a reboot (D1).
-        _boot="$(_rl_boot_epoch)" && _sepoch="$(_rl_lstart_epoch "$_start")" &&
+        _sepoch="$_sepoch0"
+        case "$_sepoch" in "" | *[!0-9]*) _sepoch="$(_rl_lstart_epoch "$_start")" ;; esac
+        _boot="$(_rl_boot_epoch)" &&
             [ -n "$_boot" ] && [ -n "$_sepoch" ] && [ "$_boot" -gt "$_sepoch" ] && {
             printf 'dead reboot\n'
             return 0
@@ -392,7 +396,7 @@ _rl_session() {
 }
 
 _rl_session_body() {
-    local _sid="$1" _end _reg _facts _pid _start _cont _proj _hastmux _loc _t _sd _ts _verdict _cause _inv
+    local _sid="$1" _end _reg _facts _pid _start _sepoch0 _cont _proj _hastmux _loc _t _sd _ts _verdict _cause _inv
     local _mmt _slack _apath _scopes="" _scope _f _aid _wid _status _runid _jr _jmt _now _idle _uuid _owner_err
     local _se _txt _wfs
     _cause=""
@@ -403,10 +407,11 @@ _rl_session_body() {
     fi
     _reg="$(borg_resume_registry_file "$_sid")"
     _facts="$(jq -r --arg s "$_RW_SEP" '[(.claude_pid // "" | tostring), (.claude_start // ""),
-        (.in_container // false | tostring), (.project // ""), (.tmux != null | tostring)] | join($s)' \
+        (.in_container // false | tostring), (.project // ""), (.tmux != null | tostring),
+        (.claude_start_epoch // "" | tostring)] | join($s)' \
         "$_reg" 2>/dev/null)"
     [ -n "$_facts" ] || return 0
-    IFS="$_RW_SEP" read -r _pid _start _cont _proj _hastmux <<EOF
+    IFS="$_RW_SEP" read -r _pid _start _cont _proj _hastmux _sepoch0 <<EOF
 $_facts
 EOF
     _now="$(_rc_now)"
@@ -445,7 +450,7 @@ EOF
         return 0
     fi
 
-    _verdict="$(_rl_verdict "$_pid" "$_start" "$_cont" "$_proj" "$_sid" "$_hastmux")"
+    _verdict="$(_rl_verdict "$_pid" "$_start" "$_cont" "$_proj" "$_sid" "$_hastmux" "$_sepoch0")"
     case "$_verdict" in
         alive)
             _rl_cancel_recovered "$_sid"

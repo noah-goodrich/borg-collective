@@ -385,3 +385,31 @@ mk_counting_hook() {
     [ "$(wc -l <"${BATS_TEST_TMPDIR}/hook.calls" | tr -d " ")" = 0 ]
     [ "$(rec '.[0].gate_reason')" = no_session_hooks ]
 }
+
+# _rr_original_alive is the last guard before a relaunch (#491): positive proof the recorded process is still ours.
+orig_alive() { # <registry file>
+    bash -c '. "$1/resume-paths.sh"; . "$1/resume-relaunch.sh" 2>/dev/null; _rr_original_alive "$2"' _ "$LIB" "$1"
+}
+
+@test "relaunch guard: a live pid with a matching epoch is the original, even after a timezone change" {
+    p=$$
+    e="$(TZ=UTC LC_ALL=C date -j -f '%a %b %e %T %Y' "$(TZ=UTC LC_ALL=C ps -o lstart= -p "$p")" +%s 2>/dev/null ||
+        TZ=UTC LC_ALL=C date -d "$(TZ=UTC LC_ALL=C ps -o lstart= -p "$p")" +%s)"
+    st="$(TZ=America/Los_Angeles LC_ALL=C ps -o lstart= -p "$p")"
+    jq -n -c --argjson p "$p" --arg st "$st" --argjson e "$e" '{claude_pid:$p, claude_start:$st, claude_start_epoch:$e}' \
+        >"$BATS_TEST_TMPDIR/reg.json"
+    TZ=America/Denver run orig_alive "$BATS_TEST_TMPDIR/reg.json"
+    [ "$status" -eq 0 ]
+}
+
+@test "relaunch guard: a dead pid, a different epoch, or a mismatched legacy string is not the original" {
+    jq -n -c --argjson p "$DEADPID" '{claude_pid:$p, claude_start_epoch:1}' >"$BATS_TEST_TMPDIR/reg.json"
+    run orig_alive "$BATS_TEST_TMPDIR/reg.json"
+    [ "$status" -ne 0 ]
+    jq -n -c --argjson p "$$" '{claude_pid:$p, claude_start_epoch:1}' >"$BATS_TEST_TMPDIR/reg.json"
+    run orig_alive "$BATS_TEST_TMPDIR/reg.json"
+    [ "$status" -ne 0 ]
+    jq -n -c --argjson p "$$" '{claude_pid:$p, claude_start:"Mon Jan  1 00:00:00 2001"}' >"$BATS_TEST_TMPDIR/reg.json"
+    run orig_alive "$BATS_TEST_TMPDIR/reg.json"
+    [ "$status" -ne 0 ]
+}

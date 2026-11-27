@@ -261,7 +261,7 @@ _bi_pid_under() {
 # Exit 0 owned. Otherwise exit 1 and print the reason: no_jq no_registry container no_pid no_start pid_dead
 # start_mismatch not_in_pane.
 borg_inject_owner_check() {
-    local _sid="$1" _ppid="$2" _reg _cont _pid _start _live
+    local _sid="$1" _ppid="$2" _reg _cont _pid _start _sepoch _live
     command -v jq >/dev/null 2>&1 || { printf 'no_jq\n'; return 1; }
     _reg="$(borg_resume_registry_file "$_sid" 2>/dev/null)"
     [ -f "$_reg" ] || { printf 'no_registry\n'; return 1; }
@@ -271,12 +271,11 @@ borg_inject_owner_check() {
     case "$_pid" in "" | *[!0-9]*) printf 'no_pid\n'; return 1 ;; esac
     _start="$(jq -r '.claude_start // empty' "$_reg" 2>/dev/null)"
     _start="$(_bi_norm "$_start")"
-    [ -n "$_start" ] || { printf 'no_start\n'; return 1; }
+    _sepoch="$(jq -r '.claude_start_epoch // empty' "$_reg" 2>/dev/null)"
+    [ -n "$_start" ] || [ -n "$_sepoch" ] || { printf 'no_start\n'; return 1; }
     kill -0 "$_pid" 2>/dev/null || { printf 'pid_dead\n'; return 1; }
-    _live="$(LC_ALL=C ps -o lstart= -p "$_pid" 2>/dev/null)"
-    _live="$(_bi_norm "$_live")"
-    [ -n "$_live" ] || { printf 'pid_dead\n'; return 1; }
-    [ "$_live" = "$_start" ] || { printf 'start_mismatch\n'; return 1; }
+    _live="$(borg_resume_start_check "$_pid" "$_sepoch" "$_start")"
+    [ "$_live" = same ] || { printf 'start_mismatch\n'; return 1; }
     _bi_pid_under "$_pid" "$_ppid" || { printf 'not_in_pane\n'; return 1; }
     return 0
 }
