@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-collective-review-01",
+    "skill": "borg-collective-review",
+    "query": "have the collective review this plan",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-02",
+    "skill": "borg-collective-review",
+    "query": "I want an adversarial review of my design before I commit to it",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-03",
+    "skill": "borg-collective-review",
+    "query": "debate this architecture decision from several perspectives",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-04",
+    "skill": "borg-collective-review",
+    "query": "run the personas over this shipping decision",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-05",
+    "skill": "borg-collective-review",
+    "query": "tear this proposal apart, I want multiple expert viewpoints arguing about it",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-06",
+    "skill": "borg-collective-review",
+    "query": "get the council to challenge this approach before we lock the objectives",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-07",
+    "skill": "borg-collective-review",
+    "query": "give me an ad-hoc design review with a panel of reviewers",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-08",
+    "skill": "borg-collective-review",
+    "query": "stress-test this plan with a rotating specialist and the core reviewers",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-09",
+    "skill": "borg-collective-review",
+    "query": "have several experts argue for and against moving to a monorepo",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-10",
+    "skill": "borg-collective-review",
+    "query": "red-team the proposed migration plan before I start",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-11",
+    "skill": "borg-collective-review",
+    "query": "adversarial review please, the plan is in PROJECT_PLAN.md",
+    "should_fire": true
+  },
+  {
+    "id": "borg-collective-review-12",
+    "skill": "borg-collective-review",
+    "query": "review this pull request diff for bugs",
+    "should_fire": false,
+    "competitor": "code-review"
+  },
+  {
+    "id": "borg-collective-review-13",
+    "skill": "borg-collective-review",
+    "query": "independently re-run the tests and give a pass or fail verdict on the PR",
+    "should_fire": false,
+    "competitor": "borg-verify"
+  },
+  {
+    "id": "borg-collective-review-14",
+    "skill": "borg-collective-review",
+    "query": "check my progress against the plan, I feel stuck",
+    "should_fire": false,
+    "competitor": "borg-review"
+  },
+  {
+    "id": "borg-collective-review-15",
+    "skill": "borg-collective-review",
+    "query": "write a plan for this project",
+    "should_fire": false,
+    "competitor": "borg-plan"
+  },
+  {
+    "id": "borg-collective-review-16",
+    "skill": "borg-collective-review",
+    "query": "proofread this paragraph for typos",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-collective-review-17",
+    "skill": "borg-collective-review",
+    "query": "what are the pros and cons of Postgres versus MySQL",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-collective-review-18",
+    "skill": "borg-collective-review",
+    "query": "is this ready to ship, run the shipping checklist",
+    "should_fire": false,
+    "competitor": "borg-assimilate"
+  },
+  {
+    "id": "borg-collective-review-19",
+    "skill": "borg-collective-review",
+    "query": "review the security of my pending changes",
+    "should_fire": false,
+    "competitor": "security-review"
+  },
+  {
+    "id": "borg-collective-review-20",
+    "skill": "borg-collective-review",
+    "query": "explain how a parliamentary debate works",
+    "should_fire": false,
+    "competitor": "none"
+  }
+]

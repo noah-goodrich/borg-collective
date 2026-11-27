@@ -1,0 +1,131 @@
+[
+  {
+    "id": "adhd-guardrails-01",
+    "skill": "adhd-guardrails",
+    "query": "I've been coding for six hours straight and I feel like I'm falling apart, keep going anyway",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-02",
+    "skill": "adhd-guardrails",
+    "query": "I keep rewriting this function, it still isn't perfect, let me try one more version",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-03",
+    "skill": "adhd-guardrails",
+    "query": "while we're here let's also add a dashboard, a CSV export, an admin panel and dark mode",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-04",
+    "skill": "adhd-guardrails",
+    "query": "I feel stupid for missing this bug, I should have caught it hours ago",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-05",
+    "skill": "adhd-guardrails",
+    "query": "I can't stop tweaking the variable names, help me make them all perfect",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-06",
+    "skill": "adhd-guardrails",
+    "query": "write me a plan for the migration project",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-07",
+    "skill": "adhd-guardrails",
+    "query": "I haven't eaten or taken a break since this morning but I want to finish the whole refactor tonight",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-08",
+    "skill": "adhd-guardrails",
+    "query": "this isn't good enough yet, I'm going to redo the whole module from scratch for the third time",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-09",
+    "skill": "adhd-guardrails",
+    "query": "I'm overwhelmed, there are twelve things I want to ship this week",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-10",
+    "skill": "adhd-guardrails",
+    "query": "let's add just one more feature before we stop, and another one after that",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-11",
+    "skill": "adhd-guardrails",
+    "query": "I should have finished this days ago, I'm so behind, plan out how to catch up",
+    "should_fire": true
+  },
+  {
+    "id": "adhd-guardrails-12",
+    "skill": "adhd-guardrails",
+    "query": "rename the variable foo to bar across the file",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "adhd-guardrails-13",
+    "skill": "adhd-guardrails",
+    "query": "am I still building the right thing, check my progress against the plan",
+    "should_fire": false,
+    "competitor": "borg-review"
+  },
+  {
+    "id": "adhd-guardrails-14",
+    "skill": "adhd-guardrails",
+    "query": "is this ready to ship, run the shipping checklist",
+    "should_fire": false,
+    "competitor": "borg-assimilate"
+  },
+  {
+    "id": "adhd-guardrails-15",
+    "skill": "adhd-guardrails",
+    "query": "what should I work on next across my repositories",
+    "should_fire": false,
+    "competitor": "borg-next"
+  },
+  {
+    "id": "adhd-guardrails-16",
+    "skill": "adhd-guardrails",
+    "query": "explain how cognitive load theory applies to UI design",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "adhd-guardrails-17",
+    "skill": "adhd-guardrails",
+    "query": "write a function that debounces input",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "adhd-guardrails-18",
+    "skill": "adhd-guardrails",
+    "query": "lay out the objectives and acceptance criteria for this new project",
+    "should_fire": false,
+    "competitor": "borg-plan"
+  },
+  {
+    "id": "adhd-guardrails-19",
+    "skill": "adhd-guardrails",
+    "query": "what are good break-reminder libraries for a desktop app",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "adhd-guardrails-20",
+    "skill": "adhd-guardrails",
+    "query": "fix the failing unit test in the parser",
+    "should_fire": false,
+    "competitor": "none"
+  }
+]

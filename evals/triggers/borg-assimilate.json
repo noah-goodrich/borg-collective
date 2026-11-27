@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-assimilate-01",
+    "skill": "borg-assimilate",
+    "query": "I think we're done, can this ship?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-02",
+    "skill": "borg-assimilate",
+    "query": "run the shipping checklist",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-03",
+    "skill": "borg-assimilate",
+    "query": "check the work against the acceptance criteria and merge the pull request",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-04",
+    "skill": "borg-assimilate",
+    "query": "is there anything left before I merge this?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-05",
+    "skill": "borg-assimilate",
+    "query": "evaluate whether the plan is complete and archive it",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-06",
+    "skill": "borg-assimilate",
+    "query": "we've finished everything in the plan, wrap it up and ship",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-07",
+    "skill": "borg-assimilate",
+    "query": "I'm tempted to add one more thing but I think it might be done, check me",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-08",
+    "skill": "borg-assimilate",
+    "query": "time to ship, merge the PR and archive the project plan",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-09",
+    "skill": "borg-assimilate",
+    "query": "are all the acceptance criteria met on this branch?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-10",
+    "skill": "borg-assimilate",
+    "query": "finalize and close out this project",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-11",
+    "skill": "borg-assimilate",
+    "query": "does the current state satisfy the plan so I can release it",
+    "should_fire": true
+  },
+  {
+    "id": "borg-assimilate-12",
+    "skill": "borg-assimilate",
+    "query": "independently verify the nanoprobe's pull request before I merge it",
+    "should_fire": false,
+    "competitor": "borg-verify"
+  },
+  {
+    "id": "borg-assimilate-13",
+    "skill": "borg-assimilate",
+    "query": "write a new project plan with objectives",
+    "should_fire": false,
+    "competitor": "borg-plan"
+  },
+  {
+    "id": "borg-assimilate-14",
+    "skill": "borg-assimilate",
+    "query": "how am I doing mid-session, am I stuck in a loop",
+    "should_fire": false,
+    "competitor": "borg-review"
+  },
+  {
+    "id": "borg-assimilate-15",
+    "skill": "borg-assimilate",
+    "query": "save my session state to a checkpoint",
+    "should_fire": false,
+    "competitor": "borg-link-up"
+  },
+  {
+    "id": "borg-assimilate-16",
+    "skill": "borg-assimilate",
+    "query": "merge this branch into main",
+    "should_fire": false,
+    "competitor": "git"
+  },
+  {
+    "id": "borg-assimilate-17",
+    "skill": "borg-assimilate",
+    "query": "assimilate this CSV into the database table",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-assimilate-18",
+    "skill": "borg-assimilate",
+    "query": "review my design doc with the adversarial panel",
+    "should_fire": false,
+    "competitor": "borg-collective-review"
+  },
+  {
+    "id": "borg-assimilate-19",
+    "skill": "borg-assimilate",
+    "query": "close this GitHub issue with a comment",
+    "should_fire": false,
+    "competitor": "gh"
+  },
+  {
+    "id": "borg-assimilate-20",
+    "skill": "borg-assimilate",
+    "query": "what's the release process for a python package on PyPI",
+    "should_fire": false,
+    "competitor": "none"
+  }
+]
