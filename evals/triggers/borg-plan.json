@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-plan-01",
+    "skill": "borg-plan",
+    "query": "I'm starting a new project, help me figure out the objectives",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-02",
+    "skill": "borg-plan",
+    "query": "plan this project for me",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-03",
+    "skill": "borg-plan",
+    "query": "I'm not sure what I'm even building, can you propose objectives and acceptance criteria?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-04",
+    "skill": "borg-plan",
+    "query": "let's lock the acceptance criteria before we write any code",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-05",
+    "skill": "borg-plan",
+    "query": "read the codebase and propose what we should aim for this quarter",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-06",
+    "skill": "borg-plan",
+    "query": "I need a project plan for rebuilding the billing service",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-07",
+    "skill": "borg-plan",
+    "query": "what should the goals and done-criteria be for this feature?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-08",
+    "skill": "borg-plan",
+    "query": "help me scope this work, the objectives are fuzzy",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-09",
+    "skill": "borg-plan",
+    "query": "set up a plan for the evals work and ask me to validate it",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-10",
+    "skill": "borg-plan",
+    "query": "kick off planning for the new import pipeline",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-11",
+    "skill": "borg-plan",
+    "query": "draft the objectives for this repo and I'll confirm them",
+    "should_fire": true
+  },
+  {
+    "id": "borg-plan-12",
+    "skill": "borg-plan",
+    "query": "review my progress against the existing plan",
+    "should_fire": false,
+    "competitor": "borg-review"
+  },
+  {
+    "id": "borg-plan-13",
+    "skill": "borg-plan",
+    "query": "is the plan complete, can we ship",
+    "should_fire": false,
+    "competitor": "borg-assimilate"
+  },
+  {
+    "id": "borg-plan-14",
+    "skill": "borg-plan",
+    "query": "plan a three day trip to Lisbon",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-plan-15",
+    "skill": "borg-plan",
+    "query": "run the adversarial panel over this plan",
+    "should_fire": false,
+    "competitor": "borg-collective-review"
+  },
+  {
+    "id": "borg-plan-16",
+    "skill": "borg-plan",
+    "query": "what's the query plan for this slow SQL statement",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-plan-17",
+    "skill": "borg-plan",
+    "query": "what should I work on next across my repositories",
+    "should_fire": false,
+    "competitor": "borg-next"
+  },
+  {
+    "id": "borg-plan-18",
+    "skill": "borg-plan",
+    "query": "write a design doc for the cache layer",
+    "should_fire": false,
+    "competitor": "design-doc"
+  },
+  {
+    "id": "borg-plan-19",
+    "skill": "borg-plan",
+    "query": "fix the typo in the plan file's heading",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-plan-20",
+    "skill": "borg-plan",
+    "query": "outline the steps to run the migration script",
+    "should_fire": false,
+    "competitor": "none"
+  }
+]

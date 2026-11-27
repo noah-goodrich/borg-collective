@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-verify-01",
+    "skill": "borg-verify",
+    "query": "the nanoprobe finished, verify its pull request before I merge",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-02",
+    "skill": "borg-verify",
+    "query": "run the independent gate on this PR before gh pr merge",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-03",
+    "skill": "borg-verify",
+    "query": "spawn a fresh reviewer to re-run the tests and map the acceptance criteria to the diff",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-04",
+    "skill": "borg-verify",
+    "query": "give me a pass or fail verdict on this branch before it merges",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-05",
+    "skill": "borg-verify",
+    "query": "the agent says it's done and green, check that independently",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-06",
+    "skill": "borg-verify",
+    "query": "verify the agent's pull request, don't trust its summary",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-07",
+    "skill": "borg-verify",
+    "query": "pre-merge gate: re-run the checks and compare the diff to the criteria",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-08",
+    "skill": "borg-verify",
+    "query": "before I merge the subagent's PR, have an independent evaluator look at it",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-09",
+    "skill": "borg-verify",
+    "query": "I want a structured verdict on whether this PR meets the plan's criteria",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-10",
+    "skill": "borg-verify",
+    "query": "the drone reports completion, confirm with a clean-room check before merging",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-11",
+    "skill": "borg-verify",
+    "query": "evaluate this finished PR from scratch with fresh eyes and the test suite",
+    "should_fire": true
+  },
+  {
+    "id": "borg-verify-12",
+    "skill": "borg-verify",
+    "query": "review this PR's code style and suggest cleanups",
+    "should_fire": false,
+    "competitor": "code-review"
+  },
+  {
+    "id": "borg-verify-13",
+    "skill": "borg-verify",
+    "query": "run the unit tests",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-verify-14",
+    "skill": "borg-verify",
+    "query": "verify my email address with a confirmation link flow",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-verify-15",
+    "skill": "borg-verify",
+    "query": "is the project done, can it ship, close out the plan",
+    "should_fire": false,
+    "competitor": "borg-assimilate"
+  },
+  {
+    "id": "borg-verify-16",
+    "skill": "borg-verify",
+    "query": "have the adversarial panel debate the design",
+    "should_fire": false,
+    "competitor": "borg-collective-review"
+  },
+  {
+    "id": "borg-verify-17",
+    "skill": "borg-verify",
+    "query": "check my session progress against the plan",
+    "should_fire": false,
+    "competitor": "borg-review"
+  },
+  {
+    "id": "borg-verify-18",
+    "skill": "borg-verify",
+    "query": "merge the pull request",
+    "should_fire": false,
+    "competitor": "gh"
+  },
+  {
+    "id": "borg-verify-19",
+    "skill": "borg-verify",
+    "query": "verify that the API response matches the schema",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-verify-20",
+    "skill": "borg-verify",
+    "query": "do a security audit of the pending changes",
+    "should_fire": false,
+    "competitor": "security-review"
+  }
+]
