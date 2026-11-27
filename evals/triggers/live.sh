@@ -15,7 +15,7 @@
 # borg_core.evals.history (BORG_EVAL_HISTORY overrides the file; each record carries the CLI version from the init
 # event, and the report never pools versions). Raw streams stay under --out for diagnosis. A run that never answered
 # (session limit, auth) grades as `error`, never as a miss. Re-running into the same --out reuses every stream that
-# answered under the same CLI version and only calls the model for the rest (no second history record for those).
+# answered under the same CLI version and only calls the model for the rest (no second history record for those unless RERECORD=1).
 
 set -uo pipefail
 
@@ -36,7 +36,7 @@ if [ "${1:-}" = "--worker" ]; then
     expect=(); [ "$mode" = "in-situ" ] && expect=(--expect-file "$EXPECT")
     cached=0
     if [ -s "$stream" ] && jq -e --arg v "$CLIVER" 'select(.type == "system" and .subtype == "init" and .claude_code_version == $v)' "$stream" > /dev/null 2>&1 \
-        && jq -e 'select(.type == "result" and (.is_error | not))' "$stream" > /dev/null 2>&1; then
+        && jq -e 'select(.type == "result" and ((.is_error | not) or .subtype == "error_max_turns"))' "$stream" > /dev/null 2>&1; then
         cached=1
     else
         (cd "$sandbox" && BORG_NO_SESSION_HOOKS=1 claude "${args[@]}" > "$stream" 2> "$stream.err")
@@ -50,7 +50,7 @@ if [ "${1:-}" = "--worker" ]; then
         *) verdict=error; reason="grader: $out" ;;
     esac
     echo "$mode $id $verdict $reason"
-    if [ "$RECORD" = 1 ] && [ "$cached" = 0 ]; then
+    if [ "$RECORD" = 1 ] && { [ "$cached" = 0 ] || [ -n "${RERECORD:-}" ]; }; then
         PYTHONPATH="$REPO" "$PYTHON" -m borg_core.evals.history --record --harness triggers --case "$id:$mode" \
             --verdict "$verdict" --reason "$reason" --result "$stream" --repo "$REPO"
     fi

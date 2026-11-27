@@ -325,3 +325,9 @@ def test_report_never_pools_cli_versions(tmp_path, capsys):
     assert triggers_cli.main(["report", "--verdicts", str(verdicts), "--dir", str(tmp_path)]) == 0
     out = capsys.readouterr().out
     assert "2.1.300" in out and "2.1.326" in out and "all 1/1" in out and "all 0/1" in out
+
+
+def test_the_expected_one_turn_stop_is_an_answer_not_an_error():
+    stopped = {"type": "result", "subtype": "error_max_turns", "is_error": True, "result": None}
+    parsed = triggers.parse_stream(json.dumps(_init(OURS)) + "\n" + json.dumps(stopped))
+    assert not triggers.run_problems(parsed)

@@ -192,12 +192,13 @@ def _skill_calls(event: dict[str, Any]) -> list[str]:
 def run_problems(parsed: dict[str, Any]) -> list[str]:
     """A run that never produced an answer (a session limit, an auth failure, a budget stop before the first turn).
 
+    `error_max_turns` is the EXPECTED end of a one-turn case (Claude Code 2.1.326 flags it `is_error`; 2.1.300 did not).
     Without this a refusal text reads as "the skill did not load" and grades a should-fire case as a miss.
     """
     result = parsed["result"]
     if result is None:
         return ["no result event in the stream: the run was cut off"]
-    if result.get("is_error"):
+    if result.get("is_error") and result.get("subtype") != "error_max_turns":
         return [f"the run failed before answering: {str(result.get('result'))[:120]}"]
     return []
 
