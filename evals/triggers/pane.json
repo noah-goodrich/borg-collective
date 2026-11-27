@@ -1,0 +1,131 @@
+[
+  {
+    "id": "pane-01",
+    "skill": "pane",
+    "query": "split the pane",
+    "should_fire": true
+  },
+  {
+    "id": "pane-02",
+    "skill": "pane",
+    "query": "open a pane to the right",
+    "should_fire": true
+  },
+  {
+    "id": "pane-03",
+    "skill": "pane",
+    "query": "can you give me a new terminal pane on the left?",
+    "should_fire": true
+  },
+  {
+    "id": "pane-04",
+    "skill": "pane",
+    "query": "I need a pane below this one for running tests",
+    "should_fire": true
+  },
+  {
+    "id": "pane-05",
+    "skill": "pane",
+    "query": "split this window vertically so I can watch the logs next to the editor",
+    "should_fire": true
+  },
+  {
+    "id": "pane-06",
+    "skill": "pane",
+    "query": "put a second pane on top of this one",
+    "should_fire": true
+  },
+  {
+    "id": "pane-07",
+    "skill": "pane",
+    "query": "open another terminal beside this one",
+    "should_fire": true
+  },
+  {
+    "id": "pane-08",
+    "skill": "pane",
+    "query": "make a horizontal split in tmux",
+    "should_fire": true
+  },
+  {
+    "id": "pane-09",
+    "skill": "pane",
+    "query": "I want to see the build output while we keep talking, split the screen",
+    "should_fire": true
+  },
+  {
+    "id": "pane-10",
+    "skill": "pane",
+    "query": "add a pane at the bottom of the current window",
+    "should_fire": true
+  },
+  {
+    "id": "pane-11",
+    "skill": "pane",
+    "query": "throw up a side pane for me to run htop",
+    "should_fire": true
+  },
+  {
+    "id": "pane-12",
+    "skill": "pane",
+    "query": "open a new tmux window for the api repository",
+    "should_fire": false,
+    "competitor": "borg-switch"
+  },
+  {
+    "id": "pane-13",
+    "skill": "pane",
+    "query": "close the pane on the right",
+    "should_fire": false,
+    "competitor": "tmux"
+  },
+  {
+    "id": "pane-14",
+    "skill": "pane",
+    "query": "what does a tmux pane do, explain it to me",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "pane-15",
+    "skill": "pane",
+    "query": "rename this tmux window to scratch",
+    "should_fire": false,
+    "competitor": "tmux"
+  },
+  {
+    "id": "pane-16",
+    "skill": "pane",
+    "query": "split this function into two smaller functions",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "pane-17",
+    "skill": "pane",
+    "query": "show me the file in a pane next to the editor",
+    "should_fire": false,
+    "competitor": "show-file"
+  },
+  {
+    "id": "pane-18",
+    "skill": "pane",
+    "query": "kill the whole tmux session",
+    "should_fire": false,
+    "competitor": "tmux"
+  },
+  {
+    "id": "pane-19",
+    "skill": "pane",
+    "query": "split the CSV into two files by column",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "pane-20",
+    "skill": "pane",
+    "query": "jump to the dashboard repository window",
+    "should_fire": false,
+    "competitor": "borg-switch"
+  }
+]

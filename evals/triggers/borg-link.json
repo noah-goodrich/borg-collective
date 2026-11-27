@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-link-01",
+    "skill": "borg-link",
+    "query": "what's going on across my repositories?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-02",
+    "skill": "borg-link",
+    "query": "give me a status overview",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-03",
+    "skill": "borg-link",
+    "query": "catch me up",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-04",
+    "skill": "borg-link",
+    "query": "morning link-up",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-05",
+    "skill": "borg-link",
+    "query": "what changed since I was last here?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-06",
+    "skill": "borg-link",
+    "query": "brief me on where things stand",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-07",
+    "skill": "borg-link",
+    "query": "show me the page for this repository",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-08",
+    "skill": "borg-link",
+    "query": "what's the state of the stillpoint repository?",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-09",
+    "skill": "borg-link",
+    "query": "I'm back after the weekend, what did I miss",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-10",
+    "skill": "borg-link",
+    "query": "do a recon of everything",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-11",
+    "skill": "borg-link",
+    "query": "give me the lay of the land before I start",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-12",
+    "skill": "borg-link",
+    "query": "which one thing should I work on next",
+    "should_fire": false,
+    "competitor": "borg-next"
+  },
+  {
+    "id": "borg-link-13",
+    "skill": "borg-link",
+    "query": "save my session state before I go",
+    "should_fire": false,
+    "competitor": "borg-link-up"
+  },
+  {
+    "id": "borg-link-14",
+    "skill": "borg-link",
+    "query": "what changed in this file since the last commit",
+    "should_fire": false,
+    "competitor": "git"
+  },
+  {
+    "id": "borg-link-15",
+    "skill": "borg-link",
+    "query": "what's going on with this error message",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-link-16",
+    "skill": "borg-link",
+    "query": "brief me on how the Raft protocol works",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-link-17",
+    "skill": "borg-link",
+    "query": "catch the exception and log it",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-link-18",
+    "skill": "borg-link",
+    "query": "switch to the ingle repository",
+    "should_fire": false,
+    "competitor": "borg-switch"
+  },
+  {
+    "id": "borg-link-19",
+    "skill": "borg-link",
+    "query": "give me a status code reference for HTTP",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-link-20",
+    "skill": "borg-link",
+    "query": "summarize this pull request diff for me",
+    "should_fire": false,
+    "competitor": "none"
+  }
+]
