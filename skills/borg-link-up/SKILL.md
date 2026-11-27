@@ -110,5 +110,6 @@ Write the **Wrote:** form when add-row ran and printed `MANIFEST_OK`; otherwise 
 The default run (`PLAN: none`, every `EXTENSION_*` field `not present`, `STATUS: ok`) needs none of these and makes no extra tool call.
 
 - `PLAN` is not `none`: Read `references/criteria.md`.
+- A `PLAN_TRACKED: <path>` line is present: Read `references/criteria.md` (tracked-plan leak; reconcile nothing).
 - Any `EXTENSION_*` field is not `not present`: Read `references/extensions.md`.
 - `STATUS` says `fallback: <reason>`, or the prepared block is missing: Read `references/fallback.md`.

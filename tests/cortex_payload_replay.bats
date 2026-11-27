@@ -124,8 +124,8 @@ $hook $fx: stdout is not JSON: ${OUT:0:120}"
 @test "replay: the promote hook writes the plan from the PostToolUse payload" {
     _replay borg-plan-promote.sh posttooluse-exit-plan-mode
     [ "$RC" -eq 0 ]
-    [ -f "$REPO/docs/plans/PROJECT_PLAN.md" ]
-    grep -q '2026-10-22-widgets-discount' "$REPO/docs/plans/PROJECT_PLAN.md"
+    [ -L "$REPO/PROJECT_PLAN.md" ]
+    grep -q '2026-10-22-widgets-discount' "$REPO/PROJECT_PLAN.md"
 }
 
 @test "replay: the fixtures are synthetic (no home directory path, no real session id)" {

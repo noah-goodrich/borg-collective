@@ -124,8 +124,11 @@ setup() {
     mkdir -p "${BORG_TEST_HOME}/.claude/lib"
     cp "$LIB" "${BORG_TEST_HOME}/.claude/lib/borg-hooks.sh"
 
-    PLAN_PRIMARY="${FAKE_REPO}/docs/plans/PROJECT_PLAN.md"
+    # #538: a promotion writes a directive and links PROJECT_PLAN.md to it. PLAN_PRIMARY is the link (the file the
+    # session and the planstate engine open); PLAN_LEGACY is the pre-#538 spot, still honoured as "a plan exists".
+    PLAN_PRIMARY="${FAKE_REPO}/PROJECT_PLAN.md"
     PLAN_FALLBACK="${FAKE_REPO}/PROJECT_PLAN.md"
+    PLAN_LEGACY="${FAKE_REPO}/docs/plans/PROJECT_PLAN.md"
 }
 
 # ── Helper to run the hook with controlled HOME ───────────────────────────────
@@ -220,14 +223,15 @@ _run_hook_split() {
 @test "plan_promote: existing PROJECT_PLAN at docs/plans/ → no overwrite, exits 0" {
     _write_jsonl_with_plan "$JSONL_PATH" "# New Plan\n\nThis should not overwrite."
     mkdir -p "${FAKE_REPO}/docs/plans"
-    printf '# Existing Plan\n' > "$PLAN_PRIMARY"
+    printf '# Existing Plan\n' > "$PLAN_LEGACY"
 
     input=$(_make_edit_input "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/main.py")
     _run_hook "$input"
 
     [ "$status" -eq 0 ]
-    grep -q "Existing Plan" "$PLAN_PRIMARY"
-    ! grep -q "New Plan" "$PLAN_PRIMARY"
+    grep -q "Existing Plan" "$PLAN_LEGACY"
+    ! grep -q "New Plan" "$PLAN_LEGACY"
+    [ ! -e "$PLAN_PRIMARY" ]
 }
 
 @test "plan_promote: existing PROJECT_PLAN at repo root → no write, exits 0" {
@@ -238,7 +242,8 @@ _run_hook_split() {
     _run_hook "$input"
 
     [ "$status" -eq 0 ]
-    [ ! -f "$PLAN_PRIMARY" ]
+    [ ! -L "$PLAN_PRIMARY" ]
+    [ ! -d "${FAKE_REPO}/docs/plans/directives" ]
 }
 
 @test "plan_promote: no ExitPlanMode in transcript → no write, exits 0" {
@@ -453,16 +458,18 @@ _cortex_accepted() {
 
 @test "plan_promote cortex: an existing PROJECT_PLAN.md at either location is never overwritten" {
     mkdir -p "${FAKE_REPO}/docs/plans"
-    printf '# Existing Plan\n' > "$PLAN_PRIMARY"
+    printf '# Existing Plan\n' > "$PLAN_LEGACY"
     _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan_a.md")")"
     [ "$status" -eq 0 ]
-    [ "$(cat "$PLAN_PRIMARY")" = "# Existing Plan" ]
+    [ "$(cat "$PLAN_LEGACY")" = "# Existing Plan" ]
+    [ ! -e "$PLAN_PRIMARY" ]
 
-    rm -f "$PLAN_PRIMARY"
+    rm -f "$PLAN_LEGACY"
     printf '# Root Plan\n' > "$PLAN_FALLBACK"
     _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan_a.md")")"
     [ "$status" -eq 0 ]
-    [ ! -f "$PLAN_PRIMARY" ]
+    [ "$(cat "$PLAN_FALLBACK")" = "# Root Plan" ]
+    [ ! -d "${FAKE_REPO}/docs/plans/directives" ]
 }
 
 @test "plan_promote cortex: the Queen session and a non-git directory write nothing" {
@@ -520,7 +527,7 @@ _cortex_accepted() {
 
 @test "plan_promote cortex: no team plan file is written when PROJECT_PLAN.md already exists" {
     mkdir -p "${FAKE_REPO}/.cortex/plans" "${FAKE_REPO}/docs/plans"
-    printf '# Existing Plan\n' > "$PLAN_PRIMARY"
+    printf '# Existing Plan\n' > "$PLAN_LEGACY"
     printf 'native Cortex plan\n' > "${FAKE_REPO}/.cortex/plans/plan-task42.md"
     _run_hook "$(_cortex_exit_payload "$FAKE_REPO" "$CORTEX_PLAN" "$(_cortex_accepted "$FAKE_REPO/.cortex/plans/plan-task42.md")")"
 
@@ -539,4 +546,41 @@ _cortex_accepted() {
     [ "$status" -eq 0 ]
     [ ! -f "$PLAN_PRIMARY" ]
     [ -z "$output" ]
+}
+
+# ── #538: the plan is a link to a directive, never a tracked file ─────────────
+
+@test "plan_promote: writes the directive and a relative, excluded PROJECT_PLAN.md link" {
+    _write_jsonl_with_plan "$JSONL_PATH" $'# My Plan\n\n- Plan-slug: `2026-11-25-widgets`'
+
+
+    _run_hook "$(_make_edit_input "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/main.py")"
+
+    [ "$status" -eq 0 ]
+    [ -L "$PLAN_PRIMARY" ]
+    [ "$(readlink "$PLAN_PRIMARY")" = "docs/plans/directives/2026-11-25-widgets.md" ]
+    grep -q "My Plan" "${FAKE_REPO}/docs/plans/directives/2026-11-25-widgets.md"
+    [ ! -e "$PLAN_LEGACY" ]
+    git -C "$FAKE_REPO" check-ignore -q PROJECT_PLAN.md
+    [ "$(grep -cxF /PROJECT_PLAN.md "${FAKE_REPO}/.git/info/exclude")" -eq 1 ]
+}
+
+@test "plan_promote: a plan with no Plan-slug gets a dated fallback directive name" {
+    _write_jsonl_with_plan "$JSONL_PATH" "# Plain Plan\n\nNo slug here."
+
+    _run_hook "$(_make_edit_input "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/main.py")"
+
+    [ "$status" -eq 0 ]
+    [[ "$(readlink "$PLAN_PRIMARY")" =~ ^docs/plans/directives/[0-9]{4}-[0-9]{2}-[0-9]{2}-session-plan\.md$ ]]
+}
+
+@test "plan_promote: a dangling PROJECT_PLAN.md link counts as an existing plan" {
+    _write_jsonl_with_plan "$JSONL_PATH" "# New Plan\n\nShould not write."
+    ln -s docs/plans/directives/gone.md "$PLAN_PRIMARY"
+
+    _run_hook "$(_make_edit_input "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/main.py")"
+
+    [ "$status" -eq 0 ]
+    [ "$(readlink "$PLAN_PRIMARY")" = "docs/plans/directives/gone.md" ]
+    [ ! -d "${FAKE_REPO}/docs/plans/directives" ]
 }

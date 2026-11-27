@@ -1911,19 +1911,11 @@ EOF
     [[ "$output" == *"interactive terminal"* ]] || false
 }
 
-# cmd_start promotes docs/plans/directives/<slug>.md to PROJECT_PLAN.md via `git mv` when the
-# directive is git-tracked (falling back to a plain `mv` for untracked files). Tested against a
-# fresh, throwaway git-initialized temp repo under BATS_TEST_TMPDIR — never the real borg-collective
-# repo, and never with a bare `cd` in the test's own shell (which would leak across tests) — the cd
-# happens inside a disposable `bash -c` subprocess instead.
-#
-# HONEST GAP (from the drafting group, preserved): only the git-tracked promotion path (`git mv`) is
-# tested, not the untracked-file `mv` fallback branch. Per this repo's own docs/plans conventions,
-# directives are checked into git before `borg start` promotes them, so the tracked path is the
-# realistic case; a second full git-repo fixture purely to hit an `mv` one-liner was judged scope
-# padding rather than a meaningful gap.
+# cmd_start links PROJECT_PLAN.md to docs/plans/directives/<slug>.md (#538): the plan is never tracked, so the
+# directive stays where it is and an untracked relative symlink points at it. Tested against a fresh,
+# throwaway git-initialized temp repo under BATS_TEST_TMPDIR, with the cd inside a disposable `bash -c`.
 
-@test "contract: start promotes a tracked directive to PROJECT_PLAN.md via git mv" {
+@test "contract: start links PROJECT_PLAN.md to the directive and excludes it" {
     local repo="${BATS_TEST_TMPDIR}/start_repo"
     mkdir -p "$repo/docs/plans/directives"
     git -C "$repo" init -q
@@ -1935,8 +1927,30 @@ EOF
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"in-flight: PROJECT_PLAN.md"* ]] || false
-    [ -f "$repo/PROJECT_PLAN.md" ]
-    [ ! -f "$repo/docs/plans/directives/my-directive.md" ]
+    [ -L "$repo/PROJECT_PLAN.md" ]
+    [ "$(readlink "$repo/PROJECT_PLAN.md")" = "docs/plans/directives/my-directive.md" ]
+    [ -f "$repo/docs/plans/directives/my-directive.md" ]
+    [ -z "$(git -C "$repo" status --porcelain)" ]
+    git -C "$repo" check-ignore -q PROJECT_PLAN.md
+
+    run bash -c "cd '$repo' && zsh '$BORG' start my-directive"
+    [ "$status" -eq 0 ]
+    [ "$(grep -cxF /PROJECT_PLAN.md "$repo/.git/info/exclude")" -eq 1 ]
+}
+
+@test "contract: start refuses when a different plan is already in flight" {
+    local repo="${BATS_TEST_TMPDIR}/start_repo_busy"
+    mkdir -p "$repo/docs/plans/directives"
+    git -C "$repo" init -q
+    printf '# A\n' > "$repo/docs/plans/directives/a.md"
+    printf '# B\n' > "$repo/docs/plans/directives/b.md"
+    ln -s docs/plans/directives/a.md "$repo/PROJECT_PLAN.md"
+
+    run bash -c "cd '$repo' && zsh '$BORG' start b"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"already in-flight"* ]] || false
+    [ "$(readlink "$repo/PROJECT_PLAN.md")" = "docs/plans/directives/a.md" ]
 }
 
 @test "contract: start errors cleanly on a directive slug that does not exist" {

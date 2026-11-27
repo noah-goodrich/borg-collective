@@ -251,3 +251,28 @@ def test_write_atomic_replaces_contents_without_changing_the_inode_path(tmp_path
     shell.write_atomic(target, "new\n")
     assert target.read_text(encoding="utf-8") == "new\n"
     assert os.path.isfile(target)
+
+
+def test_apply_through_a_plan_symlink_flips_the_directive_and_keeps_the_link(tmp_path):
+    """#538: `PROJECT_PLAN.md` is a link to the in-flight directive. An atomic replace onto the link would swap it
+    for a regular file and leave the directive unflipped, so the write must land on the target."""
+    (tmp_path / "docs/plans/directives").mkdir(parents=True)
+    (tmp_path / "docs/shipped.md").write_text("shipped\n", encoding="utf-8")
+    directive = tmp_path / "docs/plans/directives/2026-11-25-x.md"
+    directive.write_text(PLAN, encoding="utf-8")
+    link = tmp_path / "PROJECT_PLAN.md"
+    link.symlink_to("docs/plans/directives/2026-11-25-x.md")
+    assert _exit_code(cli.main, [str(link), "--json", "--apply", "--root", str(tmp_path)]) == 0
+    assert link.is_symlink()
+    assert os.readlink(link) == "docs/plans/directives/2026-11-25-x.md"
+    assert "flipped by link-up" in directive.read_text(encoding="utf-8")
+
+
+def test_write_atomic_through_a_symlink_writes_the_target(tmp_path):
+    target = tmp_path / "real.md"
+    target.write_text("old\n", encoding="utf-8")
+    link = tmp_path / "link.md"
+    link.symlink_to("real.md")
+    shell.write_atomic(link, "new\n")
+    assert link.is_symlink()
+    assert target.read_text(encoding="utf-8") == "new\n"

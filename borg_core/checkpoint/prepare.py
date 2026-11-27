@@ -80,13 +80,14 @@ class PreferRow:
 
 
 @dataclass(frozen=True)
-# JUSTIFICATION: fourteen plain facts gathered by `prepare_shell.gather`; bundling them would only rename them.
+# JUSTIFICATION: fifteen plain facts gathered by `prepare_shell.gather`; bundling them would only rename them.
 class Facts:  # pylint: disable=too-many-instance-attributes
     """Everything the impure layer read. Every field defaults to the "nothing known" value."""
 
     root: str = "unknown"
     checkpoint_path: str = "unknown"
     plan: str = ""
+    plan_tracked: str = ""
     source_dir: str = "unknown"
     git_status: str | None = None
     git_reason: str = "not read"
@@ -198,6 +199,10 @@ def _assemble(facts: Facts, body_limit: int) -> list[str]:
         f"CHECKPOINT_PATH: {_one_line(facts.checkpoint_path)}",
     ]
     lines.append(f"PLAN: {_one_line(facts.plan) if facts.plan else 'none'}")
+    if facts.plan_tracked:
+        # Only when tracked, so the default document is byte-identical to before. PLAN is `none` in this case: a
+        # tracked plan is a leak, never reconciled as the worktree's own (#538).
+        lines.append(f"PLAN_TRACKED: {_one_line(facts.plan_tracked)}")
     lines.append(f"BORG_SOURCE_DIR: {_one_line(facts.source_dir)}")
     lines.extend(_git_block(facts.git_status, facts.git_reason))
     if facts.manifest_stem:

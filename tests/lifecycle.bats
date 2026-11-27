@@ -846,3 +846,30 @@ _dirty_repo() {
     [ "$STOP_RC" -eq 0 ]
     _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
 }
+
+# ─── #538: PROJECT_PLAN.md is never tracked ───────────────────────────────────
+
+@test "start hook names a tracked PROJECT_PLAN.md and points at the cleanup" {
+    git -C "$TEST_CWD" init -q
+    : > "$TEST_CWD/PROJECT_PLAN.md"
+    git -C "$TEST_CWD" add PROJECT_PLAN.md
+
+    run bash "$BORG_START" <<< "$(_start_input)"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"PROJECT_PLAN.md IS TRACKED BY GIT"* ]] || false
+    [[ "$output" == *"git rm --cached PROJECT_PLAN.md"* ]] || false
+}
+
+@test "start hook stays quiet about a PROJECT_PLAN.md link that git does not track" {
+    git -C "$TEST_CWD" init -q
+    mkdir -p "$TEST_CWD/docs/plans/directives"
+    : > "$TEST_CWD/docs/plans/directives/d.md"
+    ln -s docs/plans/directives/d.md "$TEST_CWD/PROJECT_PLAN.md"
+
+    run bash "$BORG_START" <<< "$(_start_input)"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"TRACKED BY GIT"* ]] || false
+    [[ "$output" != *"NO PROJECT_PLAN.md FOUND"* ]] || false
+}

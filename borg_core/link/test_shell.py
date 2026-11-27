@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -329,6 +330,17 @@ def test_read_directives_returns_slug_and_title(isolated_env):
         {"slug": "2026-01-01-a", "title": "First"},
         {"slug": "2026-01-02-b", "title": "Second"},
     ]
+
+
+def test_read_directives_leaves_out_the_in_flight_directive(isolated_env):
+    """#538: PROJECT_PLAN.md links to the in-flight directive, which is the plan and not a pending directive."""
+    path = _repository(
+        isolated_env,
+        "p",
+        directives=[("2026-01-02-b.md", "# Second\n"), ("2026-01-01-a.md", "# First\n")],
+    )
+    (Path(path) / "PROJECT_PLAN.md").symlink_to("docs/plans/directives/2026-01-01-a.md")
+    assert shell.read_directives(path) == [{"slug": "2026-01-02-b", "title": "Second"}]
 
 
 def test_read_directives_empty_when_the_directory_is_absent(isolated_env):

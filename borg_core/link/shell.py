@@ -318,13 +318,16 @@ def read_directives(repository_path: str | None) -> list[dict]:
 
     The shell emits a leading COUNT line on every path, including the failures ("0"); that is a TSV
     transport artifact, not a contract. Here the count is len().
+    The in-flight directive (the PROJECT_PLAN.md symlink's target, #538) is the plan, not pending: left out.
     """
     directory = _usable_path(repository_path)
     if directory is None:
         return []
+    in_flight = (directory / "PROJECT_PLAN.md").resolve()
     return [
         {"slug": core.slug_from_filename(f.name), "title": core.heading_title(_read_text(f))}
         for f in _markdown_files(directory / "docs" / "plans" / "directives")
+        if f.resolve() != in_flight
     ]
 
 

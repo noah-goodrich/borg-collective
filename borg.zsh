@@ -192,6 +192,14 @@ _borg_read_directives() {
     dir="$ppath/docs/plans/directives"
     [[ -d "$dir" ]] || { echo "0"; return 0; }
     local files=("$dir"/*.md(N))
+    # The in-flight directive is the plan, not a pending directive: PROJECT_PLAN.md links to it (#538).
+    if [[ -L "$ppath/PROJECT_PLAN.md" ]]; then
+        local self="$ppath/PROJECT_PLAN.md"
+        self="${self:A}"
+        local kept=()
+        for f in "${files[@]}"; do [[ "${f:A}" == "$self" ]] || kept+=("$f"); done
+        files=("${kept[@]}")
+    fi
     (( ${#files[@]} == 0 )) && { echo "0"; return 0; }
     echo "${#files[@]}"
     for f in "${files[@]}"; do
@@ -2909,19 +2917,30 @@ cmd_start() {
     local root
     root=$(git rev-parse --show-toplevel 2>/dev/null) || root="$PWD"
 
-    local plan="$root/PROJECT_PLAN.md"
-    [[ -f "$plan" ]] && die "already in-flight: $plan — assimilate or sever first"
-
     slug="${slug%.md}"
     local rel="docs/plans/directives/$slug.md"
     [[ -f "$root/$rel" ]] || die "no such directive: $root/$rel"
 
-    if git -C "$root" ls-files --error-unmatch "$rel" &>/dev/null; then
-        (cd "$root" && git mv "$rel" PROJECT_PLAN.md)
+    # PROJECT_PLAN.md is never tracked (#538): it is a relative link to the in-flight directive, so editing the plan
+    # edits the directive, and the directive is what gets tracked, merged and later archived.
+    local plan="$root/PROJECT_PLAN.md"
+    if [[ -L "$plan" && "$(readlink "$plan")" == "$rel" ]]; then
+        :
+    elif [[ -e "$plan" || -L "$plan" ]]; then
+        die "already in-flight: $plan — assimilate or sever first"
     else
-        mv "$root/$rel" "$plan"
+        ln -s "$rel" "$plan"
     fi
-    info "in-flight: PROJECT_PLAN.md (was $rel)"
+
+    # info/exclude lives in the shared git dir, so one line covers every worktree of the clone without a .gitignore edit.
+    local exclude
+    exclude=$(git -C "$root" rev-parse --git-path info/exclude 2>/dev/null) || exclude=""
+    if [[ -n "$exclude" ]]; then
+        [[ "$exclude" == /* ]] || exclude="$root/$exclude"
+        mkdir -p "${exclude:h}"
+        grep -qxF '/PROJECT_PLAN.md' "$exclude" 2>/dev/null || print -r -- '/PROJECT_PLAN.md' >> "$exclude"
+    fi
+    info "in-flight: PROJECT_PLAN.md -> $rel"
 }
 
 # cmd_store_secret: store a secret in macOS Keychain and wire it to secrets.zsh.
@@ -3903,7 +3922,7 @@ cmd_help() {
     window <p> [short]  Show (or set) a repository's short tmux window name
     down                Tear down everything: containers, windows, session
     regenerate          Archive stale repositories (idle >48h)
-    start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per repository)
+    start <slug>        Link PROJECT_PLAN.md to a directive (one in-flight per repository)
     setup               Register Claude Code hooks, skills, and config
     checkpoint-name     Print the collision-proof filename stem for a new checkpoint
     checkpoint-prepare  Print every input /borg-link-up needs in one call (read-only, always exit 0)

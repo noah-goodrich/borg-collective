@@ -103,12 +103,12 @@ Three hooks update the registry automatically:
 
 | Hook | Event | What happens |
 |------|-------|-------------|
-| `borg-link-down.sh` | SessionStart | Status → active; injects latest checkpoint + plan nudge if no PROJECT_PLAN.md |
+| `borg-link-down.sh` | SessionStart | Status → active; injects latest checkpoint + plan nudge if no PROJECT_PLAN.md; flags a tracked one |
 | `borg-notify.sh` | Notification | Status → waiting, captures what Claude needs |
 | `borg-link-up.sh` | Stop | Status → idle; warns on uncommitted changes; nudges if no recent checkpoint |
 | `borg-nanoprobe-log.sh` | SubagentStop | Appends one JSONL line per nanoprobe completion to `~/.config/borg/agents.jsonl` |
 | `pre-commit-remind.sh` | PreToolUse | Reminds Claude to run /simplify before git commit |
-| `borg-plan-promote.sh` | PreToolUse | Auto-promotes ExitPlanMode plan to `docs/plans/PROJECT_PLAN.md` |
+| `borg-plan-promote.sh` | PreToolUse | Auto-promotes ExitPlanMode plan to a directive that `PROJECT_PLAN.md` links to |
 
 ### Session Checkpoints
 

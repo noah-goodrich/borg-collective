@@ -101,6 +101,22 @@ def plan_path(root: str) -> str:
     return ""
 
 
+def plan_tracked(root: str, plan: str, budget: Budget) -> bool:
+    """True when git TRACKS `plan` (#538: `PROJECT_PLAN.md` is a link to the in-flight directive and is never tracked).
+
+    A tracked plan is a leak from another branch, not this worktree's own plan, so the caller must not reconcile it.
+    `git ls-files --error-unmatch` exits 0 only for a tracked path; any other outcome (untracked, not a repository,
+    no git, budget spent) reads as "not tracked", which keeps today's behaviour."""
+    if not plan or not shutil.which("git"):
+        return False
+    answer = _run(
+        ["git", "--no-optional-locks", "-C", root, "ls-files", "--error-unmatch", os.path.relpath(plan, root)],
+        budget,
+        GIT_TIMEOUT_SECONDS,
+    )
+    return answer is not None and answer[0] == 0
+
+
 def source_dir() -> str:
     """The directory holding the `borg_core` package this command runs from: what the skill puts on PYTHONPATH."""
     return os.path.realpath(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -283,6 +299,9 @@ def _read_all(reader: Reader, here: str, session: str) -> prepare.Facts:
         lambda: prepare.first_free_path(root, name_shell.checkpoint_stem(session, now()), os.path.exists),
     )
     plan = reader.step("plan lookup", "", lambda: plan_path(root))
+    tracked = reader.step("plan tracked check", "", lambda: plan if plan_tracked(root, plan, budget) else "")
+    if tracked:
+        plan = ""
     source = reader.step("source dir", "unknown", source_dir)
     git = reader.step("git status", (None, "git status failed"), lambda: git_status(root, budget))
     manifest = reader.step(
@@ -300,6 +319,7 @@ def _read_all(reader: Reader, here: str, session: str) -> prepare.Facts:
         root=root,
         checkpoint_path=path,
         plan=plan,
+        plan_tracked=tracked,
         source_dir=source,
         git_status=git[0],
         git_reason=git[1],
