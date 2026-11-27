@@ -101,7 +101,3 @@ Rules owned by this directory, moved verbatim from the top-level CLAUDE.md. Clau
   that replaced it — same "the artifact that implements the command owns the invariant" altitude as
   the `borg recon` gate below. The `primitives` leg is untouched and still live: its shell originals
   exist verbatim in the file, so it remains a real differential.
-
-## Decision cards under `Waits on you`
-
-A `Waits on you` item may be a decision card: a top-level bullet (the title) with indented sub-bullets. `recon.core.checkpoint_owned_items` keeps the title as the row `text`, so the pages and the brief stay one line per item and nothing in `render.py` changes, and carries the whole card as `decision_card` (through `nextpick` rows and `borg link --json` `waiting.rows`). A one-liner, even a wrapped one, parses exactly as before: only indented LIST items make a card. `borg next --json` already uses `card` for its rendered chooser card, so the key is `decision_card`.

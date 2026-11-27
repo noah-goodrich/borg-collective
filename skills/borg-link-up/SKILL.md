@@ -69,19 +69,14 @@ Which files are changed and ready to commit right now (GIT_STATUS)? If nothing, 
 ## 4. Blockers
 What prevented completion? List specific issues, missing information, or dependencies. If none, say "No blockers."
 
-After the blockers, write the line `Waits on you:` ON ITS OWN LINE, then one item per thing only the user can do (a decision, a credential rotation, a file to copy, an approval). Write `Waits on you: none` when there is nothing. The spelling is exact because `borg next`, `borg link` and the arrival brief read this list as the user's rows.
+After the blockers, write the line `Waits on you:` ON ITS OWN LINE, then one item per thing only the user can do. Write `Waits on you: none` when there is nothing. The spelling is exact because `borg next`, `borg link` and the arrival brief read this list as the user's rows.
 
-**A decision is a decision card, never a one-liner.** The reader of this checkpoint has read nothing from this session, so a bare "#97, close or restate scope" is useless to them. A decision item is a top-level bullet holding a one-line title (the question, with its source link), followed by indented sub-bullets: `Context:` (what the thing is, in words a stranger follows), `Why open:` (what is blocked on it), `Options:` (2 to 4, each with `Pro:`, `Con:` and `Runs:` for the exact command or action choosing it triggers) and `Recommend:` (your pick, which is also listed first among the options). `borg link` and the arrival brief show only the title line; the whole card is stored for `/borg-link`, which asks it through AskUserQuestion. Anything that is not a decision (a credential to rotate, a file to copy) stays a one-line bullet naming the thing and the action. The shape is:
+**A decision is a decision card, never a one-liner**: a title bullet plus indented `Context:`, `Why open:`, `Options:` (each with `Pro:`, `Con:`, `Runs:`) and `Recommend:` sub-bullets, so a reader who saw nothing can decide. Read `references/decision-card.md` (relative to this skill's base directory) for the full shape before writing one. A chore stays a one-line bullet:
 
 ```markdown
 Waits on you:
-- Close or restate noah-goodrich/borg-collective#97? https://github.com/noah-goodrich/borg-collective/issues/97
-  - Context: #97 asks for a retry wrapper around gh calls, but #101 shipped one with a different name.
-  - Why open: the issue blocks the 0.9.13 release board until it is closed or rewritten.
-  - Options:
-    - Close it (recommended). Pro: the board is clean. Con: loses the logging ask. Runs: gh issue close 97.
-    - Restate it. Pro: keeps the logging ask. Con: the issue stays open another cycle. Runs: gh issue edit 97.
-  - Recommend: close it, and file the logging ask as its own issue.
+- Close or restate owner/repo#97? https://github.com/owner/repo/issues/97
+  - Context: ... Why open: ... Options: ... Recommend: ...
 - Rotate the demo token in the vault.
 ```
 

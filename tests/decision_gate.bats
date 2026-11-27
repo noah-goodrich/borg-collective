@@ -134,7 +134,9 @@ _passes() {
 @test "borg-link-up writes Waits on you as decision cards and keeps the contract lines the readers need" {
     local skill="${BATS_TEST_DIRNAME}/../skills/borg-link-up/SKILL.md"
     grep -q 'decision card' "$skill"
-    grep -q 'Pro:' "$skill" && grep -q 'Con:' "$skill" && grep -q 'Runs:' "$skill" && grep -q 'Recommend:' "$skill"
+    local ref="${BATS_TEST_DIRNAME}/../skills/borg-link-up/references/decision-card.md"
+    grep -q 'references/decision-card.md' "$skill"
+    grep -q 'Pro:' "$ref" && grep -q 'Con:' "$ref" && grep -q 'Runs:' "$ref" && grep -q 'Recommend:' "$ref"
     grep -q '^Waits on you:$' "$skill"
     grep -q 'Waits on you: none' "$skill"
 }

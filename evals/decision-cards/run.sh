@@ -13,6 +13,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="${BORG_EVAL_REPO:-$(cd "$HERE/../.." && pwd)}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -23,10 +24,34 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-PYTHON="${BORG_EVAL_PYTHON:-python3}"
-PASS=0; FAIL=0
+if [ ! -f "$REPO/borg.zsh" ]; then
+    echo "ERROR: REPO does not look like the borg-collective checkout: $REPO" >&2
+    exit 2
+fi
+if [ -n "${BORG_EVAL_PYTHON:-}" ]; then
+    PYTHON="$BORG_EVAL_PYTHON"
+elif [ -x "$REPO/.venv/bin/python" ]; then
+    PYTHON="$REPO/.venv/bin/python"
+else
+    PYTHON="python3"
+fi
+
+OUT="$REPO/evals/decision-cards/out"
+rm -rf "$OUT"
+mkdir -p "$OUT"
+
+PASS=0; FAIL=0; SKIPPED=0
 ok()  { echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad() { echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
+
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+    echo "  SKIP  decision-cards: no interpreter ($PYTHON) to run grade.py"
+    SKIPPED=$((SKIPPED+1))
+    echo
+    echo "RESULT: 0 pass, 0 fail, $SKIPPED skip"
+    echo "no trace was graded: nothing was verified" >&2
+    exit 1
+fi
 
 goods=0; bads=0
 for trace in "$HERE"/traces/good*.trace.json; do
@@ -49,7 +74,7 @@ done
 [ "$bads" -ge 4 ] || bad "decision-cards: needs known-bad traces for a terse list, no context, recommendation not first, no options"
 
 echo
-echo "RESULT: $PASS pass, $FAIL fail, 0 skip"
+echo "RESULT: $PASS pass, $FAIL fail, $SKIPPED skip"
 if [ $((PASS + FAIL)) -eq 0 ]; then
     echo "no trace was graded: nothing was verified" >&2
     exit 1

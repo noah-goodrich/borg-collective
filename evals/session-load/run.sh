@@ -147,6 +147,7 @@ else
         printf '{"type":"system","subtype":"hook_started","hook_event":"SessionStart"}\n'
         printf '{"type":"system","subtype":"hook_started","hook_event":"Stop"}\n'
         printf '{"type":"system","subtype":"hook_started","hook_event":"Stop"}\n'
+        printf '{"type":"system","subtype":"hook_started","hook_event":"Stop"}\n'
         if [ "$dup" = dup ]; then printf '{"type":"system","subtype":"hook_started","hook_event":"SessionStart"}\n'; fi
     }
     mkdir -p "$OUT/checker/home"

@@ -24,7 +24,7 @@ from pathlib import Path
 # events a headless `-p` session fires on its own are listed; Notification and the tool events need
 # a TTY or a tool call.
 # SessionStart is 3 since the arrival brief (matcher startup|resume): a headless `-p` session starts with source `startup`.
-AUTHORED_HOOKS = {"SessionStart": 3, "Stop": 2}
+AUTHORED_HOOKS = {"SessionStart": 3, "Stop": 3}
 PLUGIN_NAME = "borg-collective"
 
 

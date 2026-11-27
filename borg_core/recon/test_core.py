@@ -516,8 +516,9 @@ _SKILL = Path(__file__).resolve().parents[2] / "skills" / "borg-link-up" / "SKIL
 
 def _template_example() -> str:
     """The fenced `Waits on you:` example the link-up skill carries, read from the skill file itself."""
-    found = re.search(r"```markdown\n(Waits on you:\n(?:(?:- |  ).*\n)+)```", _SKILL.read_text(encoding="utf-8"))
-    assert found, "borg-link-up/SKILL.md no longer carries a fenced `Waits on you:` example"
+    reference = _SKILL.parent / "references" / "decision-card.md"
+    found = re.search(r"```markdown\n(Waits on you:\n(?:(?:- |  ).*\n)+)```", reference.read_text(encoding="utf-8"))
+    assert found, "borg-link-up/references/decision-card.md no longer carries a fenced `Waits on you:` example"
     return found[1]
 
 
