@@ -1,0 +1,131 @@
+[
+  {
+    "id": "borg-link-up-01",
+    "skill": "borg-link-up",
+    "query": "link up",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-02",
+    "skill": "borg-link-up",
+    "query": "I'm ending the session, save where we are",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-03",
+    "skill": "borg-link-up",
+    "query": "write a checkpoint before I take a break",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-04",
+    "skill": "borg-link-up",
+    "query": "flush the session state so the next session can pick it up",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-05",
+    "skill": "borg-link-up",
+    "query": "I'm switching to another repository, save my context first",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-06",
+    "skill": "borg-link-up",
+    "query": "checkpoint this session",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-07",
+    "skill": "borg-link-up",
+    "query": "wrapping up for the day, record what we did and what is left",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-08",
+    "skill": "borg-link-up",
+    "query": "before I close this, leave a handoff note for the next session",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-09",
+    "skill": "borg-link-up",
+    "query": "save my progress, I'm stepping away for lunch",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-10",
+    "skill": "borg-link-up",
+    "query": "do the link-up thing so I can resume tomorrow",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-11",
+    "skill": "borg-link-up",
+    "query": "capture the current state of the work to a checkpoint file",
+    "should_fire": true
+  },
+  {
+    "id": "borg-link-up-12",
+    "skill": "borg-link-up",
+    "query": "give me the overview of all my repositories",
+    "should_fire": false,
+    "competitor": "borg-link"
+  },
+  {
+    "id": "borg-link-up-13",
+    "skill": "borg-link-up",
+    "query": "resume the work the usage limit interrupted",
+    "should_fire": false,
+    "competitor": "borg-resume"
+  },
+  {
+    "id": "borg-link-up-14",
+    "skill": "borg-link-up",
+    "query": "commit my changes with a good message",
+    "should_fire": false,
+    "competitor": "git"
+  },
+  {
+    "id": "borg-link-up-15",
+    "skill": "borg-link-up",
+    "query": "save this file",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-link-up-16",
+    "skill": "borg-link-up",
+    "query": "switch to the ingle repository",
+    "should_fire": false,
+    "competitor": "borg-switch"
+  },
+  {
+    "id": "borg-link-up-17",
+    "skill": "borg-link-up",
+    "query": "what changed since the last checkpoint",
+    "should_fire": false,
+    "competitor": "borg-link"
+  },
+  {
+    "id": "borg-link-up-18",
+    "skill": "borg-link-up",
+    "query": "create a backup of the database",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-link-up-19",
+    "skill": "borg-link-up",
+    "query": "link the library statically in the Makefile",
+    "should_fire": false,
+    "competitor": "none"
+  },
+  {
+    "id": "borg-link-up-20",
+    "skill": "borg-link-up",
+    "query": "write the summary of today's meeting for the team",
+    "should_fire": false,
+    "competitor": "none"
+  }
+]
