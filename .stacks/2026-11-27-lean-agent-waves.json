@@ -1,0 +1,12 @@
+{
+  "desc": "Cut a borg multi-agent wave to 30% of the Nov 25-27 per-PR cost for the same PRs: no agent waits, fresh spawns instead of wakes, one ship verb",
+  "program": "2026-11-27-lean-agent-waves",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#563",
+      "why": "AC1: live session cost report, borg spend --session"
+    }
+  ]
+}
