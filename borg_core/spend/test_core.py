@@ -199,3 +199,35 @@ def test_write_split_edge_cases():
     tr = parse.parse_transcript(entries, "t")
     built = core.build_requests(tr)
     assert [(r.write_5m, r.write_1h) for r in built] == [(100, 0), (70, 30)]
+
+
+def test_one_pr_create_result_with_several_urls_counts_each():
+    """A looped `gh pr create` returns one string result holding several URLs among `remote:` noise."""
+    command = "mk() { gh pr create --title $1; }; for b in a b c; do mk $b; done"
+    result = (
+        "remote: \nremote: \nremote: \n"
+        "https://github.com/o/r/pull/556\nhttps://github.com/o/r/pull/557\nhttps://github.com/o/r/pull/558\n"
+        "https://github.com/o/r/pull/556"
+    )
+    entries = [
+        {
+            "type": "assistant",
+            "timestamp": "2026-11-27T10:00:00Z",
+            "message": {
+                "id": "m1",
+                "model": "claude-opus-5-5",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+                "content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": command}}],
+            },
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-11-27T10:00:05Z",
+            "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": result}]},
+        },
+    ]
+    tr = parse.parse_transcript(entries, "k", agent=True)
+    reqs = core.build_requests(tr)
+    expected = tuple(f"https://github.com/o/r/pull/{n}" for n in (556, 557, 558, 556))
+    assert reqs[0].prs == expected
+    assert core.build_report([tr])["prs"] == list(dict.fromkeys(expected))

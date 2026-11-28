@@ -110,13 +110,13 @@ def _request(tr: Transcript, group: list[Assist]) -> Request:
     write_1h = merged.write_1h
     # No split reported: every cache-write token is a 5m write.
     write_5m = merged.write_5m if merged.write_5m is not None else max(merged.write_total - write_1h, 0)
-    calls, prs = [], []
+    calls: list[tuple[str, float | None]] = []
+    prs: list[str] = []
     for tool in merged.tools:
         done = tr.results.get(tool.id)
         calls.append((tool.kind, (done[0] - end).total_seconds() if done else None))
-        match = PR_URL.search(done[1]) if done and tool.pr else None
-        if match:
-            prs.append(match.group(0))
+        if done and tool.pr:
+            prs.extend(match.group(0) for match in PR_URL.finditer(done[1]))
     return Request(
         tr.key, tr.agent, tr.agent_type, merged.model, merged.ts, end,
         merged.fresh, merged.out, write_5m, write_1h, merged.read, tuple(calls), tuple(prs),
@@ -247,7 +247,8 @@ def build_report(transcripts: list[Transcript], since: datetime | None = None, u
 
 def pr_repositories(prs: list[str]) -> list[str]:
     """The distinct owner/repo of each PR URL, in order of first appearance."""
-    return list(dict.fromkeys(PR_URL.match(url).group(1) for url in prs if PR_URL.match(url)))
+    matches = (PR_URL.match(url) for url in prs)
+    return list(dict.fromkeys(match.group(1) for match in matches if match))
 
 
 def cross_check(found: list[str], listed: list[str]) -> dict[str, list[str]]:
