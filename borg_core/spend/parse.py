@@ -79,7 +79,7 @@ class Assist:  # pylint: disable=too-many-instance-attributes
 
 
 @dataclass
-class Transcript:  # pylint: disable=too-many-instance-attributes
+class Transcript:
     """Everything the report reads from one transcript file."""
 
     key: str

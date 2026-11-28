@@ -66,6 +66,7 @@ borg recon --adapters    List the source adapters discovered on this machine
 borg nanoprobes (np)     List recent ephemeral subagent runs
 borg nanoprobe-log <id>  Fetch the transcript/summary for a nanoprobe run
 borg spend               Summarize accurate token spend from ~/.claude/token-spend.jsonl
+borg spend --session <id>  Live cost report for one session read from its transcripts (borg_core/spend): total, main vs agent, cold rewrites by cause, PRs opened; --since/--until (request start, UTC ISO), --json, --projects-dir, --cross-check (vs gh pr list)
 borg doctor              Environment/dependency health check
 borg setup               Install/refresh hooks, skills, agents, tmux keybinding
                          Adds BASH_MAX_OUTPUT_LENGTH=12000 and CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=8000 to
