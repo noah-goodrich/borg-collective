@@ -8,6 +8,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   schedule:
     # D4: re-test main independently of PR activity. main went red on 2026-08-10 and stayed red for
     # hours because nothing re-ran it. A scheduled run makes Noah the actor of record, so GitHub's
@@ -99,6 +100,24 @@ jobs:
       - name: Test + coverage baseline
         run: make test
 
+
+  release-gate:
+    # #536: plugin content may not change under an already-released VERSION unless the PR carries the
+    # `unreleased` label. Logic and message live in scripts/release-gate.sh (tests/release_gate.bats).
+    # The labeled/unlabeled types re-run it when the label is added; the others are the default set.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Plugin content needs a VERSION bump or the unreleased label
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: scripts/release-gate.sh check "$BASE_SHA" "$HEAD_SHA" "$LABELS"
 
   eval-changed:
     # Offline evals for the code a PR touched, and nothing else (evals/ledger.json `covers` decides;
