@@ -3185,6 +3185,15 @@ cmd_nanoprobe_log() {
 # reflect THIS MACHINE ONLY. The header and footer state this; do not aggregate across machines from
 # this file alone.
 cmd_spend() {
+    # `--session <id>` is the live per-session report (borg_core/spend); every other form is the log summary below.
+    local arg
+    for arg in "$@"; do
+        if [[ "$arg" == --session || "$arg" == --session=* ]]; then
+            _borg_py borg_core.spend.cli "$@"
+            return
+        fi
+    done
+
     # NOTE: token-spend.jsonl lives under ~/.claude (NOT XDG_CONFIG_HOME — that is agents.jsonl).
     local log="$HOME/.claude/token-spend.jsonl"
 
@@ -3919,6 +3928,7 @@ cmd_help() {
     nanoprobes          List recent nanoprobe (subagent) runs (alias: np)
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
     spend               Main-vs-subagent spend split + trend (this machine; --project/--by-model/--last)
+                          --session <id> [--since T] [--until T] [--json] [--cross-check]   live cost report for one session
     pr <verb>           PR check/merge verbs over gh (exit code = verdict; JSON when piped)
                           gate <n> [--repo R] [--wait]   0 green, 1 failing, 2 pending, 3 cancelled w/o runner
                           merge-train <n...> [--dry-run] Update, wait, rerun once, merge in order; MERGES:
